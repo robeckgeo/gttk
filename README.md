@@ -244,7 +244,7 @@ gttk optimize -i scientific.tif -o scientific_lerc.tif -t scientific -a LERC \
 - For comparison, the OLD report shows the XML in `text` format and the NEW report shows it in `table` format. While the information content is identical, the latter is much easier to read.
 - GTTK translated the ISO-8859-1 (Latin-1) character encoding to UTF-8, preserving the special characters.
 - The input NoData value (-3.402823466385289e+38) is problematic because it is read as `-inf` by software, causing calculation errors; mapping those pixels to NaN solved the problem.
-- The NEW file assigns the vertical datum required by the Geoide Gravimétrico Mexicano 2010 (GGM10), which lacks an EPSG code. Because GeoTIFF only stores EPSG codes in GeoKeys, the full compound CRS is stored in the GDAL metadata item `CUSTOM_CRS_WKT2` so the information is not lost.
+- The NEW file assigns the vertical datum required by the Geoide Gravimétrico Mexicano 2010 (GGM10), which lacks an EPSG code. Because GeoTIFF only stores EPSG codes in GeoKeys, the full compound CRS is stored in the GDAL metadata item `COMPOUND_CRS_WKT2` so the information is not lost.
 - The Esri Projection Engine (PE) String in the OLD header was removed from the NEW header because the 2D Projected CS was replaced with the 3D Compound CRS with GGM10 height.
 - Updating from GeoTIFF v1.0 to v1.1 ([OGC GeoTIFF Standard](https://www.ogc.org/standards/geotiff/)) reduced the GeoKey Directory complexity, dropping GeoKey count from 17 to 8 and removing the "User-Defined" `GeographicCSTypeGeoKey`/`ProjectedCSTypeGeoKey` types assigned by Esri for the *horizontal* datum/CRS combo "Mexico ITRF2008 / UTM zone 13N" CRS.
 
