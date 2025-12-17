@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata xml:lang="en">
+	<Esri>
+		<CreaDate>20250922</CreaDate>
+		<CreaTime>15120000</CreaTime>
+		<ArcGISFormat>1.0</ArcGISFormat>
+		<SyncOnce>TRUE</SyncOnce>
+	</Esri>
+	<tool name="TestCompression" displayname="Test Compression" toolboxalias="gttk">
+		<summary>Tests multiple compression settings from CSV configurations and generates detailed Excel reports comparing performance and efficiency across all algorithms and parameters.</summary>
+		<usage>
+			<bullet_item>Automatically tests dozens of compression combinations based on data type presets or custom CSV configurations.</bullet_item>
+			<bullet_item>Generates comprehensive Excel reports with compression efficiency, file sizes, read/write speeds, and performance ratios.</bullet_item>
+			<bullet_item>Supports all major compression algorithms: JPEG, JXL, LZW, DEFLATE, ZSTD, LERC, and uncompressed baseline.</bullet_item>
+			<bullet_item>Includes advanced metrics: compression percentage, improvement over original, speed ratios, and detailed error logging.</bullet_item>
+			<bullet_item>Perfect for performance benchmarking, algorithm selection, and optimization parameter tuning.</bullet_item>
+		</usage>
+		<parameters>
+			<param sync="true" name="source_geotiff" displayname="Source GeoTIFF or Raster Layer" datatype="Raster Layer" direction="Input" expression="source_geotiff" type="Required">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The source GeoTIFF file or raster layer that will be used as input for all compression tests. This file will be processed through multiple compression algorithms and parameter combinations to evaluate their performance and efficiency.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="output_file" displayname="Output Excel Report" datatype="DEFile" direction="Output" expression="output_file" type="Required">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The path and filename for the comprehensive Excel report (.xlsx) that will contain detailed results for all compression tests. The report includes metrics such as file sizes, compression percentages, read/write speeds, and performance comparisons. The .xlsx extension will be added automatically if not provided.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="input_method" displayname="Input Method" datatype="String" direction="Input" expression="input_method" type="Required">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>Choose how to specify the compression tests to run:</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Use Data Type Presets:</SPAN><SPAN> Automatically selects optimized compression tests based on the data type (DEM, Image, etc.). This uses pre-configured CSV files with proven parameter combinations.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Use Custom CSV File:</SPAN><SPAN> Specify a custom CSV file containing your own compression parameter combinations for testing.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="product_type" displayname="Product Type (for Preset Selection)" datatype="String" direction="Input" expression="product_type" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The type of GeoTIFF product, used to select appropriate compression test presets. These presets are configured in separate CSV files in `gttk/resources/templates/` and can be customized.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Digital Elevation Model:</SPAN><SPAN> For elevation data. Enables vertical SRS handling and rounding. Defaults to DEFLATE compression.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Error Model:</SPAN><SPAN> For 32-bit error models with low precision. Enhances lossless compression by rounding to 1 decimal (e.g. 10 cm) first. Defaults to DEFLATE.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Orthoimage or Basemap:</SPAN><SPAN> For visual imagery. Defaults to YCbCr JPEG compression and handles alpha bands and transparency masks correctly.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Thematic Data:</SPAN><SPAN> For classified data like landcover. Uses Nearest Neighbor resampling and lossless compression, defaulting to DEFLATE.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Scientific Data:</SPAN><SPAN> For continuous floating-point data. Enables rounding and defaults to DEFLATE.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="csv_path" displayname="Custom CSV Configuration File" datatype="DEFile" direction="Input" expression="csv_path" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>A custom CSV file containing compression parameter combinations to test. The CSV must include the following mandatory columns:</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• type:</SPAN><SPAN> Data type (dem, image, error, scientific, thematic)</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• algorithm:</SPAN><SPAN> Compression algorithm (JPEG, JXL, LZW, DEFLATE, ZSTD, LERC, NONE)</SPAN></P>
+							<P><SPAN>Optional columns include: level, predictor, quality, decimals, max_z_error, vertical_srs, nodata</SPAN></P>
+							<P><SPAN>Each row represents one compression test that will be performed and included in the Excel report.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="temp_dir" displayname="Temporary Files Directory" datatype="DEFolder" direction="Input" expression="temp_dir" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The directory where temporary compressed GeoTIFF files will be stored during testing. Each compression test generates a temporary file that is measured for performance metrics.</SPAN></P>
+							<P><SPAN>If not specified, a default './temp_geotiffs' directory will be created. The temporary files can be automatically deleted after testing or preserved for manual inspection.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="delete_test_files" displayname="Delete Temporary Test Files" datatype="Boolean" direction="Input" expression="delete_test_files" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>Controls whether temporary compressed GeoTIFF files created during testing should be automatically deleted after processing.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Checked (True):</SPAN><SPAN> Temporary files are deleted immediately after measuring their performance metrics, saving disk space.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Unchecked (False):</SPAN><SPAN> Temporary files are preserved for manual inspection, allowing you to examine the actual compressed files produced by each test. This is useful for detailed analysis but requires more disk space.</SPAN></P>
+							<P><SPAN>Default is unchecked to allow inspection of test results.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="open_report" displayname="Open Excel Report on Completion" datatype="Boolean" direction="Input" expression="open_report" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>If checked, the generated Excel report will be automatically opened in your default spreadsheet application when testing completes. This provides immediate access to view the detailed compression test results, performance metrics, and comparison charts.</SPAN></P>
+							<P><SPAN>The Excel report contains comprehensive data including file sizes, compression percentages, read/write speeds, performance ratios, and detailed comments about each test's success or failure.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+		</parameters>
+		<scriptExamples>
+			<scriptExample>
+				<title>Test DEM compression algorithms</title>
+				<para>This example tests all DEM-optimized compression combinations.</para>
+				<code>import arcpy
+arcpy.gttk.TestCompression("dem_input.tif", "dem_compression_results.xlsx",
+				                       "Use Product Type Presets", product_type="Digital Elevation Model")</code>
+			</scriptExample>
+			<scriptExample>
+				<title>Test with custom CSV configuration</title>
+				<para>This example uses a custom CSV file with specific compression parameters.</para>
+				<code>import arcpy
+arcpy.gttk.TestCompression("input.tif", "custom_test.xlsx",
+				                       "Use Custom CSV File", input_csv="my_tests.csv",
+				                       delete_test_files=False)</code>
+			</scriptExample>
+			<scriptExample>
+				<title>Batch test imagery compression</title>
+				<para>This example tests compression on orthoimage data and preserves temporary files.</para>
+				<code>import arcpy
+arcpy.gttk.TestCompression("ortho.tif", "ortho_benchmark.xlsx",
+				                       "Use Data Type Presets",
+				                       product_type="Orthoimage or Basemap",
+				                       delete_test_files=False,
+				                       temp_dir="C:/temp/compression_tests")</code>
+			</scriptExample>
+		</scriptExamples>
+		<tags>
+			<tag>GeoTIFF</tag>
+			<tag>compression</tag>
+			<tag>testing</tag>
+			<tag>benchmark</tag>
+			<tag>performance</tag>
+			<tag>analysis</tag>
+			<tag>Excel report</tag>
+			<tag>batch processing</tag>
+		</tags>
+	</tool>
+	<dataIdInfo>
+		<idCredit>GeoTIFF ToolKit - Eric Robeck (robeckgeo@gmail.com)</idCredit>
+		<idAbs>
+			<DIV STYLE="text-align:Left;"><P><SPAN>Performs comprehensive compression testing across multiple algorithms and parameter combinations. Generates detailed Excel reports with performance metrics, compression ratios, and comparative analysis for optimization decision-making.</SPAN></P></DIV>
+		</idAbs>
+		<idPurp>Benchmark compression algorithms, select optimal parameters, and document performance characteristics for various data types and processing workflows.</idPurp>
+		<resConst>
+			<Consts>
+				<useLimit>
+					<DIV STYLE="text-align:Left;"><P><SPAN>Licensed under the MIT License. Free for commercial and non-commercial use.</SPAN></P></DIV>
+				</useLimit>
+			</Consts>
+		</resConst>
+	</dataIdInfo>
+</metadata>

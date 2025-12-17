@@ -1,0 +1,28 @@
+# GeoTIFF ToolKit Configuration File
+
+[paths]
+# OSGeo4W installation path (for standalone GDAL)
+osgeo4w = "C:/OSGeo4W"
+
+[gui]
+# GUI Configuration
+default_layout = "analyst"
+default_theme = "material_light"
+window_size = [1200, 900]
+enable_dark_mode = true
+
+[api]
+# REST API Configuration
+host = "0.0.0.0"
+port = 8000
+max_upload_size_mb = 500
+cache_ttl_seconds = 3600
+
+# Authentication (placeholder for future implementation)
+# auth_type = "none"  # Options: none, api_key, oauth
+# auth_config = {}
+
+[logging]
+# Logging Configuration
+level = "INFO"
+file = "gttk.log"

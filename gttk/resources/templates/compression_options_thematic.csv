@@ -1,0 +1,14 @@
+type,algorithm,level,predictor,max_z_error,tile_size,cog,overviews
+thematic,DEFLATE,6,1,,512,True,True
+thematic,DEFLATE,9,1,,512,True,True
+thematic,DEFLATE,12,1,,512,True,True
+thematic,DEFLATE,6,2,,512,True,True
+thematic,DEFLATE,9,2,,512,True,True
+thematic,DEFLATE,12,2,,512,True,True
+thematic,ZSTD,6,1,,512,True,True
+thematic,ZSTD,9,1,,512,True,True
+thematic,ZSTD,6,2,,512,True,True
+thematic,ZSTD,9,2,,512,True,True
+thematic,LZW,,1,,512,True,True
+thematic,LZW,,2,,512,True,True
+thematic,LERC,,,0,512,True,True

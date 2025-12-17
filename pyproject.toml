@@ -1,0 +1,78 @@
+[build-system]
+requires = ["setuptools>=67.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "geotiff-toolkit"
+version = "0.8.0"
+description = "GeoTIFF ToolKit (GTTK): A Python toolkit for analyzing and optimizing GeoTIFF data."
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "MIT" }
+authors = [
+  { name = "Eric Robeck", email = "robeckgeo@gmail.com" }
+]
+keywords = ["geotiff", "gdal", "cloud-optimized-geotiff", "elevation", "orthoimagery", "remote-sensing"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "Intended Audience :: End Users/Desktop",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.13",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Topic :: Scientific/Engineering :: GIS",
+  "Topic :: Utilities"
+]
+
+dependencies = [
+  "gdal>=3.11",
+  "lxml>=5.3.1",
+  "matplotlib>=3.10.0",
+  "mistune>=3.0.0",
+  "numpy>=2.2.0",
+  "openpyxl>=3.1.5",
+  "pillow>=11.1.0",
+  "tifffile>=2025.1.10",
+]
+
+[project.urls]
+Homepage = "https://github.com/robeckgeo/gttk"
+Repository = "https://github.com/robeckgeo/gttk"
+Issues = "https://github.com/robeckgeo/gttk/issues"
+Changelog = "https://github.com/robeckgeo/gttk/blob/main/CHANGELOG.md"
+
+[project.scripts]
+gttk = "gttk.main:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages]
+find = { where = ["."] , include = ["gttk*"] }
+
+[tool.setuptools.package-data]
+# Include non-Python data files in the final wheel
+gttk = [
+    "resources/**/*.json",
+    "resources/**/*.py",
+    "resources/**/*.md",
+    "resources/**/*.svg",
+    "resources/**/*.png",
+    "resources/**/*.ico",
+    "resources/**/*.css",
+    "resources/**/*.qml",
+    "resources/**/*.ui",
+    "resources/**/*.txt",
+]
+
+[tool.setuptools.exclude-package-data]
+# Exclude cache folders and temporary data
+gttk = [
+    "resources/esri/cache/*",
+    "resources/tiff/cache/*",
+    "resources/**/*.html"
+]
+

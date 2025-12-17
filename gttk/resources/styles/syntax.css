@@ -1,0 +1,79 @@
+/* Syntax Highlighting CSS for GeoTIFF ToolKit HTML Reports */
+
+/* XML Syntax Highlighting */
+.tag-name { 
+    color: var(--xml-tag-name); 
+}
+
+.attr-name { 
+    color: var(--xml-attr-name); 
+}
+
+.attr-value { 
+    color: var(--xml-attr-value); 
+    font-weight: bold;
+}
+
+.comment { 
+    color: var(--xml-comment); 
+}
+
+.tag-start, .tag-end, .equals, .quote { 
+    color: var(--xml-bracket); 
+}
+
+.xml-text { 
+    color: var(--xml-text); 
+    font-weight: bold; 
+}
+
+.space { 
+    color: var(--xml-text); 
+    font-weight: bold; 
+}
+
+/* WKT Syntax Highlighting */
+.wkt-keyword { 
+    color: var(--wkt-keyword); 
+    font-weight: bold; 
+}
+
+.wkt-number { 
+    color: var(--wkt-number); 
+}
+
+.wkt-text { 
+    color: var(--wkt-text); 
+    font-weight: bold;
+}
+
+.wkt-punc { 
+    color: var(--wkt-punc); 
+}
+
+.wkt-enum { 
+    color: var(--wkt-enum); 
+}
+
+/* JSON Syntax Highlighting */
+.json-member { 
+    color: var(--json-member); 
+    font-weight: bold; 
+}
+
+.json-number { 
+    color: var(--json-number); 
+}
+
+.json-string { 
+    color: var(--json-string); 
+    font-weight: bold;
+}
+
+.json-punc { 
+    color: var(--json-punc); 
+}
+
+.json-bool { 
+    color: var(--json-bool); 
+}

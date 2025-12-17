@@ -1,0 +1,10 @@
+<svg width="100%" height="100%" viewBox="0 0 800 800" version="1.1" xmlns="http://www.w3.org/2000/svg" xml:space="preserve" 
+     style="fill:none;fill-rule:nonzero;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke:#000;stroke-width:50px;">
+	<path d="M50,700l700,0"/>
+	<path d="M700,460l0,120"/>
+	<path d="M580,380l0,200"/>
+	<path d="M460,220l0,360"/>
+	<path d="M100,460l0,120"/>
+	<path d="M220,220l0,360"/>
+	<path d="M340,100l0,480"/>
+</svg>

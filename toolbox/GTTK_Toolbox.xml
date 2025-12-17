@@ -1,0 +1,216 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata xml:lang="en">
+	<Esri>
+		<CreaDate>20250807</CreaDate>
+		<CreaTime>06083700</CreaTime>
+		<ArcGISFormat>1.0</ArcGISFormat>
+		<SyncOnce>TRUE</SyncOnce>
+	</Esri>
+	<tool name="OptimizeCompression" displayname="Optimize Compression" toolboxalias="gttk">
+		<summary>Optimizes and compresses a GeoTIFF into a Cloud-Optimized GeoTIFF (COG) with intelligent defaults.</summary>
+		<usage>
+			<bullet_item>Handles resampling, reprojecting, alpha band conversion, and various compression algorithms.</bullet_item>
+			<bullet_item>All intermediate steps are handled in-memory to maximize performance.</bullet_item>
+			<bullet_item>Provides a detailed report comparing the input and output files.</bullet_item>
+		</usage>
+		<parameters>
+			<param sync="true" name="input_path" displayname="Input GeoTIFF or Raster Layer" datatype="Raster Layer" direction="Input" expression="input_path" type="Required">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The source GeoTIFF file or raster layer to optimize.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="output_path" displayname="Output GeoTIFF" datatype="DEFile" direction="Output" expression="output_path" type="Required">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The path and filename for the optimized output GeoTIFF.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="product_type" displayname="Product Type" datatype="String" direction="Input" expression="product_type" type="Required">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The type of GeoTIFF product. This choice determines the optimal compression defaults and available algorithms.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Digital Elevation Model:</SPAN><SPAN> For elevation data. Enables vertical SRS handling and rounding. Defaults to DEFLATE compression.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Error Model:</SPAN><SPAN> For 32-bit error models with low precision. Enhances lossless compression by rounding to 1 decimal (e.g. 10 cm) first. Defaults to DEFLATE.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Orthoimage or Basemap:</SPAN><SPAN> For visual imagery. Defaults to YCbCr JPEG compression and handles alpha bands and transparency masks correctly.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Thematic Data:</SPAN><SPAN> For classified data like landcover. Uses Nearest Neighbor resampling and lossless compression, defaulting to DEFLATE.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Scientific Data:</SPAN><SPAN> For continuous floating-point data. Enables rounding and defaults to DEFLATE.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="raster_type" displayname="Raster Type (Area or Point)" datatype="String" direction="Input" expression="raster_type" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>Override the raster's interpretation of pixel values.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• PixelIsPoint:</SPAN><SPAN> The pixel value represents a measurement at the exact coordinate (e.g., elevation). Recommended for DEMs and scientific data.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• PixelIsArea:</SPAN><SPAN> The pixel value represents the average value over the area of the pixel (e.g., imagery, landcover).</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="vertical_srs" displayname="Vertical SRS" datatype="String" direction="Input" expression="vertical_srs" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The vertical coordinate system for DEMs (e.g., EGM2008, NAVD88). This is critical for ensuring correct vertical alignment.</SPAN></P>
+							<P><SPAN>This tool correctly handles compound coordinate systems, preventing common vertical shift errors.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="nodata" displayname="NoData Value" datatype="String" direction="Input" expression="nodata" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The NoData value for DEM or error model data types. The value 'NaN' (for Not-a-Number) only works with floating-point data.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="algorithm" displayname="Compression Algorithm" datatype="String" direction="Input" expression="algorithm" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The compression algorithm to use. If not specified, an intelligent default based on Data Type will be chosen.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="quality" displayname="JPEG Quality" datatype="Long" direction="Input" expression="quality" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>JPEG or JXL compression quality (75-100). Only used if Algorithm is JPEG or JXL. Default is 90.</SPAN></P>
+							<P><SPAN>Higher values result in better quality and larger file sizes.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="predictor" displayname="Predictor" datatype="String" direction="Input" expression="predictor" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The predictor algorithm for LZW, DEFLATE, or ZSTD compression. A predictor can significantly improve compression ratios by storing the differences between adjacent pixel values rather than the raw values.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• 1 - None:</SPAN><SPAN> No prediction is used. Generally results in the worst compression.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• 2 - Horizontal differencing:</SPAN><SPAN> Stores the difference between a pixel and its neighbor to the left. Highly effective for integer data or rounded floating-point data.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• 3 - Floating-point:</SPAN><SPAN> A more complex predictor designed for floating-point data. Best for un-rounded float data.</SPAN></P>
+							<P><SPAN>If left blank, the tool will automatically select the optimal predictor based on the data type.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="level" displayname="Compression Level" datatype="Long" direction="Input" expression="level" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The compression level for DEFLATE (1-9) or ZSTD (1-22).</SPAN></P>
+							<P><SPAN>Higher values result in better compression but may take longer to process.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="max_z_error" displayname="Max Z Error (LERC)" datatype="Double" direction="Input" expression="max_z_error" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The maximum allowable error for LERC compression, specified in the units of the raster's vertical coordinate system.</SPAN></P>
+							<P><SPAN>LERC is a lossy compression method for numeric data. This value controls the trade-off between file size and precision. For example, a value of 0.01 means that the compressed pixel values will be within +/- 0.01 of the original values.</SPAN></P>
+							<P><SPAN>A default value is chosen based on the Data Type if not specified.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="decimals" displayname="Decimal Places for Rounding" datatype="Long" direction="Input" expression="decimals" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The number of decimal places to round DEM or scientific data to before compression.</SPAN></P>
+							<P><SPAN>Rounding floating-point data can dramatically improve the effectiveness of lossless compression algorithms like DEFLATE or ZSTD, especially when a predictor is used. For many datasets, rounding to 1 or 2 decimal places can significantly reduce file size with no meaningful loss of accuracy.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="tile_size" displayname="Tile Size (in Pixels)" datatype="Long" direction="Input" expression="tile_size" type="Required">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The width and height of the internal tiles used for the image and its overviews (e.g., 256x256 or 512x512).</SPAN></P>
+							<P><SPAN>Tiling improves access speed by allowing applications to read only the specific parts of the image they need, rather than the entire file.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• 512 (Default):</SPAN><SPAN> A standard balance between number of tiles and individual tile size. Widely supported and performant.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• 256:</SPAN><SPAN> Useful for web mapping applications where smaller payloads are preferred for faster network transmission.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• 1024+:</SPAN><SPAN> Can slightly improve compression efficiency for very large files by reducing tile overhead, but may increase memory usage in viewing applications.</SPAN></P>
+							<P><SPAN>Values must be multiples of 16. Powers of 2 (256, 512, 1024) are standard.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="geo_metadata" displayname="Write External XML to GEO_METADATA Tag" datatype="Boolean" direction="Input" expression="geo_metadata" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>Write the contents of the external XML metadata file (if present) to the GEO_METADATA TIFF Tag (#50909). The tool will look for an XML file with the same basename as the TIF, or optionally with a '_meta' suffix, in the same directory or parent directory. The .aux.xml extension will be ignored as this extension is used for Precision Auxiliary Metadata (PAM). If a matching XML file is found, it will be written to the GEO_METADATA tag.</SPAN></P>
+							<P><SPAN>The GEO_METADATA tag was created to support the GeoTIFF Profile for Georeferenced Imagery (DGIWG 108) standard produced by the Defence Geospatial Information Working Group (DGIWG). Because it is distinct from the more commonly used GDAL_METADATA Tag (#42112), which uses &lt;Item&gt; elements to store its attributes, GEO_METADATA can store entire XML metadata files compliant with standards including the DGIWG Metadata Foundation (DMF) ISO 19115/19139, INSPIRE, FGDC, DMF, etc.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="write_pam_xml" displayname="Write Statistics XML (.aux.xml)" datatype="Boolean" direction="Input" expression="write_pam_xml" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>If checked, a Precision Auxiliary Metadata (PAM) .aux.xml file containing band statistics and histograms will be created. This allows ArcGIS Pro to skip the 'Calculate Statistics' step when loading the raster, improving performance.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="cog" displayname="Create Cloud-Optimized GeoTIFF (COG)" datatype="Boolean" direction="Input" expression="cog" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>If checked, the output will be a Cloud-Optimized GeoTIFF, which is structured for efficient streaming and web access. If unchecked, it will be a standard tiled GeoTIFF. Default is checked.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="overviews" displayname="Create Internal Overviews" datatype="Boolean" direction="Input" expression="overviews" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>If checked, internal overviews (pyramids) will be generated. Overviews are lower-resolution versions of the raster that improve display performance at smaller scales. Default is checked.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="mask_nodata" displayname="Mask NoData Pixels" datatype="Boolean" direction="Input" expression="mask_nodata" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>If True, add NoData pixels (if any) to an internal mask and unset the NoData value. This is a best practice for imagery.</SPAN></P>
+							<P><SPAN>If False, the NoData value will be preserved.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="mask_alpha" displayname="Convert Alpha Band (if present) to Internal Mask" datatype="Boolean" direction="Input" expression="mask_alpha" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>If True, convert an alpha band (if present) to an internal mask and return a masked image. This is a best practice for imagery and is required for YCbCr JPEG compression.</SPAN></P>
+							<P><SPAN>If False, the RGBA image will be preserved, which may limit the choice of compression algorithms.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="add_to_map" displayname="Add Output to Map" datatype="Boolean" direction="Input" expression="add_to_map" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>If checked, the output file will be loaded into the current active map in ArcGIS Pro.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="report_format" displayname="Compression Report Format" datatype="String" direction="Input" expression="report_format" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The format for the compression report file. Can be HTML (default) or Markdown.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="report_suffix" displayname="Report Filename Suffix" datatype="String" direction="Input" expression="report_suffix" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The suffix to append to the input filename for the report. Default is '_comp'.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="open_report" displayname="Open Report on Completion" datatype="Boolean" direction="Input" expression="open_report" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>If checked, the generated report file will be opened automatically upon completion. Default is checked.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+		</parameters>
+		<summary>Optimizes and compresses a GeoTIFF into a Cloud-Optimized GeoTIFF (COG) with intelligent defaults for various data types including DEMs, imagery, and scientific data.</summary>
+		<usage>
+			<bullet_item>Handles resampling, reprojecting, alpha band conversion, and various compression algorithms including JPEG, JXL, LZW, DEFLATE, ZSTD, and LERC.</bullet_item>
+			<bullet_item>All intermediate steps are handled in-memory to maximize performance and minimize disk I/O overhead.</bullet_item>
+			<bullet_item>Provides a detailed compression report comparing the input and output files with metrics on file size, compression ratio, and processing time.</bullet_item>
+			<bullet_item>Supports Cloud Optimized GeoTIFF (COG) creation with internal overviews for efficient web streaming and partial reads.</bullet_item>
+			<bullet_item>Handles complex coordinate system scenarios including compound CRS and vertical datum transformations without common shift errors.</bullet_item>
+		</usage>
+		<scriptExamples>
+			<scriptExample>
+				<title>Optimize a DEM with default settings</title>
+				<para>This example optimizes an elevation model using intelligent defaults for DEM data.</para>
+				<code>import arcpy
+arcpy.gttk.OptimizeCompression("input_dem.tif", "output_dem.tif", "Digital Elevation Model")</code>
+			</scriptExample>
+			<scriptExample>
+				<title>Optimize imagery with JPEG compression</title>
+				<para>This example compresses an orthoimage using JPEG with quality 85.</para>
+				<code>import arcpy
+arcpy.gttk.OptimizeCompression("input_ortho.tif", "output_ortho.tif",
+				                           "Orthoimage or Basemap", algorithm="JPEG", quality=85)</code>
+			</scriptExample>
+			<scriptExample>
+				<title>Create a COG with LERC compression for scientific data</title>
+				<para>This example creates a Cloud Optimized GeoTIFF with controlled lossy compression.</para>
+				<code>import arcpy
+arcpy.gttk.OptimizeCompression("input_scientific.tif", "output_cog.tif",
+				                           "Scientific Data", algorithm="LERC",
+				                           max_z_error=0.01, cog=True)</code>
+			</scriptExample>
+		</scriptExamples>
+		<tags>
+			<tag>GeoTIFF</tag>
+			<tag>COG</tag>
+			<tag>Cloud Optimized GeoTIFF</tag>
+			<tag>compression</tag>
+			<tag>DEM</tag>
+			<tag>elevation</tag>
+			<tag>LERC</tag>
+			<tag>JPEG</tag>
+			<tag>optimize</tag>
+			<tag>raster</tag>
+		</tags>
+	</tool>
+	<dataIdInfo>
+		<idCredit>GeoTIFF ToolKit - Eric Robeck (robeckgeo@gmail.com)</idCredit>
+		<idAbs>
+			<DIV STYLE="text-align:Left;"><P><SPAN>This tool optimizes GeoTIFF files for size and performance, creating Cloud Optimized GeoTIFFs (COGs) with intelligent compression defaults based on data type. It handles DEMs, imagery, scientific data, and thematic datasets with appropriate algorithms and parameters.</SPAN></P></DIV>
+		</idAbs>
+		<idPurp>Reduce GeoTIFF file sizes while preserving data quality and enabling efficient web streaming through COG optimization.</idPurp>
+		<resConst>
+			<Consts>
+				<useLimit>
+					<DIV STYLE="text-align:Left;"><P><SPAN>Licensed under the MIT License. Free for commercial and non-commercial use. See LICENSE file for details.</SPAN></P></DIV>
+				</useLimit>
+			</Consts>
+		</resConst>
+	</dataIdInfo>
+</metadata>

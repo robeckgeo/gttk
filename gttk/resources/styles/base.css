@@ -1,0 +1,114 @@
+/* Base CSS for GeoTIFF ToolKit HTML Reports */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: 'Roboto', sans-serif;
+    font-size: 12px;
+    line-height: 1.6;
+    background-color: var(--background);
+    color: var(--text);
+    margin: 0;
+    padding-bottom: 28px;
+}
+
+.container {
+    max-width: 1000px;
+    min-width: 600px;
+    margin: 0 auto;
+    padding: 15px;
+}
+
+.container h2:first-of-type {
+    margin-top: -10px;
+}
+
+.header-content {
+    max-width: 1000px;
+    min-width: 600px;
+    margin: 0 auto;
+    padding: 0px 15px;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Roboto', sans-serif;
+    margin-top: 1em;
+    margin-bottom: 0.25em;
+    scroll-margin-top: 5px;
+}
+
+p, li, table, th, td {
+    font-size: 12px;
+}
+
+pre {
+    background-color: #F2F2F2;
+    padding: 1em;
+    border-radius: 5px;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 10px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+code {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 10px;
+}
+
+table {
+    border-collapse: collapse;
+    width: auto;
+    margin-bottom: 1em;
+}
+
+th, td {
+    border: 1px solid #ddd;
+    padding: 2px 4px;
+    text-align: left;
+    vertical-align: top;
+}
+
+th {
+    font-weight: bold;
+    border-bottom: 2px solid #ccc;
+}
+
+td:first-child {
+    white-space: nowrap;
+}
+
+tr:nth-child(even) {
+    background-color: #f2f2f2;
+}
+
+td:nth-child(3) {
+    overflow-wrap: break-word;
+    overflow-wrap: anywhere; /* breaks very long unbroken strings (like URLs) */
+    word-break: normal;
+    hyphens: none;
+    white-space: normal;
+}
+
+.container .report {
+    position: relative;
+    padding-top: 0.75rem;
+    color: #555;
+    font-style: italic;
+    margin-top: 1rem;
+}
+
+/* Add a full-width gray gradient horizontal line above the footer */
+.container .report::before {
+    content: "";
+    display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(to right, #e9e9e9, #7e7e7e, #e9e9e9);
+}

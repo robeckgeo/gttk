@@ -1,0 +1,34 @@
+# Core metadata files
+include README.md
+include CHANGELOG.md
+include LICENSE
+include pyproject.toml
+include requirements.txt
+
+# Include selective resource files
+recursive-include gttk/resources *
+
+# Exclude unused resource cache files
+recursive-exclude gttk/resources/esri/cache *
+recursive-exclude gttk/resources/tiff/cache *
+
+# Exclude misc files not needed on PyPI
+exclude .gitignore
+exclude .coveragerc
+exclude coverage.xml
+exclude .coverage
+
+# Exclude beta GUI
+exclude gttk_gui.py
+prune gttk/gui
+
+# Exclude heavy or dev-only directories
+prune arcgis_toolbox
+prune design
+prune docs
+prune htmlcov
+prune input
+prune output
+prune plans
+prune tests
+prune temp

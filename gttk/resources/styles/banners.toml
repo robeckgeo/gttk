@@ -1,0 +1,96 @@
+# Security Classification Banner Styles for GeoTIFF ToolKit (GTTK)
+# ==============================================================================
+# This file defines the colors and text styles for report banners based on
+# security classification markings.
+#
+# COLOR SOURCES:
+# - USA Colors: Astro UXDS (https://www.astrouxds.com/components/classification-markings/)
+#               Aligned with GSA Standard Forms (SF 706, 707, 708, 710, 712, 902).
+# - Australia Colors: PSPF Digital Markings (https://www.protectivesecurity.gov.au/)
+# - UK Colors: Intelligence Community Design System (https://design.sis.gov.uk/styles/colour#classification)
+#
+# LOGIC NOTES:
+# 1. Matching is Case Insensitive.
+# 2. ORDER MATTERS: Rules are evaluated in order. If multiple rules match the 
+#    banner text, the LAST matching rule wins. This allows for specific overrides
+#    (e.g., defining "TOP SECRET" first, then "TOP SECRET//SCI" later to override it).
+#
+# CUSTOMIZATION:
+# To add your own classification system, add a new [[banners]] block or update an existing one.
+# - pattern: Python Regex pattern to match against the banner text.
+#            Example: "^official" matches text starting with "official".
+#            Example: "^official.*sensitive" matches "official" at start AND "sensitive" later.
+# - background_color: CSS color value for the banner background.
+# - color: CSS color value for the banner text (optional, defaults to white if not specified).
+
+# ------------------------------------------------------------------------------
+# USA CLASSIFICATIONS
+# ------------------------------------------------------------------------------
+
+[[banners]]
+description = "Confidential"
+pattern = "^confidential"
+background_color = "#0033a0"
+color = "white"
+
+[[banners]]
+description = "Unclassified"
+pattern = "^unclassified"
+background_color = "#007a33"
+color = "white"
+
+[[banners]]
+description = "CUI"
+pattern = "^cui"
+background_color = "#007a33"  # "CUI" labels use #502b85 but banners are UNCLASSIFIED green
+color = "white"
+
+[[banners]]
+description = "Secret"
+pattern = "^secret"  # starts (^) with "secret" to avoid matching "top secret"
+background_color = "#c8102e"  # Australia PSPF: #e5b8b7; GOV.UK: #f39c2c
+color = "white"
+
+[[banners]]
+description = "Top Secret (Collateral)"
+# The '.*' supports a prefix (e.g. "UK TOP SECRET")
+pattern = ".*top secret"
+background_color = "#ff8c00"  # Australia PSPF: #ff0000; GOV.UK: #f39c2c
+color = "black"
+
+[[banners]]
+description = "Top Secret//SCI"
+# Overrides the Orange "TOP SECRET" above
+pattern = ".*top secret//"
+background_color = "#fce83a"  # Australia PSPF: #ff0000; GOV.UK: #aa0000
+color = "black"
+
+# ------------------------------------------------------------------------------
+# AUSTRALIA & UK CLASSIFICATIONS (DEFAULTS TO AUSTRALIA PSPF COLORS)
+# ------------------------------------------------------------------------------
+
+[[banners]]
+description = "Unofficial"
+pattern = "^unofficial"
+background_color = "#afabab"
+color = "black"
+
+[[banners]]
+description = "Official"
+# Overridden by "Official Sensitive" below
+pattern = "^official"
+background_color = "#d0cece"  # GOV.UK: #2b71c7
+color = "black"
+
+[[banners]]
+description = "Official Sensitive"
+# Matches "OFFICIAL Sensitive", "OFFICIAL: SENSITIVE", etc.
+pattern = "^official.*sensitive"
+background_color = "#ffff99"  # GOV.UK: #2b71c7
+color = "#ff0000"  # GOV.UK: #ffffff (or remove this line)
+
+[[banners]]
+description = "Protected"
+pattern = "^protected"
+background_color = "#4f81bd"
+color = "white"

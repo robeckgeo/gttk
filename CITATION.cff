@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Robeck"
+    given-names: "Eric"
+    email: "robeckgeo@gmail.com"
+    alias: "robeckgeo"
+    orcid: "https://orcid.org/0000-0002-2603-7990"
+title: "GeoTIFF ToolKit (GTTK)"
+abstract: "A unified Python toolkit for analyzing, optimizing, and compressing GeoTIFF files. GTTK provides a modular command-line interface and ArcGIS Toolbox for professional geospatial workflows, including optimization/COG creation, metadata extraction, and compression benchmarking."
+version: 0.8.0
+date-released: 2025-12-07
+license: MIT
+repository-code: "https://github.com/robeckgeo/gttk"
+url: "https://github.com/robeckgeo/gttk"
+keywords:
+  - "geotiff"
+  - "cloud-optimized-geotiff"
+  - "geospatial"
+  - "elevation"
+  - "orthoimagery"
+  - "remote-sensing"
+  - "scientific-modeling"
+  - "gdal"
+  - "arcgis"
+  - "python"
+identifiers:
+  - type: url
+    value: "https://www.researchgate.net/profile/Eric-Robeck"
+    description: "ResearchGate Profile"

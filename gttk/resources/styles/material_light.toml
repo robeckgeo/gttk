@@ -1,0 +1,31 @@
+# Material Theme Light
+# Color scheme for GeoTIFF ToolKit HTML Reports
+
+name = "Material Theme Light"
+
+[colors]
+background = "#FFFFFF"
+text = "#333333"
+accent = "#007bff"
+
+[syntax.xml]
+tag-name = "#E93935"
+attr-name = "#9C3EDA"
+attr-value = "#196B24"
+comment = "#90A4AE"
+bracket = "#39ADB5"
+text = "#000000"
+
+[syntax.wkt]
+keyword = "#196B24"
+number = "#40A070"
+text = "#4070A0"
+punc = "#3C4A69"
+enum = "#000000"
+
+[syntax.json]
+member = "#196B24"
+number = "#40A070"
+string = "#4070A0"
+punc = "#3C4A69"
+bool = "#000000"

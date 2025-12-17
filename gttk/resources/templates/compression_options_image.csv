@@ -1,0 +1,13 @@
+type,algorithm,level,predictor,decimals,max_z_error,quality,tile_size,cog,overviews
+image,LZW,,1,,,,512,TRUE,TRUE
+image,LZW,,2,,,,512,TRUE,TRUE
+image,DEFLATE,6,1,,,,512,TRUE,TRUE
+image,DEFLATE,6,2,,,,512,TRUE,TRUE
+image,ZSTD,9,1,,,,512,TRUE,TRUE
+image,ZSTD,9,2,,,,512,TRUE,TRUE
+image,JPEG,,,,,90,512,TRUE,TRUE
+image,JPEG,,,,,95,512,TRUE,TRUE
+image,JPEG,,,,,100,512,TRUE,TRUE
+image,JXL,7,,,,90,512,TRUE,TRUE
+image,JXL,7,,,,95,512,TRUE,TRUE
+image,JXL,7,,,,100,512,TRUE,TRUE

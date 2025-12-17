@@ -1,0 +1,9 @@
+type,algorithm,level,predictor,decimals,max_z_error,nodata,vertical_srs,tile_size,cog,overviews
+dem,LZW,,3,8,,NaN,EGM2008,512,TRUE,TRUE
+dem,LZW,,2,2,,NaN,EGM2008,512,TRUE,TRUE
+dem,DEFLATE,6,3,8,,NaN,EGM2008,512,TRUE,TRUE
+dem,DEFLATE,6,2,2,,NaN,EGM2008,512,TRUE,TRUE
+dem,ZSTD,9,3,8,,NaN,EGM2008,512,TRUE,TRUE
+dem,ZSTD,9,2,2,,NaN,EGM2008,512,TRUE,TRUE
+dem,LERC,,,,0,NaN,EGM2008,512,TRUE,TRUE
+dem,LERC,,,,0.01,NaN,EGM2008,512,TRUE,TRUE

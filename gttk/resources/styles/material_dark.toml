@@ -1,0 +1,31 @@
+# Material Theme Dark
+# Color scheme for GeoTIFF ToolKit HTML Reports
+
+name = "Material Theme Dark"
+
+[colors]
+background = "#212121"
+text = "#FFFFFF"
+accent = "#89DDFF"
+
+[syntax.xml]
+tag-name = "#F07178"
+attr-name = "#C792EA"
+attr-value = "#C3E88D"
+comment = "#ADADAD"
+bracket = "#89DDFF"
+text = "#FFFFFF"
+
+[syntax.wkt]
+keyword = "#C3E88D"
+number = "#F78C6C"
+text = "#89DDFF"
+punc = "#FFFFFF"
+enum = "#FFCB6B"
+
+[syntax.json]
+member = "#C3E88D"
+number = "#F78C6C"
+string = "#89DDFF"
+punc = "#FFFFFF"
+bool = "#FFCB6B"

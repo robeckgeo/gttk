@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata xml:lang="en">
+	<Esri>
+		<CreaDate>20250722</CreaDate>
+		<CreaTime>22024600</CreaTime>
+		<ArcGISFormat>1.0</ArcGISFormat>
+		<SyncOnce>TRUE</SyncOnce>
+	</Esri>
+	<tool name="ReadMetadata" displayname="Read Metadata" toolboxalias="gttk">
+		<summary>Reads the metadata in a GeoTIFF header and generates a comprehensive metadata report in HTML or Markdown format.</summary>
+		<usage>
+			<bullet_item>The tool generates a detailed analysis of TIFF tags, GeoTIFF keys, projection information, and COG validation.</bullet_item>
+			<bullet_item>HTML format provides syntax highlighting and is best for viewing in web browsers.</bullet_item>
+			<bullet_item>Markdown format is plain text and suitable for documentation systems.</bullet_item>
+			<bullet_item>The output file is automatically named based on the input file with the specified suffix and format extension.</bullet_item>
+		</usage>
+		<parameters>
+			<param sync="true" name="input_geotiff" displayname="Input GeoTIFF or Raster Layer" datatype="Raster Layer" direction="Input" expression="input_geotiff" type="Required">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The GeoTIFF file or raster layer to analyze. You can select a layer from the map or browse to a file on disk.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="output_format" displayname="Output Format" datatype="String" direction="Input" expression="output_format" type="Required">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>Choose the output format for the metadata report. HTML provides syntax highlighting and is best for viewing, while Markdown is plain text suitable for documentation.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="output_suffix" displayname="Output Filename Suffix" datatype="String" direction="Input" expression="output_suffix" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>A suffix to append to the output filename before the file extension. Default is '_header'.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="output_file" displayname="Output Report File" datatype="File" direction="Output" expression="output_file" type="Derived">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The generated metadata report file. This path is automatically determined based on the input file, format, and suffix selections.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="open_report" displayname="Open Report on Completion" datatype="Boolean" direction="Input" expression="open_report" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>When checked, the generated report file will be automatically opened using the system's default application (e.g., a web browser for HTML files).</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param sync="true" name="write_pam_xml" displayname="Write Statistics XML (.aux.xml)" datatype="Boolean" direction="Input" expression="write_pam_xml" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>If checked, an Esri-compatible .aux.xml file containing band statistics and histograms will be created. This allows ArcGIS Pro to skip the 'Calculate Statistics' step when loading the raster.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param name="page" displayname="Image File Directory (IFD)" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><P><SPAN>The Image File Directory (IFD) number to read. Defaults to 0 (the main image). Overviews and other supplemental images are stored in subsequent IFDs. For example, a GeoTIFF with three overviews will have IFDs 0 through 4, where IFD 0 is the main image and IFDs 1-4 are the overviews.</SPAN></P></DIV>
+				</dialogReference>
+			</param>
+			<param name="banner" displayname="Banner Text" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>Custom text to display at the top of the report. Useful for classification markings (e.g., CUI, INTERNAL USE ONLY) or project identifiers.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param name="reader_type" displayname="Reader Type" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>Predefined configuration for report content:</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Analyst (Default):</SPAN><SPAN> Focuses on actionable data for geospatial analysis. Includes standard tags, statistics, and compact tables.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Producer:</SPAN><SPAN> Focuses on data production details. Includes all tags (complete scope) and raw text formats.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Custom:</SPAN><SPAN> Allows manual selection of specific report sections below.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param name="tag_scope" displayname="Tag Scope" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>Controls the verbosity of the TIFF Tag section:</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Compact:</SPAN><SPAN> Shows only common and critical tags. Hides obscure or empty tags.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Complete:</SPAN><SPAN> Lists every single TIFF tag found in the header, including unknown or private tags.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+			<param name="xml_type" displayname="XML Format" type="Optional">
+				<dialogReference>
+					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>How XML metadata (GDAL_METADATA, GEO_METADATA, PAM, XMP, and external XML files) is presented in the report:</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Table:</SPAN><SPAN> Formats XML attributes into a readable table key-value pairs.</SPAN></P>
+							<P><SPAN STYLE="font-weight:bold;">• Text:</SPAN><SPAN> Displays the raw XML string, useful for copy-pasting or debugging syntax errors.</SPAN></P></DIV></DIV>
+				</dialogReference>
+			</param>
+		</parameters>
+		<scriptExamples>
+			<scriptExample>
+				<title>Generate HTML metadata report</title>
+				<para>This example reads GeoTIFF metadata and creates an HTML report.</para>
+				<code>import arcpy
+arcpy.gttk.ReadMetadata("input.tif", "HTML (.html)")</code>
+			</scriptExample>
+			<scriptExample>
+				<title>Generate Markdown documentation</title>
+				<para>This example creates Markdown metadata documentation with custom suffix.</para>
+				<code>import arcpy
+arcpy.gttk.ReadMetadata("raster.tif", "Markdown (.md)",
+				                    output_suffix="_metadata", write_pam_xml=True)</code>
+			</scriptExample>
+			<scriptExample>
+				<title>Analyze specific IFD (overview)</title>
+				<para>This example reads metadata from a specific Image File Directory.</para>
+				<code>import arcpy
+arcpy.gttk.ReadMetadata("cog.tif", "HTML (.html)", page=1)</code>
+			</scriptExample>
+		</scriptExamples>
+		<tags>
+			<tag>GeoTIFF</tag>
+			<tag>metadata</tag>
+			<tag>TIFF tags</tag>
+			<tag>GeoKeys</tag>
+			<tag>COG validation</tag>
+			<tag>documentation</tag>
+			<tag>analysis</tag>
+		</tags>
+	</tool>
+	<dataIdInfo>
+		<idCredit>GeoTIFF ToolKit - Eric Robeck (robeckgeo@gmail.com)</idCredit>
+		<idAbs>
+			<DIV STYLE="text-align:Left;"><P><SPAN>Extracts and formats comprehensive metadata from GeoTIFF headers including TIFF tags, GeoTIFF keys, projection information, and COG validation. Generates detailed HTML or Markdown reports.</SPAN></P></DIV>
+		</idAbs>
+		<idPurp>Document GeoTIFF technical specifications, validate COG compliance, and extract geospatial metadata for analysis and quality assurance.</idPurp>
+		<resConst>
+			<Consts>
+				<useLimit>
+					<DIV STYLE="text-align:Left;"><P><SPAN>Licensed under the MIT License. Free for commercial and non-commercial use.</SPAN></P></DIV>
+				</useLimit>
+			</Consts>
+		</resConst>
+	</dataIdInfo>
+</metadata>

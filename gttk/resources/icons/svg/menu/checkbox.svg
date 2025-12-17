@@ -1,0 +1,5 @@
+<svg width="100%" height="100%" viewBox="0 0 800 800" version="1.1" xmlns="http://www.w3.org/2000/svg" xml:space="preserve" 
+     style="fill:none;fill-rule:nonzero;clip-rule:evenodd;stroke-linecap:round;stroke-linejoin:round;stroke:#000;stroke-width:50px;">
+	<path d="M750,225c0,-96.585 -78.415,-175 -175,-175l-350,0c-96.585,0 -175,78.415 -175,175l0,350c0,96.585 78.415,175 175,175l350,0c96.585,0 175,-78.415 175,-175l0,-350Z" />
+	<path d="M200,400l150,150l250,-300"/>
+</svg>
