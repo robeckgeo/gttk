@@ -229,7 +229,7 @@ PRODUCER_SECTIONS = [
 # Analyst preset: User-friendly view focusing on data quality and coverage
 ANALYST_SECTIONS = [
     'tags', 'gdal-metadata', 'xmp-metadata', 'georeference', 'bbox', 'geoextent', 
-    'statistics', 'histogram', 'cog', 'geo-metadata', 'xml-metadata'
+    'statistics', 'histogram', 'tiling', 'cog', 'geo-metadata', 'xml-metadata'
 ]
 
 # All available *Read Metadata* report sections (excludes comparison sections)

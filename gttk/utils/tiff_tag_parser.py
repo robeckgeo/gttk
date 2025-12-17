@@ -263,9 +263,13 @@ SUB_IFD_TAGS = {
 # Tags that are excluded from a "Compact* TIFF Tags" section
 EXCLUDED_TAGS = {
     273,   # StripOffsets
+    277,   # SamplesPerPixel
     278,   # RowsPerStrip
     279,   # StripByteCounts
+    282,   # XResolution
+    283,   # YResolution
     284,   # PlanarConfiguration
+    296,   # ResolutionUnit
     324,   # TileOffsets
     325,   # TileByteCounts
     338,   # ExtraSamples
