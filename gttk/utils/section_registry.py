@@ -63,7 +63,7 @@ SECTION_CONFIGS: Dict[str, SectionConfig] = {
     # Spatial extent sections
     'bbox': SectionConfig(
         id='bbox',
-        title='Bounding Box – Native Coordinate System',
+        title='Bounding Box',
         menu_name='BBox',
         icon='bbox',
         renderer='render_bbox'
@@ -148,7 +148,7 @@ SECTION_CONFIGS: Dict[str, SectionConfig] = {
     ),
     'xmp-metadata': SectionConfig(
         id='xmp-metadata',
-        title='Extensible Metadata Platform (XMP) Metadata',
+        title='Extensible Metadata Platform (XMP)',
         menu_name='XMP',
         icon='xmp',
         renderer='render_xmp_metadata'
@@ -162,7 +162,7 @@ SECTION_CONFIGS: Dict[str, SectionConfig] = {
     ),
     'xml-metadata': SectionConfig(
         id='xml-metadata',
-        title='XML Metadata',
+        title='External XML Metadata File',
         menu_name='XML',
         icon='xml',
         renderer='render_xml_metadata'
@@ -189,6 +189,13 @@ SECTION_CONFIGS: Dict[str, SectionConfig] = {
         menu_name='IFDs',
         icon='ifd',
         renderer='render_comparison_ifd'
+    ),
+    'comparison-tiling': SectionConfig(
+        id='comparison-tiling',
+        title='Tiling and Overviews',
+        menu_name='Tiling',
+        icon='tiling',
+        renderer='render_comparison_tiling'
     ),
     'comparison-statistics': SectionConfig(
         id='comparison-statistics',

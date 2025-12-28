@@ -94,10 +94,20 @@ class VirtualFileManager:
 
 def _create_intermediate_with_mask(temp_ds: gdal.Dataset, vfm: VirtualFileManager) -> gdal.Dataset:
     """Handles the alpha to mask conversion and creates an intermediate dataset."""
-    # Apply threshold to the alpha band of the in-memory/temp dataset
     threshold = 230
     logger.info(f"Applying threshold of {threshold}/255 (90% opaque) to alpha band to reduce edge effects.")
-    alpha_band = temp_ds.GetRasterBand(4)
+    
+    # Identify alpha band by color interpretation (fallback to last band)
+    band_count = temp_ds.RasterCount
+    alpha_band_index = band_count
+    
+    for i in range(1, band_count + 1):
+        if temp_ds.GetRasterBand(i).GetColorInterpretation() == gdal.GCI_AlphaBand:
+            alpha_band_index = i
+            break
+            
+    logger.info(f"Identified alpha band at index {alpha_band_index}")
+    alpha_band = temp_ds.GetRasterBand(alpha_band_index)
     alpha_data = alpha_band.ReadAsArray()
     
     alpha_data[alpha_data < threshold] = 0
@@ -106,12 +116,20 @@ def _create_intermediate_with_mask(temp_ds: gdal.Dataset, vfm: VirtualFileManage
     # Keep the processed alpha data for manual mask creation
     mask_data = alpha_data.copy()
 
-    logger.info("Creating intermediate file with RGB bands only.")
-    # First, create output with just RGB bands (no mask yet)
+    logger.info("Creating intermediate file with data bands only (stripping alpha).")
+    
+    # Construct band list excluding the alpha band
+    band_list = [i for i in range(1, band_count + 1) if i != alpha_band_index]
+    
     translate_options = gdal.TranslateOptions(
         format='GTiff',
-        bandList=[1, 2, 3],
-        creationOptions=['TILED=YES', 'COMPRESS=LZW']
+        bandList=band_list,
+        creationOptions=[
+            'GEOTIFF_VERSION=1.1', 
+            'BIGTIFF=YES', 
+            'TILED=YES', 
+            'COMPRESS=LZW'
+        ]
     )
     masked_path = vfm.get_temp_path("masked.tif")
     masked_ds = gdal.Translate(masked_path, temp_ds, options=translate_options)
@@ -127,6 +145,100 @@ def _create_intermediate_with_mask(temp_ds: gdal.Dataset, vfm: VirtualFileManage
     masked_ds.FlushCache()
     
     return masked_ds
+
+def round_overviews(ds: gdal.Dataset, decimals: int) -> gdal.Dataset:
+    """
+    Round all overview bands in a dataset to specified decimal places.
+    
+    This function rounds each overview level for all bands to improve compression
+    efficiency when using lossless compression algorithms (LZW, DEFLATE, ZSTD).
+    Bilinear resampling used to generate overviews introduces interpolated values
+    with more decimal places than the main image, reducing compression efficiency.
+    
+    IMPORTANT: Overviews must be built with COMPRESS=NONE for this to work correctly.
+    Compressed overviews cannot be modified in-place.
+    
+    Args:
+        ds: GDAL dataset with existing UNCOMPRESSED overviews
+        decimals: Number of decimal places to round to
+    
+    Returns:
+        The same dataset with rounded overviews, reopened to ensure changes are visible
+    
+    Example:
+        >>> ds = gdal.Open('/vsimem/temp.tif', gdal.GA_Update)
+        >>> ds.BuildOverviews('BILINEAR', [2, 4, 8], options=['COMPRESS=NONE'])
+        >>> ds = round_overviews(ds, 2)  # Round all overviews to 2 decimal places
+    """
+    if not ds or ds.RasterCount == 0:
+        logger.warning("Dataset is None or has no bands. Cannot round overviews.")
+        return ds
+    
+    filepath = ds.GetDescription()
+    band = ds.GetRasterBand(1)
+    overview_count = band.GetOverviewCount()
+    
+    if overview_count == 0:
+        logger.info("No overviews found to round.")
+        return ds
+    
+    logger.info(f"Rounding {overview_count} overview level(s) to {decimals} decimal places...")
+    
+    total_overviews_processed = 0
+    for band_idx in range(1, ds.RasterCount + 1):
+        band = ds.GetRasterBand(band_idx)
+        overview_count = band.GetOverviewCount()
+        
+        if overview_count == 0:
+            continue
+        
+        logger.info(f"  Processing {overview_count} overviews for band {band_idx}")
+        
+        for ovr_idx in range(overview_count):
+            try:
+                overview_band = band.GetOverview(ovr_idx)
+                if not overview_band:
+                    logger.warning(f"    Overview {ovr_idx} is None, skipping")
+                    continue
+                
+                # Read overview data
+                array = overview_band.ReadAsArray()
+                if array is None:
+                    logger.warning(f"    Failed to read overview {ovr_idx}, skipping")
+                    continue
+                
+                # Round to specified decimals
+                array = np.round(array, decimals)
+                
+                # Write back - this only works for uncompressed overviews
+                write_result = overview_band.WriteArray(array)
+                if write_result != 0:
+                    logger.warning(f"    Failed to write overview {ovr_idx} (error code: {write_result})")
+                    logger.warning("    This may occur if overviews are compressed. Overviews must be uncompressed to round.")
+                    continue
+                
+                overview_band.FlushCache()
+                total_overviews_processed += 1
+                logger.debug(f"    Rounded overview {ovr_idx} ({overview_band.XSize}x{overview_band.YSize})")
+                
+            except Exception as e:
+                logger.error(f"    Error processing overview {ovr_idx}: {e}")
+                continue
+    
+    # Flush the dataset
+    ds.FlushCache()
+    
+    # Reopen to ensure changes are visible
+    filepath_str = filepath  # Store before setting ds to None
+    ds = None  # type: ignore[assignment]
+    reopened_ds = gdal.Open(filepath_str, gdal.GA_Update)
+    
+    if total_overviews_processed > 0:
+        logger.info(f"Overview rounding complete. Processed {total_overviews_processed} overview(s).")
+    else:
+        logger.warning("No overviews were successfully rounded. Ensure overviews are uncompressed before rounding.")
+    
+    return reopened_ds if reopened_ds else ds
 
 def preprocess_geotiff(
     original_ds: gdal.Dataset,
@@ -155,7 +267,16 @@ def preprocess_geotiff(
     # --- 1. Create Intermediate File ---
     temp_path = vfm.get_temp_path("intermediate.tif")
     logger.info(f"Creating intermediate file at virtual path: {temp_path}")
-    ds = gdal.GetDriverByName('GTiff').CreateCopy(temp_path, original_ds, options=['TILED=YES', 'COMPRESS=LZW'])
+    ds = gdal.GetDriverByName('GTiff').CreateCopy(
+        temp_path, 
+        original_ds, 
+        options=[
+            'GEOTIFF_VERSION=1.1', 
+            'BIGTIFF=YES',  # Force BigTIFF to avoid 4GB limit on uncompressed/intermediate files
+            'TILED=YES', 
+            'COMPRESS=LZW'
+        ]
+    )
     if ds is None:
         raise ProcessingStepFailedError("Failed to create intermediate tiled copy.")
 

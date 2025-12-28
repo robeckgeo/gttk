@@ -46,7 +46,8 @@ class Config:
     
     def _load_config(self):
         """Load configuration from config.toml"""
-        config_path = Path(__file__).parent.parent / "config.toml"
+        # config.toml is at project root (one level above gttk package)
+        config_path = Path(__file__).parent.parent.parent / "config.toml"
         if config_path.exists() and tomllib is not None:
             try:
                 with open(config_path, "rb") as f:
@@ -56,6 +57,7 @@ class Config:
                 self._config = self._default_config()
         else:
             # Fallback to defaults if config.toml doesn't exist or tomllib not available
+            print(f"Warning: config.toml not found at {config_path}")
             self._config = self._default_config()
     
     def _default_config(self) -> Dict[str, Any]:

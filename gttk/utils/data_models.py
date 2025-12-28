@@ -46,6 +46,7 @@ Comparison container classes (*Comparison suffix):
     HistogramComparison: Comparison data for histogram analysis
     StatisticsComparison: Comparison data for statistics analysis
     IfdInfoComparison: Comparison data for IFD analysis
+    TilingComparison: Comparison data for tiling analysis
     CogValidationComparison: Comparison data for COG validation
 """
 
@@ -83,6 +84,7 @@ class GeoTiffInfo:
         projection_info: Raw projection information extracted once (raster_type, CS names/codes, units, etc.)
         native_bbox: Cached native coordinate system bounding box
         geographic_corners: Cached geographic (WGS84) corner coordinates
+        cached_projjson: Cached PROJJSON string from OSGeo4W (for ArcGIS Pro compatibility)
     """
     filepath: str
     x_size: int
@@ -92,7 +94,7 @@ class GeoTiffInfo:
     geo_transform: Tuple[float, ...]
     res_x: float
     res_y: float
-    srs: osr.SpatialReference
+    srs: Optional[osr.SpatialReference] = None
     vertical_srs: Optional[osr.SpatialReference] = None
     vertical_srs_name: Optional[str] = None
     data_type: Optional[str] = None
@@ -103,6 +105,7 @@ class GeoTiffInfo:
     projection_info: Optional[Dict[str, Any]] = None
     native_bbox: Optional[Dict[str, float]] = None
     geographic_corners: Optional[Dict[str, Tuple[float, float]]] = None
+    cached_projjson: Optional[str] = None
 
 
 # ============================================================================
@@ -1228,6 +1231,7 @@ class XmlMetadata:
     title: str
     content: str
     xml_type: str = 'text'  # 'text' or 'table'
+    footer: Optional[str] = None
     
     def is_table_format(self) -> bool:
         """
@@ -1246,6 +1250,15 @@ class XmlMetadata:
             True if content is not empty
         """
         return bool(self.content and self.content.strip())
+    
+    def has_footer(self) -> bool:
+        """
+        Check if there is a footer message.
+        
+        Returns:
+            True if footer is set and not empty
+        """
+        return bool(self.footer)
 
 
 # ============================================================================
@@ -1269,7 +1282,7 @@ class TiffTagsData:
         >>> tags_data = TiffTagsData(
         ...     tags=[TiffTag(256, "ImageWidth", 1024)],
         ...     title="Compact* TIFF Tags (IFD 0 – Main Image)",
-        ...     footer="* TIFF tags excluded from the report: StripOffsets, RowsPerStrip"
+        ...     footer="* Some TIFF tags excluded from the report."
         ... )
     """
     tags: List[TiffTag]
@@ -1445,6 +1458,33 @@ class IfdInfoComparison:
     """
     title: str
     files: List[Tuple[str, IfdInfoData]]
+
+
+@dataclass
+class TilingComparison:
+    """
+    Grouped tiling data for comparison reports.
+    
+    Contains tiling and overview information for both baseline and comparison
+    files under a single section. Each file's data includes a sub-header and
+    either its corresponding table or an error message.
+    
+    Attributes:
+        title: Main section title (e.g., "Tiling and Overviews")
+        files: List of tuples (file_label, tiling_data_or_message)
+               where tiling_data_or_message is either List[TileInfo] or str
+    
+    Example:
+        >>> comp_tiling = TilingComparison(
+        ...     title="Tiling and Overviews",
+        ...     files=[
+        ...         ("Baseline", baseline_tiles),
+        ...         ("Comparison", "This file is not tiled.")
+        ...     ]
+        ... )
+    """
+    title: str
+    files: List[Tuple[str, Union[List[TileInfo], str]]]
 
 
 @dataclass

@@ -27,6 +27,7 @@ Classes:
 """
 
 import os
+import lxml.etree as etree
 from abc import ABC
 from typing import Any, List, Optional
 from gttk.utils.data_models import (
@@ -44,6 +45,7 @@ from gttk.utils.data_models import (
     HistogramComparison,
     IfdInfoComparison,
     CogValidationComparison,
+    TilingComparison,
 )
 from gttk.utils.geotiff_processor import (
     read_geotiff,
@@ -191,7 +193,7 @@ class MetadataReportBuilder(ReportBuilder):
         >>> print(len(builder.sections))  # 3 (assuming all sections had data)
     """
     
-    def __init__(self, extractor: MetadataExtractor, page: int = 0, tag_scope: str = 'complete'):
+    def __init__(self, extractor: MetadataExtractor, page: int = 0, tag_scope: str = 'complete', reader_type: Optional[str] = None):
         """
         Initialize metadata report builder.
         
@@ -199,11 +201,13 @@ class MetadataReportBuilder(ReportBuilder):
             extractor: MetadataExtractor instance for the file.
             page: The IFD page to report on.
             tag_scope: The scope of tags to include ('complete' or 'compact').
+            reader_type: The reader type ('analyst', 'producer', or None for custom).
         """
         super().__init__()
         self.extractor = extractor
         self.page = page
         self.tag_scope = tag_scope
+        self.reader_type = reader_type
         self._cached_statistics = None  # Cache to avoid re-extracting
     
     def _build_statistics_data(self, stats: List[StatisticsBand]) -> Optional[StatisticsData]:
@@ -332,10 +336,17 @@ class MetadataReportBuilder(ReportBuilder):
             'pam-metadata': self._add_pam_metadata_section,
         }
 
+        import logging
+        logger = logging.getLogger('read_metadata')
+        
         for section_id in section_ids:
             adder_method = section_map.get(section_id)
             if adder_method and callable(adder_method):
-                adder_method()
+                try:
+                    adder_method()
+                except Exception as e:
+                    logger.warning(f"Failed to add section '{section_id}': {e}")
+                    logger.debug(f"Exception details for section '{section_id}':", exc_info=True)
 
     def _add_tags_section(self):
         tags = self.extractor.extract_tags(self.page, self.tag_scope)
@@ -351,7 +362,50 @@ class MetadataReportBuilder(ReportBuilder):
 
     def _add_gdal_metadata_section(self):
         gdal_metadata = self.extractor.extract_gdal_metadata()
+        
+        if gdal_metadata and self.reader_type == 'analyst':
+            # Filter STATISTICS_* items for analyst view and add footer if any were found
+            filtered_content, had_statistics = self._filter_statistics_from_gdal_metadata(gdal_metadata.content)
+            if had_statistics:
+                gdal_metadata.content = filtered_content
+                gdal_metadata.footer = "\\* *STATISTICS_* items were excluded from the list; see [Statistics](#statistics) below.*"
+        
         self.add_section('gdal-metadata', gdal_metadata)
+    
+    def _filter_statistics_from_gdal_metadata(self, xml_content: str) -> tuple[str, bool]:
+        """
+        Filter out STATISTICS_* items from GDAL_METADATA XML.
+        
+        Args:
+            xml_content: The GDAL_METADATA XML string
+            
+        Returns:
+            Tuple of (filtered_xml_string, had_statistics_items)
+        """
+        try:
+            # Parse the XML
+            root = etree.fromstring(xml_content.encode('utf-8'))
+            
+            # Find all Item elements with name attribute matching ^STATISTICS_
+            statistics_items = root.xpath(".//Item[starts-with(@name, 'STATISTICS_')]")
+            
+            if not statistics_items:
+                # No STATISTICS_* items found
+                return xml_content, False
+            
+            # Remove all STATISTICS_* items
+            for item in statistics_items:
+                item.getparent().remove(item)
+            
+            # Serialize back to UTF-8 string
+            filtered_xml = etree.tostring(root, encoding='utf-8', pretty_print=False, xml_declaration=True).decode('utf-8')
+            
+            return filtered_xml, True
+            
+        except Exception:
+            # If XML parsing fails, return original content without modification
+            return xml_content, False
+
 
     def _add_xmp_metadata_section(self):
         xmp_metadata = self.extractor.extract_xmp_metadata()
@@ -451,7 +505,8 @@ class MetadataReportBuilder(ReportBuilder):
 
     def _add_tiling_section(self):
         tiling = self.extractor.extract_tile_info()
-        self.add_section('tiling', tiling)
+        # Always add section; empty list will trigger "not tiled" message in renderer
+        self.add_section('tiling', tiling if tiling else [])
 
     def _add_cog_section(self):
         cog = self.extractor.validate_cog()
@@ -463,7 +518,8 @@ class MetadataReportBuilder(ReportBuilder):
 
     def _add_xml_metadata_section(self):
         xml_metadata = self.extractor.extract_xml_metadata()
-        self.add_section('xml-metadata', xml_metadata)
+        title = xml_metadata.title if xml_metadata else "External XML Metadata File"
+        self.add_section('xml-metadata', xml_metadata, title_override=title)
 
     def _add_pam_metadata_section(self):
         pam_metadata = self.extractor.extract_pam_metadata()
@@ -538,6 +594,7 @@ class ComparisonReportBuilder(ReportBuilder):
 
         # Remaining comparison sections
         self.add_ifd_sections()
+        self.add_tiling_sections()
         self.add_statistics_sections()
         self.add_histogram_sections()
         self.add_cog_sections()
@@ -722,6 +779,30 @@ class ComparisonReportBuilder(ReportBuilder):
                     files=files
                 )
                 self.add_section('comparison-ifd', grouped_data)
+    
+    def add_tiling_sections(self) -> None:
+        """
+        Add grouped tiling section for both files.
+        
+        Creates a single section with tiling tables for both baseline and
+        comparison files, grouped under h3 subheaders. Always includes the
+        section, using message for non-tiled files to flag non-compliant files.
+        """
+        # Get tiling domain objects for both files
+        base_tiles = self.base_extractor.extract_tile_info()
+        comp_tiles = self.comp_extractor.extract_tile_info()
+        
+        files = []
+        error_msg = "This file is not tiled."
+        
+        files.append((self.base_name, base_tiles if base_tiles else error_msg))
+        files.append((self.comp_name, comp_tiles if comp_tiles else error_msg))
+        
+        grouped_data = TilingComparison(
+            title='Tiling and Overviews',
+            files=files
+        )
+        self.add_section('comparison-tiling', grouped_data)
     
     def _build_ifd_data_for_file(self, ifds: List[IfdInfo]) -> Optional[IfdInfoData]:
         """Transform IFD domain objects to presentation format for a single file."""

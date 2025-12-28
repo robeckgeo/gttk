@@ -53,6 +53,7 @@ from gttk.utils.data_models import (
     StatisticsComparison,
     HistogramComparison,
     CogValidationComparison,
+    TilingComparison,
 )
 
 
@@ -1540,7 +1541,145 @@ class TestComparisonContainerClasses:
         
         assert comp.title == "COG Validation"
         assert len(comp.files) == 2
+    
+    def test_tiling_comparison(self):
+        """Test TilingComparison data model."""
+        baseline_tiles = [
+            TileInfo(
+                level=0,
+                tile_count=16,
+                block_size="256 x 256",
+                tile_dimensions="7680.0 x 7680.0 m",
+                total_pixels="1024 x 1024",
+                resolution="30.0 m"
+            )
+        ]
+        comp_tiles = [
+            TileInfo(
+                level=0,
+                tile_count=16,
+                block_size="512 x 512",
+                tile_dimensions="15360.0 x 15360.0 m",
+                total_pixels="1024 x 1024",
+                resolution="30.0 m"
+            )
+        ]
+        
+        comp = TilingComparison(
+            title="Tiling and Overviews",
+            files=[("Baseline", baseline_tiles), ("Comparison", comp_tiles)]
+        )
+        
+        assert comp.title == "Tiling and Overviews"
+        assert len(comp.files) == 2
+        assert comp.files[0][0] == "Baseline"
+        assert comp.files[1][0] == "Comparison"
+        assert len(comp.files[0][1]) == 1
+        assert len(comp.files[1][1]) == 1
+    
+    def test_tiling_comparison_with_overviews(self):
+        """Test TilingComparison with multiple levels (main + overviews)."""
+        baseline_tiles = [
+            TileInfo(level=0, tile_count=16, block_size="256 x 256",
+                    tile_dimensions="7680.0 m", total_pixels="1024 x 1024",
+                    resolution="30.0 m"),
+            TileInfo(level=1, tile_count=4, block_size="256 x 256",
+                    tile_dimensions="7680.0 m", total_pixels="512 x 512",
+                    resolution="60.0 m"),
+        ]
+        comp_tiles = [
+            TileInfo(level=0, tile_count=16, block_size="512 x 512",
+                    tile_dimensions="15360.0 m", total_pixels="1024 x 1024",
+                    resolution="30.0 m"),
+            TileInfo(level=1, tile_count=4, block_size="512 x 512",
+                    tile_dimensions="15360.0 m", total_pixels="512 x 512",
+                    resolution="60.0 m"),
+        ]
+        
+        comp = TilingComparison(
+            title="Tiling and Overviews",
+            files=[("Input", baseline_tiles), ("Output", comp_tiles)]
+        )
+        
+        baseline_list = comp.files[0][1]
+        assert len(baseline_list) == 2  # Baseline has 2 levels
+        assert len(comp.files[1][1]) == 2  # Comparison has 2 levels
+        # Ensure items are TileInfo before calling TileInfo methods (fixes Pylance)
+        assert isinstance(baseline_list[0], TileInfo)
+        assert isinstance(baseline_list[1], TileInfo)
+        assert baseline_list[0].is_main_image() is True
+        assert baseline_list[1].is_overview() is True
+    
+    def test_tiling_comparison_single_file(self):
+        """Test TilingComparison with only one file having data."""
+        comp_tiles = [
+            TileInfo(level=0, tile_count=16, block_size="256 x 256",
+                    tile_dimensions="7680.0 m", total_pixels="1024 x 1024",
+                    resolution="30.0 m")
+        ]
+        
+        comp = TilingComparison(
+            title="Tiling and Overviews",
+            files=[("Output", comp_tiles)]
+        )
+        
+        assert len(comp.files) == 1
+        assert comp.files[0][0] == "Output"
+    
+    def test_tiling_comparison_empty_tiles(self):
+        """Test TilingComparison handles empty tile lists."""
+        comp = TilingComparison(
+            title="Tiling and Overviews",
+            files=[("Baseline", []), ("Comparison", [])]
+        )
+        
+        assert len(comp.files) == 2
+        assert len(comp.files[0][1]) == 0
+        assert len(comp.files[1][1]) == 0
 
+class TestTilingComparisonTypeSafety:
+    """Ensure TilingComparison file entries contain TileInfo instances before calling TileInfo methods."""
+
+    def test_tiling_comparison_tile_items_are_tileinfo(self):
+        baseline_tiles = [
+            TileInfo(level=0, tile_count=16, block_size="256 x 256",
+                     tile_dimensions="7680.0 m", total_pixels="1024 x 1024",
+                     resolution="30.0 m"),
+            TileInfo(level=1, tile_count=4, block_size="256 x 256",
+                     tile_dimensions="7680.0 m", total_pixels="512 x 512",
+                     resolution="60.0 m"),
+        ]
+        comp_tiles = [
+            TileInfo(level=0, tile_count=16, block_size="512 x 512",
+                     tile_dimensions="15360.0 m", total_pixels="1024 x 1024",
+                     resolution="30.0 m"),
+            TileInfo(level=1, tile_count=4, block_size="512 x 512",
+                     tile_dimensions="15360.0 m", total_pixels="512 x 512",
+                     resolution="60.0 m"),
+        ]
+
+        comp = TilingComparison(
+            title="Tiling and Overviews",
+            files=[("Input", baseline_tiles), ("Output", comp_tiles)]
+        )
+
+        baseline_list = comp.files[0][1]
+        assert isinstance(baseline_list, list)
+        assert all(isinstance(t, TileInfo) for t in baseline_list)
+
+        # Safe to call TileInfo methods
+        assert baseline_list[0].is_main_image() is True
+        assert baseline_list[1].is_overview() is True
+
+    def test_tiling_comparison_handles_non_tile_items_gracefully(self):
+        mixed_items = ["This file is not tiled.", 123, {"level": 0}]
+        comp = TilingComparison(title="Mixed", files=[("MixedFile", mixed_items)])
+
+        stored = comp.files[0][1]
+        assert isinstance(stored, list)
+        # Do not call TileInfo methods without checking type (Pylance-safe)
+        assert not any(hasattr(item, "is_main_image") for item in stored)
+        assert not any(hasattr(item, "is_overview") for item in stored)
 
 # =============================================================================
 # Integration-style Unit Tests (Testing multiple components together)

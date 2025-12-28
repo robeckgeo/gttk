@@ -82,7 +82,7 @@ def generate_report_for_datasets(
             # Generate report based on format, injecting summary above all sections
             report_format = getattr(args, 'report_format', 'html')
             if report_format == 'html':
-                formatter = HtmlReportFormatter(filename=comp_file.name)
+                formatter = HtmlReportFormatter(filename=comp_file.name, report_type='comparison')
                 formatter.report_title = "Compression Comparison"
                 formatter.sections = builder.sections
                 formatter.renderer.set_sections([s.id for s in builder.sections])
@@ -132,8 +132,7 @@ def generate_report_for_datasets(
 
         # Open report if requested
         open_report = getattr(args, 'open_report', False)
-        arc_mode = getattr(args, 'arc_mode', False)
-        if open_report and not arc_mode:
+        if open_report:
             try:
                 os.startfile(report_path)
                 logger.info(f"Opening report: {report_path}")
@@ -164,9 +163,9 @@ def _generate_report_summary(base_file: str, comp_file: str, base_name: str, com
     current_date_str = datetime.now().strftime('%Y-%m-%d')
     lines = [
         "## Report Summary\n",
-        f"**Report Date:** {current_date_str}  ",
         f"**{base_name}:** {base_file}  ",
         f"**{comp_name}:** {comp_file}  ",
+        f"**Report Date:** {current_date_str}  ",
     ]
     
     return "\n".join(lines)

@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "geotiff-toolkit"
-version = "0.8.0"
+version = "0.8.1"
 description = "GeoTIFF ToolKit (GTTK): A Python toolkit for analyzing and optimizing GeoTIFF data."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 license = { text = "MIT" }
 authors = [
   { name = "Eric Robeck", email = "robeckgeo@gmail.com" }
@@ -20,7 +20,7 @@ classifiers = [
   "Intended Audience :: Developers",
   "Intended Audience :: End Users/Desktop",
   "Programming Language :: Python :: 3",
-  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "License :: OSI Approved :: MIT License",
   "Operating System :: OS Independent",
   "Topic :: Scientific/Engineering :: GIS",
@@ -34,7 +34,6 @@ dependencies = [
   "mistune>=3.0.0",
   "numpy>=2.2.0",
   "openpyxl>=3.1.5",
-  "pillow>=11.1.0",
   "tifffile>=2025.1.10",
 ]
 

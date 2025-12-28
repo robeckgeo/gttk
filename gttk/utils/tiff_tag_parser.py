@@ -565,7 +565,7 @@ class TiffTagParser:
                     }
                 }
             except Exception:
-                pass
+                logging.warning("Could not parse InterColourProfile tag; PIL may not be installed or profile is invalid.")
 
         # Look for other common EXIF-related tags
         for tag in tags.values():

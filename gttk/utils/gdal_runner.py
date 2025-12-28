@@ -14,7 +14,10 @@ Isolated GDAL Command Runner for ArcGIS Pro Compatibility.
 This script acts as a bridge to execute GDAL commands in a clean, standalone
 OSGeo4W environment. It is designed to be called as a subprocess from within
 the ArcGIS Pro Python environment to bypass potential conflicts with Esri's
-bundled GDAL libraries, ensuring consistent and optimal results.
+bundled GDAL libraries, ensuring consistent and optimal results. It is used by 
+the `optimize-arc` command to create GeoTIFFs with the most up-to-date GDAL
+capabilities and by the `gttk read` command to call gdalinfo when ArcGIS Pro's 
+bundled GDAL cannot handle modern EPSG codes that require a PROJ database).
 """
 import sys
 import os
@@ -22,9 +25,10 @@ import json
 import subprocess
 import logging
 import shlex
+import tempfile
 import tomllib
 from pathlib import Path
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Tuple
 
 # --- Configuration ---
 # Add the project's root directory to the Python path to allow imports of the 'gttk' package
@@ -141,7 +145,24 @@ def run_gdal_command(command: List[str], env: Dict[str, str], capture_output: bo
     Executes a single GDAL command in the provided environment.
     """
     if sys.platform == 'win32':
-        os.system('chcp 65001 > nul')
+        # Avoid launching a visible cmd window via os.system('chcp...') by setting the console code
+        # page via Win32 API when possible, falling back to a hidden subprocess if needed.
+        try:
+            import ctypes
+
+            ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+            ctypes.windll.kernel32.SetConsoleCP(65001)
+        except Exception:
+            try:
+                subprocess.run(
+                    ['cmd', '/c', 'chcp', '65001'],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    creationflags=(subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0)
+                )
+            except Exception:
+                # If even this fails, continue without changing code page.
+                logging.debug('Unable to set console code page to 65001.')
 
     command_str = [str(item) for item in command]
     
@@ -233,6 +254,274 @@ def run_gdal_command(command: List[str], env: Dict[str, str], capture_output: bo
     except Exception as e:
         logging.error(f"An unexpected error occurred: {e}")
         raise
+
+def get_projection_info_from_osgeo4w(filepath: str) -> Tuple[Optional[Dict[str, Any]], Optional[str], Optional[str]]:
+    """
+    Get complete projection info, WKT, and PROJJSON from OSGeo4W using GDAL Python bindings.
+    
+    Executes _retrieve_projection_info logic directly in the clean OSGeo4W environment,
+    avoiding the crippled ArcGIS Pro Python env, which lacks the `PROJ_LIB` variable.
+    
+    Args:
+        filepath: Path to GeoTIFF file
+        
+    Returns:
+        Tuple of (projection_info dict, wkt_string, projjson_string) or (None, None, None) if execution fails
+    """
+    try:
+        from gttk.utils.config_loader import config
+        osgeo4w_root = config.get('paths.osgeo4w')
+        
+        logger.info(f"OSGeo4W root from config: {osgeo4w_root}")
+        
+        if not osgeo4w_root:
+            logger.warning("OSGeo4W path not configured in config.toml")
+            return (None, None, None)
+        
+        osgeo4w_dir = Path(osgeo4w_root)
+        if not osgeo4w_dir.is_dir():
+            logger.warning(f"OSGeo4W directory does not exist: {osgeo4w_dir}")
+            return (None, None, None)
+        
+        python_executable = osgeo4w_dir / "bin" / "python.exe"
+        if not python_executable.exists():
+            logger.warning(f"OSGeo4W Python executable not found at: {python_executable}")
+            return (None, None, None)
+        
+        # Get path to gdal_runner.py (this file's sibling)
+        gdal_runner_script = Path(__file__).resolve().parent / "gdal_runner.py"
+        if not gdal_runner_script.exists():
+            logger.warning(f"gdal_runner.py not found at: {gdal_runner_script}")
+            return (None, None, None)
+        
+        logger.info(f"Extracting projection info for: {filepath}")
+        logger.info("Using gdal_runner subprocess with Python bindings")
+        
+        # Create a Python script that uses GDAL bindings to extract projection info, WKT, and PROJJSON
+        # Escape backslashes for the python string
+        filepath_esc = str(filepath).replace('\\', '\\\\')
+        
+        extract_script_content = f'''
+import sys
+import json
+from osgeo import gdal, osr
+
+def extract_projection_info():
+    """Extract projection info, WKT, and PROJJSON using same logic as _retrieve_projection_info."""
+    filepath = "{filepath_esc}"
+    
+    ds = gdal.Open(filepath)
+    if not ds:
+        print(json.dumps({{"error": "Failed to open dataset"}}), file=sys.stderr)
+        sys.exit(1)
+    
+    srs = ds.GetSpatialRef()
+    if not srs:
+        print(json.dumps({{"error": "No spatial reference found"}}), file=sys.stderr)
+        sys.exit(1)
+    
+    info = {{}}
+    
+    # Raster type
+    metadata = ds.GetMetadata()
+    raster_type = metadata.get('AREA_OR_POINT', 'Area').lower()
+    info['raster_type'] = 'PixelIsArea' if raster_type == 'area' else 'PixelIsPoint'
+    
+    # CS types
+    info['is_geographic'] = bool(srs.IsGeographic())
+    info['is_projected'] = bool(srs.IsProjected())
+    info['is_compound'] = bool(srs.IsCompound())
+    
+    # Geographic CS
+    if srs.IsGeographic() or srs.IsProjected():
+        try:
+            info['geographic_cs_name'] = srs.GetAttrValue('GEOGCS')
+            info['geographic_cs_code'] = srs.GetAuthorityCode('GEOGCS')
+            info['datum_name'] = srs.GetAttrValue('DATUM')
+            info['datum_code'] = srs.GetAuthorityCode('DATUM')
+            info['ellipsoid_name'] = srs.GetAttrValue('SPHEROID')
+            info['semi_major'] = srs.GetSemiMajor()
+            info['inv_flattening'] = srs.GetInvFlattening()
+            info['angular_unit_name'] = srs.GetAngularUnitsName()
+        except Exception:
+            pass
+    
+    # Projected CS
+    if srs.IsProjected():
+        try:
+            info['projected_cs_name'] = srs.GetAttrValue('PROJCS')
+            info['projected_cs_code'] = srs.GetAuthorityCode('PROJCS')
+            info['linear_unit_name'] = srs.GetLinearUnitsName()
+        except Exception:
+            pass
+    
+    # Compound CS
+    if srs.IsCompound():
+        try:
+            info['compound_cs_name'] = srs.GetAttrValue('COMPD_CS')
+        except Exception:
+            pass
+    
+    # Vertical CS - extract from WKT (compound CRS)
+    try:
+        wkt = srs.ExportToWkt()
+        if 'VERT_CS' in wkt or 'VERTCRS' in wkt:
+            vert_srs = osr.SpatialReference()
+            vert_srs.ImportFromWkt(wkt)
+            
+            vert_name = vert_srs.GetAttrValue('VERT_CS')
+            if vert_name:
+                info['vertical_cs_name'] = vert_name
+                info['vertical_cs_code'] = vert_srs.GetAuthorityCode('VERT_CS')
+            
+            vert_datum = vert_srs.GetAttrValue('VERT_DATUM')
+            if vert_datum:
+                info['vertical_datum_name'] = vert_datum
+                info['vertical_datum_code'] = vert_srs.GetAuthorityCode('VERT_DATUM')
+            
+            vert_unit = vert_srs.GetLinearUnitsName()
+            if vert_unit:
+                info['vertical_unit_name'] = vert_unit
+    except Exception:
+        pass
+    
+    # Check for 3D Geographic CRS (e.g., EPSG:4979)
+    # These have ellipsoidal height as 3rd axis but no separate VERT_CS
+    if info['is_geographic'] and not info.get('vertical_unit_name'):
+        try:
+            axis_count = srs.GetAxesCount()
+            if axis_count == 3:
+                # Check if 3rd axis is vertical/height
+                axis_name = srs.GetAxisName(None, 2)
+                if axis_name and ('height' in axis_name.lower() or 'ellipsoid' in axis_name.lower()):
+                    # Get unit from 3rd axis
+                    axis_unit_name = srs.GetAxisName(None, 2)
+                    axis_unit_val = srs.GetAxisOrientation(None, 2)
+                    # Get the linear unit for the 3rd axis
+                    linear_unit = srs.GetLinearUnitsName()
+                    if linear_unit:
+                        info['vertical_unit_name'] = linear_unit
+        except Exception:
+            pass
+    
+    # Export WKT for use in ArcGIS environment
+    wkt_string = ""
+    try:
+        wkt_string = srs.ExportToWkt(['FORMAT=WKT2_2019', 'MULTILINE=YES'])
+    except Exception:
+        pass
+    
+    # Export PROJJSON for use in ArcGIS environment
+    # This ensures consistent format with full member IDs when PROJ database is available
+    projjson_string = ""
+    try:
+        projjson_string = srs.ExportToPROJJSON()
+    except Exception:
+        pass
+    
+    # Output projection_info, WKT, and PROJJSON as JSON
+    result = {{
+        "projection_info": info,
+        "wkt_string": wkt_string,
+        "projjson_string": projjson_string
+    }}
+    print(json.dumps(result))
+    ds = None
+
+if __name__ == "__main__":
+    extract_projection_info()
+'''
+        
+        # Write extraction script to temp file
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as tmp_script:
+            temp_script_path = tmp_script.name
+            tmp_script.write(extract_script_content)
+        
+        try:
+            # Build command to run the Python script via gdal_runner
+            python_command = {
+                "command": ["python", temp_script_path],
+                "capture_output": True
+            }
+            
+            payload = json.dumps({"commands": [python_command]})
+            
+            # Create isolated environment
+            logger.info("Creating isolated OSGeo4W environment...")
+            isolated_env = create_isolated_env(osgeo4w_dir)
+            
+            # Log critical environment variables for debugging
+            logger.info(f"PROJ_LIB: {isolated_env.get('PROJ_LIB', 'NOT SET')}")
+            logger.info(f"GDAL_DATA: {isolated_env.get('GDAL_DATA', 'NOT SET')}")
+            
+            # Launch gdal_runner.py as subprocess
+            command = [str(python_executable), str(gdal_runner_script)]
+            
+            logger.info(f"Executing: {' '.join(command)}")
+            
+            process = subprocess.Popen(
+                command,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                errors='replace',
+                env=isolated_env,
+                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
+            )
+            
+            stdout, stderr = process.communicate(input=payload, timeout=30)
+            
+            logger.info(f"gdal_runner return code: {process.returncode}")
+            
+            if stderr:
+                logger.info(f"gdal_runner stderr: {stderr[:500]}")
+            
+            if process.returncode != 0:
+                logger.warning(f"gdal_runner failed with exit code {process.returncode}")
+                return (None, None, None)
+            
+            # Parse captured output
+            if not stdout:
+                logger.warning("WARNING: gdal_runner returned empty stdout")
+                return (None, None, None)
+            
+            logger.info("Parsing gdal_runner output...")
+            
+            # The runner returns JSON lines, one per captured command
+            for line in stdout.strip().split('\n'):
+                try:
+                    captured_data = json.loads(line)
+                    if isinstance(captured_data, dict) and "stdout" in captured_data:
+                        if captured_data['stdout']:
+                            # Parse the result JSON from the captured stdout
+                            result = json.loads(captured_data["stdout"])
+                            projection_info = result.get("projection_info")
+                            wkt_string = result.get("wkt_string", "")
+                            projjson_string = result.get("projjson_string", "")
+                            logger.info(f"Successfully extracted projection_info: {projection_info}")
+                            logger.info(f"WKT string length: {len(wkt_string)} chars")
+                            logger.info(f"PROJJSON string length: {len(projjson_string)} chars")
+                            return (projection_info, wkt_string, projjson_string)
+                except json.JSONDecodeError:
+                    continue
+            
+            logger.warning("No captured projection_info found in gdal_runner stdout")
+            return (None, None, None)
+        
+        finally:
+            # Clean up temp script
+            try:
+                Path(temp_script_path).unlink(missing_ok=True)
+            except Exception:
+                pass
+                
+    except Exception as e:
+        logger.warning(f"Error extracting projection info via OSGeo4W: {e}")
+        import traceback
+        logger.warning(traceback.format_exc())
+        return (None, None, None)
 
 def main():
     """Main entry point for the gdal_runner script."""

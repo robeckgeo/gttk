@@ -1,7 +1,7 @@
 # GeoTIFF ToolKit (GTTK): GeoTIFF Analysis and Optimization Tools
 
 <p align="left">
-  <img src="https://img.shields.io/badge/version-0.8.0-orange" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.8.1-orange" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 </p>
 
@@ -73,13 +73,12 @@ The `environment.yml` includes:
 
 - `python>=3.13`
 - `gdal>=3.11`
-- `numpy`
-- `tifffile`
+- `lxml`
 - `matplotlib`
 - `mistune`
-- `pillow`
+- `numpy`
 - `openpyxl`
-- `lxml`
+- `tifffile`
 
 ## Usage Guide
 
@@ -149,17 +148,16 @@ gttk compare -i baseline.tif -o optimized.tif --report-format md
 
 **Description**: Pix4DMapper orthomosaic processed from ebee drone imagery
 
-- The original image used LZW compression, which is very inefficient for imagery.
+- The original image used LZW compression with an 8-bit alpha band, which is very inefficient for imagery.
 - The alpha band used for masking areas outside the mosaic was replaced with a transparency mask that also fixed edge effects while reducing file size.
-- JXL compression at quality=90 (visually lossless) reduced the image size by 89% relative to the LZW compression.
+- YCbCr JPEG compression at quality=90 (visually lossless) reduced the image size by 86% relative to the input LZW compression.
 - The input histogram displays the alpha band on a different axis so its bimodal distribution doesn't flatten the RGB bands.
 
 **2. [USGS_1M_11_x33y541_WA_NorthCentral_2021_B21_comp.html](example_reports/USGS_1M_11_x33y541_WA_NorthCentral_2021_B21_comp.html)**
 
 **Description**: A one-meter-resolution DEM produced through the USGS 3D Elevation Program (3DEP) in northern Washington State, available at [this link](https://www.sciencebase.gov/catalog/item/66726a21d34e84915adbb360).
 
-- Confirms 2-decimal rounding in main image (IFD 0), which contains ~75% of pixels, but no rounding in overviews due to bilinear resampling.
-- With the change from LZW -> DEFLATE and rounding, compression efficiency *doubled* for the main image, but improvement is more modest in the unrounded overviews.
+- The source USGS DEM, already a COG with overviews, reduced in size by 49% simply by switching from LZW to DEFLATE, rounding to 1 cm, and using Predictor 2 instead of 3.
 
 ### Tool: Optimize Compression (`gttk optimize`)
 
@@ -196,10 +194,10 @@ This powerful tool combines multiple optimization techniques into a single, stre
 | `--output` | `-o` | Path | Yes | - | Output COG file path |
 | `--product-type` | `-t` | str | Yes | - | Type of GeoTIFF product (`dem`, `image`, `error`, `scientific`, `thematic`) |
 | `--raster-type` | `-r` | str | No | Auto | Override raster type (`point` for PixelIsPoint, `area` for PixelIsArea) |
-| `--algorithm` | `-a` | str | Yes | - | Compression algorithm (`JPEG`, `JXL`, `LZW`, `DEFLATE`, `ZSTD`, `LERC`, `NONE`) |
-| `--vertical-srs` | `-s` | str | No | - | Vertical SRS for DEM products (required for `dem` type) |
-| `--nodata` | `-n` | float | No | - | NoData value for DEM or error products |
-| `--decimals` | `-d` | int | No | Auto | Decimal places for rounding DEM/error data |
+| `--algorithm` | `-a` | str | No | Auto | Compression algorithm (`JPEG`, `JXL`, `LZW`, `DEFLATE`, `ZSTD`, `LERC`, `NONE`) |
+| `--vertical-srs` | `-s` | str | Varies | - | Vertical SRS for elevation products (required for `dem` type) |
+| `--nodata` | `-n` | float | No | - | NoData value |
+| `--decimals` | `-d` | int | No | Auto | Decimal places for rounding  |
 | `--predictor` | `-p` | int | No | Auto | Predictor for LZW/DEFLATE/ZSTD compression (1, 2, or 3) |
 | `--max-z-error` | `-z` | float | No | Auto | Max Z error for LERC compression |
 | `--level` | `-l` | int | No | Auto | Compression level for DEFLATE or ZSTD |
@@ -238,23 +236,25 @@ gttk optimize -i scientific.tif -o scientific_lerc.tif -t scientific -a LERC \
 
 **1. [INEGI_f13a35e4_ms_comp.html](example_reports/INEGI_f13a35e4_ms_comp.html)**
 
-**Description**: A 1.5m Digital Surface Model (DSM) over Mazatlán, Mexico produced and distributed by the Instituto Nacional de Estadística y Geografía (INEGI).The producer-grade (`--reader-type producer`) [OLD](example_reports/INEGI_f13a35e4_ms_OLD_meta.html) and [NEW](example_reports/INEGI_f13a35e4_ms_NEW_meta.html) metadata reports are provided for context.
+**Description**: A 1.5m Digital Surface Model (DSM) over Mazatlán, Mexico produced and distributed by the Instituto Nacional de Estadística y Geografía (INEGI) [here](https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/espanol/bvinegi/productos/geografia/imagen_cartografica/1_10_000/lidar/1_5m/Superficie/889463844341_t.zip).The producer-grade (`--reader-type=producer`) [OLD](example_reports/INEGI_f13a35e4_ms_OLD_meta.html) and [NEW](example_reports/INEGI_f13a35e4_ms_NEW_meta.html) metadata reports are provided for context.
 
-- The external XML file referenced by the OLD file from the [INEGI website](https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/espanol/bvinegi/productos/geografia/imagen_cartografica/1_10_000/lidar/1_5m/Superficie/889463844341_t.zip) was written to the internal GEO_METADATA TIFF Tag (#50909) in the NEW file.
-- For comparison, the OLD report shows the XML in `text` format and the NEW report shows it in `table` format. While the information content is identical, the latter is much easier to read.
+- The sidecar XML file packaged with the OLD file was written to the internal GEO_METADATA TIFF Tag (#50909) in the NEW file.
+- For comparison, the OLD report shows the XML in `text` format and the NEW report shows it in `table` format.
 - GTTK translated the ISO-8859-1 (Latin-1) character encoding to UTF-8, preserving the special characters.
 - The input NoData value (-3.402823466385289e+38) is problematic because it is read as `-inf` by software, causing calculation errors; mapping those pixels to NaN solved the problem.
 - The NEW file assigns the vertical datum required by the Geoide Gravimétrico Mexicano 2010 (GGM10), which lacks an EPSG code. Because GeoTIFF only stores EPSG codes in GeoKeys, the full compound CRS is stored in the GDAL metadata item `COMPOUND_CRS_WKT2` so the information is not lost.
 - The Esri Projection Engine (PE) String in the OLD header was removed from the NEW header because the 2D Projected CS was replaced with the 3D Compound CRS with GGM10 height.
-- Updating from GeoTIFF v1.0 to v1.1 ([OGC GeoTIFF Standard](https://www.ogc.org/standards/geotiff/)) reduced the GeoKey Directory complexity, dropping GeoKey count from 17 to 8 and removing the "User-Defined" `GeographicCSTypeGeoKey`/`ProjectedCSTypeGeoKey` types assigned by Esri for the *horizontal* datum/CRS combo "Mexico ITRF2008 / UTM zone 13N" CRS.
+- Updating from GeoTIFF v1.0 to v1.1 ([OGC GeoTIFF Standard](https://www.ogc.org/standards/geotiff/)) reduced the GeoKey Directory complexity, dropping GeoKey count from 17 to 4 for the *horizontal components* and removing the "User-Defined" `GeographicCSTypeGeoKey`/`ProjectedCSTypeGeoKey` types assigned by Esri for the "Mexico ITRF2008 / UTM zone 13N" projected CRS.
+- The `Tiling and Overviews` section includes pyramids in the external `.ovr` file as the only IFD is the main image. (Note: The `.ovr` files are NOT factored into the file size or space savings calculations).
 
 **2. [USGS_ortho_054-083_comp.html](example_reports/USGS_ortho_054-083_comp.html)**
 
-**Description**: 2015 East West Gateway 6-inch, 4-band Orthophotography over the Gateway Arch and downtown St. Louis, Missouri, USA. The analyst-grade (`--reader-type analyst`) [OLD](example_reports/USGS_ortho_054-083_OLD_meta.html) and [NEW](example_reports/USGS_ortho_054-083_NEW_meta.html) metadata reports are included for context.
+**Description**: 2015 East West Gateway 6-inch, 4-band Orthophotography over the Gateway Arch and downtown St. Louis, Missouri, USA. The analyst-grade (`--reader-type=analyst`) [OLD](example_reports/USGS_ortho_054-083_OLD_meta.html) and [NEW](example_reports/USGS_ortho_054-083_NEW_meta.html) metadata reports are included for context.
 
 - The original image distributed on the [USGS EarthExplorer website](https://earthexplorer.usgs.gov/scene/metadata/full/5e83a2397d63a400/3827956_054083/) is uncompressed.
 - JXL compression at quality=90 (visually lossless) reduced the 4-band Color Near-Infrared (CNIR) image size by 88% (8.2x).
 - The tiling and overviews were optimized and standardized: 128px (main image) and 64px (overview) tiles were replaced with 512px tiles everywhere.
+- This reduced the tile count from 5,716 to 409 (a 93% decrease) and levels from 8 to 5.
 - The output image is a valid COG, which is consistent with [earlier efforts](https://www.usgs.gov/news/technical-announcement/usgs-digital-elevation-models-dem-switching-new-distribution-format) by the USGS to distribute more of its content in that format.
 
 ---
@@ -393,9 +393,10 @@ gttk read -i classified.tif --report-format md --banner "UNCLASSIFIED"
 
 **Description**: A multi-band Principal Component Analysis (PCA) over the Gobi Desert in Mongolia, constructed from all 9 VNIR and SWIR bands of the Advanced Spaceborne Thermal Emission & Reflectance Radiometer (ASTER) satellite. Raw data are from [AST_07XT_00404082004040535_20250325113927](s3://lp-prod-protected/AST_07XT.004/AST_07XT_00404082004040535_20250325113927/AST_07XT_00404082004040535_20250325113927.cmr.json).
 
-- Synchronizes font and patch colors between GDAL metadata, Statistics band columns and Histogram chart.
+- Synchronizes font and patch colors between band-specific GDAL metadata, Statistics columns and Histogram chart.
 - Displays a layered histogram with all bands in one chart for contrast and to reduce real estate.
-- Reports *both* NoData and Transparency Mask pixel types (while redundant, dataset uses both per pixel to display correctly in most common GIS browsers).
+- Main "image" rounded to 3 decimals to preserve calculation precision, warranting use of Predictor 3.
+- Overviews are NOT rounded because GDAL doesn't support rounding of masked overviews.
 
 **2. [us_nga_egm08_1_meta.html](example_reports/us_nga_egm08_1_meta.html)**
 
@@ -949,6 +950,6 @@ For detailed information about testing, including:
 see the comprehensive testing documentation:
 
 - **[`tests/README.md`](tests/README.md)**: Complete testing guide for developers
-- **[`plans/TESTING_PLAN.md`](plans/TESTING_PLAN.md)**: Testing strategy and implementation plan
+- **[`plans/testing_plan.md`](plans/testing_plan.md)**: Testing strategy and implementation plan
 
 ---

@@ -34,7 +34,7 @@ from gttk.utils.data_models import (
     WktString, JsonString, CogValidation, XmlMetadata,
     TiffTagsData, StatisticsData, IfdInfoData,
     DifferencesComparison, IfdInfoComparison, StatisticsComparison,
-    HistogramComparison, CogValidationComparison
+    HistogramComparison, CogValidationComparison, TilingComparison
 )
 
 XMP_TAG = 700
@@ -241,7 +241,7 @@ class Renderer(ABC):
         pass
 
     @abstractmethod
-    def render_cog_validation(self, cog: CogValidation, title: str = "COG Compliance") -> str:
+    def render_cog_validation(self, cog: CogValidation, title: str = "COG Validation") -> str:
         """
         Render COG validation results.
         
@@ -392,6 +392,20 @@ class Renderer(ABC):
         
         Args:
             data: IfdInfoComparison with multiple file IFD tables
+            title: Optional override title
+            
+        Returns:
+            Formatted string representation
+        """
+        pass
+    
+    @abstractmethod
+    def render_comparison_tiling(self, data: TilingComparison, title: Optional[str] = None) -> str:
+        """
+        Render grouped tiling comparison data.
+        
+        Args:
+            data: TilingComparison with multiple file tiling tables
             title: Optional override title
             
         Returns:
@@ -681,7 +695,13 @@ class MarkdownRenderer(Renderer):
             
             is_positive = dd >= 0
             dd = abs(dd)
-            minutes, seconds = divmod(dd * 3600, 60)
+
+            # Calculate total seconds and round to 2 decimal places to handle display rounding
+            total_seconds = dd * 3600
+            rounded_seconds = round(total_seconds, 2)
+
+            # Recalculate components based on rounded total seconds
+            minutes, seconds = divmod(rounded_seconds, 60)
             degrees, minutes = divmod(minutes, 60)
             
             if direction == 'lat':
@@ -748,6 +768,11 @@ class MarkdownRenderer(Renderer):
     def render_tiling_table(self, tiles: List[TileInfo], title: str = "Tiling and Overviews") -> str:
         """Render tiling information as a table."""
         lines = [f"## {title}", ""]
+        
+        if not tiles:
+            lines.append("This file is not tiled.")
+            return "\n".join(lines)
+        
         lines.append("| Level | Tile Count | Tile Size | Tile Dimensions | Total Pixels | Resolution |")
         lines.append("|---|---|---|---|---|---|")
         
@@ -923,7 +948,7 @@ class MarkdownRenderer(Renderer):
             
         return lines
 
-    def render_cog_validation(self, cog: CogValidation, title: str = "COG Compliance") -> str:
+    def render_cog_validation(self, cog: CogValidation, title: str = "COG Validation") -> str:
         """
         Render COG Validation section.
         
@@ -982,6 +1007,11 @@ class MarkdownRenderer(Renderer):
             lines.append("```xml")
             lines.append(pretty_content)
             lines.append("```")
+        
+        # Append footer if present
+        if data.has_footer() and data.footer:
+            lines.append("")
+            lines.append(data.footer)
             
         return "\n".join(lines)
 
@@ -999,7 +1029,7 @@ class MarkdownRenderer(Renderer):
 
     def render_xml_metadata(self, data: XmlMetadata, title: Optional[str] = None) -> str:
         """Render external XML file metadata section."""
-        return self._render_xml_content(data, "XML Metadata", title)
+        return self._render_xml_content(data, "External XML Metadata File", title)
 
     def render_pam_metadata(self, data: XmlMetadata, title: Optional[str] = None) -> str:
         """Render Precision Auxiliary Metadata (PAM) section."""
@@ -1176,6 +1206,46 @@ class MarkdownRenderer(Renderer):
                 row_values = [str(row.get(h, '')) for h in ifd_data.headers]
                 lines.append(f"| {' | '.join(row_values)} |")
             lines.append("")
+        
+        return "\n".join(lines)
+    
+    def render_comparison_tiling(self, data: TilingComparison, title: Optional[str] = None) -> str:
+        """
+        Render grouped tiling comparison data with subheaders for each file.
+        
+        Args:
+            data: TilingComparison with multiple file tiling tables or messages
+            title: Optional override title
+            
+        Returns:
+            Markdown formatted grouped tiling comparison
+        """
+        title = title or data.title
+        lines = [f"## {title}", ""]
+        
+        for file_label, tiles_or_message in data.files:
+            # Add subheader for each file
+            lines.append(f"### {file_label}")
+            lines.append("")
+            
+            # Handle both List[TileInfo] and str types
+            if isinstance(tiles_or_message, str):
+                # String message (e.g., "This file is not tiled.")
+                lines.append(tiles_or_message)
+                lines.append("")
+            elif not tiles_or_message:
+                # Empty list
+                lines.append("This file is not tiled.")
+                lines.append("")
+            else:
+                # List[TileInfo] - build table
+                lines.append("| Level | Tile Count | Tile Size | Tile Dimensions | Total Pixels | Resolution |")
+                lines.append("|---|---|---|---|---|---|")
+                
+                for tile in tiles_or_message:
+                    lines.append(f"| {tile.level} | {tile.tile_count} | {tile.block_size} | "
+                                f"{tile.tile_dimensions} | {tile.total_pixels} | {tile.resolution} |")
+                lines.append("")
         
         return "\n".join(lines)
     

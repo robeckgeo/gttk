@@ -74,7 +74,7 @@ CUSTOM_VERTICAL_WKT_REGISTRY: Dict[str, str] = {
             SCOPE["Geodesy, engineering survey, topographic mapping."],
             AREA["Mexico - onshore and offshore."],
             BBOX[14.02,-118.98,32.98,-86.02]],
-        ID["PROJ","GGM2010"]]
+        ID["INEGI","GGM2010"]]
     """
 }
 
@@ -98,8 +98,7 @@ def get_srs_from_user_input(srs_input: str) -> Optional[osr.SpatialReference]:
         abbrev = None
         if srs_input in VERTICAL_SRS_NAME_MAP:
             # Reverse lookup name to abbreviation isn't direct, but we can check the EPSG code
-            # However, for custom CRS, the EPSG is 0000.
-            # Instead, let's check if the mapped EPSG is 0, which signals a custom lookup needed.
+            # Check if the mapped EPSG is 0, which signals a custom lookup needed.
             epsg_code = VERTICAL_SRS_NAME_MAP[srs_input]
             if epsg_code == 0:
                 # Infer abbreviation from the name string (hacky but effective for GGM10)

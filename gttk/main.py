@@ -81,7 +81,7 @@ def main():
         p.add_argument('-o', '--output', required=True, type=Path, dest='output_path', help='Output COG file path.')
         p.add_argument('-t', '--product-type', required=True, type=str.lower,choices=['dem', 'image', 'error', 'scientific', 'thematic'], dest='product_type', help='Type of GeoTIFF product.')
         p.add_argument('-r', '--raster-type', type=str.lower, choices=['point', 'area'], dest='raster_type', help="Override raster type ('point' for PixelIsPoint, 'area' for PixelIsArea).")
-        p.add_argument('-a', '--algorithm', required=True, type=str.upper, choices=['JPEG', 'JXL', 'LZW', 'DEFLATE', 'ZSTD', 'LERC', 'NONE'], dest='algorithm', help='Compression algorithm.')
+        p.add_argument('-a', '--algorithm', type=str.upper, choices=['JPEG', 'JXL', 'LZW', 'DEFLATE', 'ZSTD', 'LERC', 'NONE'], dest='algorithm', help='Compression algorithm.')
         p.add_argument('-s', '--vertical-srs', type=str, default=None, dest='vertical_srs', help="Vertical SRS for 'dem' type.")
         p.add_argument('-n', '--nodata', type=float_nodata, default=None,dest='nodata', help="NoData value for 'dem' or 'error' type.")
         p.add_argument('-d', '--decimals', type=int, dest='decimals', help='Decimal places for rounding DEM/error data.')

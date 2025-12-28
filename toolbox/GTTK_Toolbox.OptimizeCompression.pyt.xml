@@ -1,2 +1,93 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<metadata xml:lang="en"><Esri><CreaDate>20251207</CreaDate><CreaTime>08471500</CreaTime><ArcGISFormat>1.0</ArcGISFormat><SyncOnce>TRUE</SyncOnce></Esri></metadata>
+<metadata xml:lang="en">
+	<Esri>
+		<CreaDate>20251207</CreaDate>
+		<CreaTime>08471500</CreaTime>
+		<ArcGISFormat>1.0</ArcGISFormat>
+		<SyncOnce>TRUE</SyncOnce>
+		<ModDate>20251226</ModDate>
+		<ModTime>192356</ModTime>
+	</Esri>
+	<tool name="OptimizeCompression" displayname="Optimize Compression" toolboxalias="gttk">
+		<summary>Creates optimized, compressed Cloud Optimized GeoTIFFs (COGs) with intelligent defaults and expert-level automation.</summary>
+		<usage>
+			<bullet_item>Product Type determines intelligent defaults for compression, raster type, and processing parameters.</bullet_item>
+			<bullet_item>For elevation products (DEM type), Vertical SRS is required to create proper compound coordinate systems.</bullet_item>
+			<bullet_item>The tool automatically selects optimal compression settings based on product type, but you can override any parameter.</bullet_item>
+			<bullet_item>JPEG and JXL are recommended for multi-band imagery; DEFLATE, ZSTD, or LERC for elevation/scientific data.</bullet_item>
+			<bullet_item>The tool generates a comparison report showing before/after analysis and validates the output as a proper COG.</bullet_item>
+			<bullet_item>All processing is performed in-memory using GDAL's virtual file system for maximum performance.</bullet_item>
+		</usage>
+		<parameters>
+			<param name="input_path" displayname="Input GeoTIFF, Raster Layer, or Folder" type="Required" direction="Input" datatype="Raster Layer; Raster Dataset; File" expression="input">
+				<dialogReference>Source GeoTIFF file to optimize and compress. Can be any valid GeoTIFF including DEMs, imagery, or thematic data.</dialogReference>
+			</param>
+			<param name="output_path" displayname="Output GeoTIFF or Folder" type="Required" direction="Output" datatype="Raster Dataset" expression="output">
+				<dialogReference>Path for the optimized output file. The tool will create a Cloud Optimized GeoTIFF (COG) with compression and proper internal structure.</dialogReference>
+			</param>
+			<param name="product_type" displayname="Product Type" type="Required" direction="Input" datatype="String" expression="product_type">
+				<dialogReference>Type of GeoTIFF product. This determines intelligent defaults for compression algorithm, raster type (PixelIsPoint vs PixelIsArea), and processing parameters. Choose 'dem' for elevation models, 'image' for imagery/orthophotos, 'error' for uncertainty/error models, 'scientific' for general scientific data, or 'thematic' for classified/categorical data.</dialogReference>
+			</param>
+			<param name="vertical_srs" displayname="Vertical SRS Name" type="Optional" direction="Input" datatype="String" expression="{vertical_srs}">
+				<dialogReference>Vertical spatial reference system for elevation products. REQUIRED for DEM product type. Can be an EPSG code (e.g., 'EPSG:5703'), vertical datum name (e.g., 'NAVD88', 'EGM2008'), or WKT string. This creates proper compound coordinate systems and prevents vertical datum errors.</dialogReference>
+			</param>
+			<param name="algorithm" displayname="Compression Algorithm" type="Optional" direction="Input" datatype="String" expression="{algorithm}">
+				<dialogReference>Compression algorithm to use. Leave blank for automatic selection based on product type. JPEG (lossy) and JXL (lossy/lossless) are best for imagery. DEFLATE, ZSTD, and LZW are lossless algorithms suitable for DEMs. LERC supports controlled lossy compression for floating-point data. NONE creates uncompressed output.</dialogReference>
+			</param>
+			<param name="raster_type" displayname="Raster Type" type="Optional" direction="Input" datatype="String" expression="{raster_type}">
+				<dialogReference>Override the raster type assignment. Choose 'point' for PixelIsPoint (pixel represents a point sample) or 'area' for PixelIsArea (pixel represents an averaged area). Leave blank to use intelligent defaults: DEMs default to 'area', imagery to 'point'.</dialogReference>
+			</param>
+			<param name="nodata" displayname="NoData Value" type="Optional" direction="Input" datatype="Double" expression="{nodata}">
+				<dialogReference>NoData value to assign to the output. Use this to remap problematic NoData values (e.g., -9999, -3.4e38) to standard values like NaN for floating-point data or appropriate values for integer data. Leave blank to preserve the input NoData value.</dialogReference>
+			</param>
+			<param name="decimals" displayname="Decimal Places for Rounding" type="Optional" direction="Input" datatype="Long" expression="{decimals}">
+				<dialogReference>Number of decimal places to round floating-point data. Rounding significantly improves compression efficiency by removing pseudo-precision. Recommended: 2 decimals (1 cm precision) for DEMs, 1 decimal (10 cm) for error models. Leave blank for no rounding.</dialogReference>
+			</param>
+			<param name="quality" displayname="JPEG/JXL Quality" type="Optional" direction="Input" datatype="Long" expression="{quality}">
+				<dialogReference>Quality setting for JPEG or JXL compression (75-100). Default is 90, which provides visually lossless results for most imagery. Higher values (95-99) reduce artifacts but increase file size. Lower values (75-85) increase compression but may show visible artifacts.</dialogReference>
+			</param>
+			<param name="predictor" displayname="Predictor" type="Optional" direction="Input" datatype="Long" expression="{predictor}">
+				<dialogReference>Predictor for LZW/DEFLATE/ZSTD compression. Leave blank for automatic selection. Predictor 2 (horizontal differencing) is best for integer and rounded floating-point data. Predictor 3 (floating-point) is best for unrounded floating-point data. Predictor 1 (none) disables prediction.</dialogReference>
+			</param>
+			<param name="max_z_error" displayname="Max Z Error (LERC)" type="Optional" direction="Input" datatype="Double" expression="{max_z_error}">
+				<dialogReference>Maximum allowed error for LERC compression in the same units as the data. Use 0 for lossless LERC. For elevation in meters, 0.01 = 1 cm precision. WARNING: Do not use lossy LERC on hydro-conditioned DEMs as it may alter flow directions.</dialogReference>
+			</param>
+			<param name="level" displayname="Compression Level" type="Optional" direction="Input" datatype="Long" expression="{level}">
+				<dialogReference>Compression level for DEFLATE (1-9) or ZSTD (1-22). Higher values provide better compression but slower encoding. Leave blank for automatic selection: DEFLATE=6, ZSTD=9.</dialogReference>
+			</param>
+			<param name="tile_size" displayname="Tile Size (pixels)" type="Optional" direction="Input" datatype="Long" expression="{tile_size}">
+				<dialogReference>Tile size in pixels for the primary image and overviews. Default is 512. Use 256 for web mapping, 512 for general use, or 1024 for large images or processing workflows.</dialogReference>
+			</param>
+			<param name="mask_nodata" displayname="Mask NoData Pixels (if any)" type="Optional" direction="Input" datatype="Boolean" expression="{mask_nodata}">
+				<dialogReference>Add NoData pixels to the transparency mask. Leave blank for automatic behavior based on product type (enabled for imagery, disabled for DEMs).</dialogReference>
+			</param>
+			<param name="mask_alpha" displayname="Convert Alpha Band (if one exists) to Internal Mask" type="Optional" direction="Input" datatype="Boolean" expression="{mask_alpha}">
+				<dialogReference>Convert RGBA imagery to RGB with internal transparency mask. A 1-bit transparency mask is more efficient than an 8-bit alpha band and fixes edge effects with JPEG compression. Recommended for imagery. Does not apply if input has no alpha band.</dialogReference>
+			</param>
+			<param name="cog" displayname="Create Cloud Optimized GeoTIFF" type="Optional" direction="Input" datatype="Boolean" expression="{cog}">
+				<dialogReference>Create a Cloud Optimized GeoTIFF with proper internal structure for efficient HTTP range requests and web streaming. Recommended for all outputs.</dialogReference>
+			</param>
+			<param name="overviews" displayname="Generate Internal Overviews" type="Optional" direction="Input" datatype="Boolean" expression="{overviews}">
+				<dialogReference>Generate internal overview pyramids (reduced-resolution versions) for efficient visualization at multiple scales. Highly recommended for web mapping and large files.</dialogReference>
+			</param>
+			<param name="geo_metadata" displayname="Write External XML to GEO_METADATA Tag" type="Optional" direction="Input" datatype="Boolean" expression="{geo_metadata}">
+				<dialogReference>Write external XML sidecar files (.xml) to the internal GEO_METADATA TIFF tag (#50909). This embeds metadata directly in the file for better portability.</dialogReference>
+			</param>
+			<param name="write_pam_xml" displayname="Write Statistics XML (.aux.xml)" type="Optional" direction="Input" datatype="Boolean" expression="{write_pam_xml}">
+				<dialogReference>Write an Esri-compatible .aux.xml Persistent Auxiliary Metadata (PAM) file with band statistics. Recommended for ArcGIS Pro workflows.</dialogReference>
+			</param>
+			<param name="add_to_map" displayname="Add Output to Map" type="Optional" direction="Input" datatype="Boolean" expression="{add_to_map}">
+				<dialogReference>Automatically add the optimized output GeoTIFF to the current ArcGIS Pro map after processing completes.</dialogReference>
+			</param>
+			<param name="report_format" displayname="Compression Report Format" type="Optional" direction="Input" datatype="String" expression="{report_format}">
+				<dialogReference>Output format for the comparison report. Choose HTML for a rich, interactive report with charts and formatting, or Markdown for a text-based report.</dialogReference>
+			</param>
+			<param name="report_suffix" displayname="Report Filename Suffix" type="Optional" direction="Input" datatype="String" expression="{report_suffix}">
+				<dialogReference>Suffix to append to the comparison report filename. Default is '_comp' (e.g., 'output_comp.html'). Use a custom suffix to organize multiple reports.</dialogReference>
+			</param>
+			<param name="open_report" displayname="Open Report on Completion" type="Optional" direction="Input" datatype="Boolean" expression="{open_report}">
+				<dialogReference>Automatically open the comparison report in your default browser (HTML) or text editor (Markdown) after generation.</dialogReference>
+			</param>
+		</parameters>
+	</tool>
+</metadata>

@@ -1,7 +1,7 @@
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.pyHistory
 
 # Egg / build artifacts
 build/
@@ -20,11 +20,6 @@ venv/
 .conda/
 miniconda3/
 
-# Secrets / local config
-.env
-.env.*
-secrets.json
-
 # Test / coverage
 htmlcov/
 .coverage
@@ -36,7 +31,6 @@ coverage.xml
 __pypackages__/
 
 # Editor / OS junk
-*.log
 .DS_STORE
 Thumbs.db
 .vscode/
@@ -54,6 +48,7 @@ gttk/logs/
 *.gdb
 *.aprx
 *.atbx
+*.itemindex
 ImportLog/
 Index/
 GpMessages/

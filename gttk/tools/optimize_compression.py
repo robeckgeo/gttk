@@ -40,7 +40,7 @@ from gttk.utils.log_helpers import init_arcpy
 from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
 from gttk.utils.path_helpers import get_geotiff_files, prepare_output_path, copy_folder_structure
 from gttk.utils.performance_tracker import PerformanceTracker
-from gttk.utils.preprocessor import preprocess_geotiff, VirtualFileManager
+from gttk.utils.preprocessor import preprocess_geotiff, round_overviews, VirtualFileManager
 from gttk.utils.script_arguments import OptimizeArguments
 from gttk.utils.srs_logic import handle_srs_logic, check_vertical_srs_mismatch
 from gttk.utils.statistics_calculator import calculate_statistics, build_pam_data_from_stats, write_pam_xml
@@ -176,6 +176,58 @@ def _get_jxl_options(quality: int, effort: int = 7):
 
     return options
 
+def _calculate_overview_levels(x_size: int, y_size: int, tile_size: int = 512) -> list:
+    """
+    Calculate optimal overview levels, stopping when dimensions reach tile_size.
+    
+    Generates overview levels [2, 4, 8, 16, ...] until EITHER width or height
+    is less than or equal to tile_size. This prevents generating unnecessary
+    overviews for images where one or both dimensions are already small.
+    
+    Args:
+        x_size: Image width in pixels
+        y_size: Image height in pixels
+        tile_size: Tile/block size (default: 512)
+    
+    Returns:
+        List of overview levels as integers (e.g., [2, 4, 8])
+    
+    Example:
+        For a 6000x4000 (width x height) image with 512 tile size:
+        - Level 2: 3000x2000 (both > 512) ✓
+        - Level 4: 1500x1000 (both > 512) ✓
+        - Level 8: 750x500 (height ≤ 512) ✓ STOP
+        Returns: [2, 4, 8]
+    """
+    levels = []
+    factor = 2
+    
+    # Keep generating levels until one dimension reaches tile_size
+    while True:
+        # Calculate dimensions at this overview level
+        overview_width = x_size / factor
+        overview_height = y_size / factor
+
+        # Add this overview level
+        levels.append(factor)
+        
+        # Stop if either dimension is now <= tile_size
+        if overview_width <= tile_size or overview_height <= tile_size:
+            break
+
+        factor *= 2
+        
+        # Safety check to prevent infinite loops
+        if factor > 2**18:  # sufficient for 1m global COG at equator with 256x256 tiles
+            logger.warning(f"Overview calculation stopped at factor {factor}. This is unexpected.")
+            break
+    
+    # Always include at least one overview level if image is larger than tile_size
+    if not levels and (x_size > tile_size and y_size > tile_size):
+        levels = [2]
+    
+    logger.debug(f"Calculated overview levels for {x_size}x{y_size}: {levels}")
+    return levels
 
 def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileManager, tracker: Optional[PerformanceTracker] = None):
     """Orchestrates the end-to-end GeoTIFF optimization and compression workflow."""
@@ -196,7 +248,51 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileM
     with vfm as temp_vfm:
         temp_path = temp_vfm.get_temp_path("intermediate.tif")
 
-        # --- 0. Set base creation options, whether COG or plain GeoTIFF ---
+        # --- 1. Perform all in-memory preprocessing steps ---
+        if tracker:
+            tracker.start("intermediate_processing")
+
+        temp_ds = preprocess_geotiff(
+            original_ds=original_input_ds,
+            vfm=temp_vfm,
+            args=args,
+            info=input_info,
+            srs=target_srs,
+            metadata=source_metadata
+        )
+        
+        if tracker:
+            tracker.stop("intermediate_processing")
+
+        # --- 2. Detect internal mask and determine overview strategy ---
+        has_internal_mask = False
+        if temp_ds.RasterCount > 0:
+            band = temp_ds.GetRasterBand(1)
+            mask_flags = band.GetMaskFlags()
+            # GMF_PER_DATASET (0x02) indicates an internal mask
+            has_internal_mask = (mask_flags & gdal.GMF_PER_DATASET) != 0
+            logger.debug(f"Internal mask detected: {has_internal_mask}")
+        
+        # Determine if we should round overviews (all conditions must be met)
+        should_round_overviews = (
+            args.overviews and
+            args.decimals is not None and
+            args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and
+            args.product_type in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value] and
+            'Float' in str(input_info.data_type) and
+            not has_internal_mask  # Don't round if mask present
+        )
+        
+        # Log the decision
+        if args.overviews:
+            if should_round_overviews:
+                logger.info("Overview strategy: ROUNDING workflow (float data, lossless compression, no mask)")
+            elif has_internal_mask:
+                logger.info("Overview strategy: STANDARD workflow (internal mask detected)")
+            else:
+                logger.info("Overview strategy: STANDARD workflow (rounding conditions not met)")
+
+        # --- 3. Build creation options based on overview strategy ---
         final_creation_options = [
             'GEOTIFF_VERSION=1.1',
             'BIGTIFF=IF_SAFER',
@@ -206,13 +302,14 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileM
             
         if args.cog:
             final_creation_options += [f'BLOCKSIZE={args.tile_size}']
-
-            if args.overviews:  # Regenerate overviews from optimized base layer
-                final_creation_options.append('OVERVIEWS=IGNORE_EXISTING')
-                if args.product_type in [PT.IMAGE.value, PT.THEMATIC.value]:
-                    final_creation_options.append('OVERVIEW_RESAMPLING=NEAREST')
+            
+            if args.overviews:
+                if should_round_overviews:
+                    # Use existing overviews (built on intermediate and rounded)
+                    final_creation_options.append('OVERVIEWS=FORCE_USE_EXISTING')
                 else:
-                    final_creation_options.append('OVERVIEW_RESAMPLING=BILINEAR')
+                    # Let COG driver build overviews (standard workflow)
+                    final_creation_options.append('OVERVIEWS=AUTO')
             else:
                 final_creation_options.append('OVERVIEWS=NONE')
         else:
@@ -221,8 +318,14 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileM
                 f'BLOCKXSIZE={args.tile_size}',
                 f'BLOCKYSIZE={args.tile_size}'
             ]
+            
             if args.overviews:
-                final_creation_options.append('COPY_SRC_OVERVIEWS=YES')
+                if should_round_overviews:
+                    # Copy existing overviews from intermediate
+                    final_creation_options.append('COPY_SRC_OVERVIEWS=YES')
+                else:
+                    # Don't copy - will build external overviews after
+                    final_creation_options.append('COPY_SRC_OVERVIEWS=NO')
             else:
                 final_creation_options.append('COPY_SRC_OVERVIEWS=NO')
 
@@ -244,49 +347,35 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileM
             final_creation_options.append(f'LEVEL={args.level}')
         logger.info(f"Final creation options set: {final_creation_options}")
 
-        # --- 1. Perform all in-memory preprocessing steps ---
-        if tracker:
-            tracker.start("intermediate_processing")
-
-        temp_ds = preprocess_geotiff(
-            original_ds=original_input_ds,
-            vfm=temp_vfm,
-            args=args,
-            info=input_info,
-            srs=target_srs,
-            metadata=source_metadata
-        )
-        
-        if tracker:
-            tracker.stop("intermediate_processing")
-
-        # --- 3. Prepare overviews on intermediate file for standard GeoTIFF ---
-        if args.overviews and not args.cog:
+        # --- 4. Build and round overviews on intermediate file (ONLY if rounding workflow) ---
+        if should_round_overviews:
             if tracker:
                 tracker.start("overview_creation")
+            
+            # Type guard: should_round_overviews is True means args.decimals is not None
+            assert args.decimals is not None, "args.decimals must be set when should_round_overviews is True"
+            
+            logger.info("Building internal overviews on intermediate file for rounding (float data, no mask).")
             resample_alg = 'NEAREST' if args.product_type in [PT.IMAGE.value, PT.THEMATIC.value] else 'BILINEAR'
-            overview_list = [2, 4, 8, 16, 32]
+            overview_list = _calculate_overview_levels(input_info.x_size, input_info.y_size, tile_size=args.tile_size)
+            logger.info(f"Using overview levels: {', '.join(map(str, overview_list))}")
+                
             overview_options = [
                 'TILED=YES',
-                f"COMPRESS={args.algorithm}",
+                'COMPRESS=NONE',  # Always uncompressed on intermediate file for rounding
                 f'BLOCKXSIZE={args.tile_size}',
                 f'BLOCKYSIZE={args.tile_size}'
             ]
-            if args.algorithm in [CA.JPEG.value, CA.JXL.value]:
-                overview_options.append(f"{'JPEG_' if not args.cog else ''}QUALITY={args.quality}")
-            if args.algorithm == CA.JPEG.value:
-                overview_options.append('PHOTOMETRIC=YCBCR')
-            if args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value]:
-                overview_options.append(f'PREDICTOR={args.predictor}')
-            if args.algorithm == CA.LERC.value:
-                overview_options.append(f'MAX_Z_ERROR={args.max_z_error}')
             
-            logger.info("Creating overviews for the intermediate GeoTIFF.")
             temp_ds.BuildOverviews(resampling=resample_alg, overviewlist=overview_list, options=overview_options)
+            
+            logger.info(f"Rounding overviews to {args.decimals} decimal places...")
+            temp_ds = round_overviews(temp_ds, args.decimals)
+            
             if tracker:
                 tracker.stop("overview_creation")
 
-        # --- 4. Create final COG or GeoTIFF ---
+        # --- 5. Create final COG or GeoTIFF ---
         if tracker:
             tracker.start("final_translate")
             
@@ -306,8 +395,6 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileM
         if input_info.nodata is not None:
             if args.mask_nodata:
                 # Unset NoData value when using internal mask
-                # BUT: Don't set noData='none' for GTiff driver as it breaks COPY_SRC_OVERVIEWS
-                # For GTiff driver, just don't set any noData - the mask handles transparency
                 if args.cog:
                     final_options_dict['noData'] = 'none'
             elif args.nodata is not None:  # User specified a NoData value
@@ -356,7 +443,44 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileM
         if tracker:
             tracker.stop("final_translate")
         
-        # --- 10. Write external .aux.xml if requested ---
+        # --- 6. Build external overviews for GTiff if using standard workflow ---
+        if not args.cog and args.overviews and not should_round_overviews:
+            if tracker:
+                tracker.start("external_overviews")
+            
+            logger.info("Building external overviews on final GTiff file (standard workflow)...")
+            resample_alg = 'NEAREST' if args.product_type in [PT.IMAGE.value, PT.THEMATIC.value] else 'BILINEAR'
+            overview_list = _calculate_overview_levels(input_info.x_size, input_info.y_size, tile_size=args.tile_size)
+            logger.info(f"Using overview levels: {', '.join(map(str, overview_list))}")
+            
+            # Reopen as update to build overviews
+            final_ds_for_overviews = gdal.Open(str(args.output_path), gdal.GA_Update)
+            if final_ds_for_overviews:
+                overview_options_external = [
+                    f'COMPRESS={args.algorithm}',
+                    'TILED=YES',
+                    f'BLOCKXSIZE={args.tile_size}',
+                    f'BLOCKYSIZE={args.tile_size}'
+                ]
+                
+                # Add predictor if applicable
+                if args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and args.predictor:
+                    overview_options_external.append(f'PREDICTOR={args.predictor}')
+                
+                final_ds_for_overviews.BuildOverviews(
+                    resampling=resample_alg.upper(),
+                    overviewlist=overview_list,
+                    options=overview_options_external
+                )
+                final_ds_for_overviews = None
+                logger.info(f"External overviews built successfully with {args.algorithm} compression.")
+            else:
+                logger.warning("Failed to open final file for external overview building.")
+            
+            if tracker:
+                tracker.stop("external_overviews")
+        
+        # --- 7. Write external .aux.xml if requested ---
         if args.write_pam_xml:
             logger.info("Writing external .aux.xml file for the final dataset...")
             if stats:

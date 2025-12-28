@@ -14,6 +14,7 @@ Metadata Extractor for GeoTIFF Files.
 This module provides a MetadataExtractor class to orchestrate the extraction of
 metadata from GeoTIFF files, populating the data models directly.
 """
+import logging
 import math
 import re
 import tifffile
@@ -36,6 +37,8 @@ from gttk.utils.statistics_calculator import calculate_statistics
 from gttk.utils.tiff_tag_parser import TiffTagParser
 from gttk.utils.validate_cloud_optimized_geotiff import validate as validate_cog
 from gttk.utils.xml_formatter import read_xml_with_encoding_detection, decode_xml_bytes
+
+logger = logging.getLogger(__name__)
 
 PREDICTOR_ABBREV_MAP = {
     1: "1-None",
@@ -228,14 +231,11 @@ class MetadataExtractor:
             if georef.has_vertical():
                 is_3d = True
                 vert_unit = georef.vertical_unit
-            elif self.geotiff_info.srs and self.geotiff_info.srs.IsGeographic() and self.geotiff_info.srs.GetAxesCount() == 3:
+            elif georef.vertical_unit:
+                # 3D Geographic CRS (e.g., EPSG:4979) has vertical_unit set via PROJJSON parsing
                 is_3d = True
-                # Try to get unit from the third axis
-                try:
-                    vert_unit = self.geotiff_info.srs.GetLinearUnitsName()
-                except Exception:
-                    vert_unit = "metre"  # Default for 3D Geographic
-
+                vert_unit = georef.vertical_unit
+        logger.debug(f"extract_bounding_box: is_3d={is_3d}, vert_unit={vert_unit}")
         if is_3d:
             stats = self.extract_statistics()
             if stats and len(stats) == 1:  # single band only (i.e. DEM)
@@ -260,20 +260,29 @@ class MetadataExtractor:
         This now reads from the pre-calculated geographic_corners instead of
         calling geokey_parser.get_geographic_extents() and re-transforming coordinates.
         """
-        if not self.is_geotiff or not self.geotiff_info:
-            return None
+        import logging
+        logger = logging.getLogger('read_metadata')
         
-        corners = self.geotiff_info.geographic_corners
-        if not corners:
+        try:
+            if not self.is_geotiff or not self.geotiff_info:
+                logger.info("extract_geo_extents: Not a GeoTIFF or no geotiff_info")
+                return None
+            
+            corners = self.geotiff_info.geographic_corners
+            if not corners:
+                logger.warning("extract_geo_extents: No geographic_corners in geotiff_info - geoextent section will be skipped")
+                return None
+            
+            return GeoExtents(
+                upper_left=corners.get('Upper Left', (0.0, 0.0)),
+                lower_left=corners.get('Lower Left', (0.0, 0.0)),
+                upper_right=corners.get('Upper Right', (0.0, 0.0)),
+                lower_right=corners.get('Lower Right', (0.0, 0.0)),
+                center=corners.get('Center', (0.0, 0.0))
+            )
+        except Exception as e:
+            logger.warning(f"Failed to extract geo extents: {e}")
             return None
-        
-        return GeoExtents(
-            upper_left=corners.get('Upper Left', (0.0, 0.0)),
-            lower_left=corners.get('Lower Left', (0.0, 0.0)),
-            upper_right=corners.get('Upper Right', (0.0, 0.0)),
-            lower_right=corners.get('Lower Right', (0.0, 0.0)),
-            center=corners.get('Center', (0.0, 0.0))
-        )
 
     def extract_statistics(self, page: int = 0) -> Optional[List[StatisticsBand]]:
         """
@@ -428,37 +437,76 @@ class MetadataExtractor:
 
     def extract_wkt_string(self) -> Optional[WktString]:
         """Extracts WKT2 string, preferring custom metadata for non-EPSG vertical CRSs."""
-        if not self.is_geotiff or not self.gdal_ds:
-            return None
+        import logging
+        logger = logging.getLogger('read_metadata')
         
-        # Check for custom WKT2 metadata (for custom vertical datums)
-        custom_wkt = self.gdal_ds.GetMetadataItem('COMPOUND_CRS_WKT2')
-        if custom_wkt:
-            # Parse the custom WKT to get a proper SRS object for multiline formatting
-            from osgeo import osr
-            custom_srs = osr.SpatialReference()
-            if custom_srs.ImportFromWkt(custom_wkt) == 0:
-                version = "WKT2_2019 (from metadata)"
-                wkt = custom_srs.ExportToWkt(['FORMAT=WKT2_2019', 'MULTILINE=YES'])
-                return WktString(wkt_string=wkt, format_version=version, source_file=str(self.filepath))
-        
-        # Fallback to standard GeoKey-based SRS
-        srs = self.gdal_ds.GetSpatialRef()
-        if not srs:
+        try:
+            if not self.is_geotiff or not self.gdal_ds:
+                logger.info("extract_wkt_string: Not a GeoTIFF or no GDAL dataset")
+                return None
+            
+            # Check for custom WKT2 metadata (for custom vertical datums)
+            custom_wkt = self.gdal_ds.GetMetadataItem('COMPOUND_CRS_WKT2')
+            if custom_wkt:
+                logger.info("extract_wkt_string: Found COMPOUND_CRS_WKT2 metadata, using custom WKT")
+                # Parse the custom WKT to get a proper SRS object for multiline formatting
+                from osgeo import osr
+                custom_srs = osr.SpatialReference()
+                if custom_srs.ImportFromWkt(custom_wkt) == 0:
+                    version = "WKT2_2019 (from metadata)"
+                    wkt = custom_srs.ExportToWkt(['FORMAT=WKT2_2019', 'MULTILINE=YES'])
+                    return WktString(wkt_string=wkt, format_version=version, source_file=str(self.filepath))
+            
+            # Use cached SRS from geotiff_info (which may have been populated by OSGeo4W fallback)
+            srs = self.geotiff_info.srs if self.geotiff_info else None
+            
+            # Fallback to GetSpatialRef() if cached SRS not available
+            if not srs:
+                srs = self.gdal_ds.GetSpatialRef()
+            
+            if not srs:
+                logger.warning("extract_wkt_string: No SRS available (GetSpatialRef() and cached SRS both None) - wkt section will be skipped")
+                return None
+            
+            version = "WKT2_2019"
+            wkt = srs.ExportToWkt([f'FORMAT={version}', 'MULTILINE=YES'])
+            return WktString(wkt_string=wkt, format_version=version, source_file=str(self.filepath))
+        except Exception as e:
+            logger.warning(f"Failed to extract WKT string: {e}")
             return None
-        version = "WKT2_2019"
-        wkt = srs.ExportToWkt([f'FORMAT={version}', 'MULTILINE=YES'])
-        return WktString(wkt_string=wkt, format_version=version, source_file=str(self.filepath))
 
     def extract_projjson_string(self) -> Optional[JsonString]:
         """Extracts PROJJSON string."""
-        if not self.is_geotiff or not self.gdal_ds:
+        import logging
+        logger = logging.getLogger('read_metadata')
+        
+        try:
+            if not self.is_geotiff or not self.gdal_ds:
+                logger.info("extract_projjson_string: Not a GeoTIFF or no GDAL dataset")
+                return None
+            
+            # First try using cached PROJJSON from OSGeo4W (if available)
+            # This ensures consistent format with full member IDs when PROJ database was accessible
+            if self.geotiff_info and self.geotiff_info.cached_projjson:
+                logger.info("Using cached PROJJSON from OSGeo4W")
+                return JsonString(json_string=self.geotiff_info.cached_projjson, source_file=str(self.filepath))
+            
+            # Use cached SRS from geotiff_info (which may have been populated by OSGeo4W fallback)
+            srs = self.geotiff_info.srs if self.geotiff_info else None
+            
+            # Fallback to GetSpatialRef() if cached SRS not available
+            if not srs:
+                srs = self.gdal_ds.GetSpatialRef()
+            
+            if not srs:
+                logger.warning("extract_projjson_string: No SRS available (GetSpatialRef() and cached SRS both None) - json section will be skipped")
+                return None
+            
+            projjson = srs.ExportToPROJJSON()
+            return JsonString(json_string=projjson, source_file=str(self.filepath))
+        except Exception as e:
+            logger.warning(f"Failed to extract PROJJSON string: {e}")
             return None
-        srs = self.gdal_ds.GetSpatialRef()
-        if not srs:
-            return None
-        projjson = srs.ExportToPROJJSON()
-        return JsonString(json_string=projjson, source_file=str(self.filepath))
 
     def extract_gdal_metadata(self) -> Optional[XmlMetadata]:
         """Extracts GDAL_METADATA TIFF Tag."""
@@ -523,21 +571,23 @@ class MetadataExtractor:
             pixel_size_x = abs(gt[1])
             pixel_size_y = abs(gt[5])
             
-            srs = ds.GetSpatialRef()
-            is_geographic = srs and srs.IsGeographic()
+            # Use projection_info from geotiff_info instead of calling SRS methods
+            # This handles broken PROJ environments in ArcGIS Pro
+            proj_info = self.geotiff_info.projection_info if self.geotiff_info else {}
+            is_geographic = proj_info.get('is_geographic', False) if proj_info else False
             
             units = "arc seconds"
             if not is_geographic:
-                try:
-                    linear_units = srs.GetLinearUnitsName()
-                    if linear_units:
-                        units = linear_units.lower()
-                        units = re.sub(r'metre|meter', 'm', units)
-                        units = re.sub(r'foot', 'ft', units)
-                        units = re.sub(r'us survey ft', 'ft', units)
-                        units = re.sub(r'degree', 'deg', units)
-                except AttributeError:
-                    units = "units"  # Fallback for older GDAL versions
+                # Try to get linear unit name from projection_info
+                linear_units = proj_info.get('linear_unit_name') if proj_info else None
+                if linear_units:
+                    units = linear_units.lower()
+                    units = re.sub(r'metre|meter', 'm', units)
+                    units = re.sub(r'foot', 'ft', units)
+                    units = re.sub(r'us survey ft', 'ft', units)
+                    units = re.sub(r'degree', 'deg', units)
+                else:
+                    units = "units"  # Fallback if unit name not available
             elif is_geographic:
                 pixel_size_x *= 3600
                 pixel_size_y *= 3600

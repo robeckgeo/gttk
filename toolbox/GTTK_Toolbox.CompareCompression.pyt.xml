@@ -1,2 +1,40 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<metadata xml:lang="en"><Esri><CreaDate>20251207</CreaDate><CreaTime>16184600</CreaTime><ArcGISFormat>1.0</ArcGISFormat><SyncOnce>TRUE</SyncOnce></Esri></metadata>
+<metadata xml:lang="en">
+	<Esri>
+		<CreaDate>20251207</CreaDate>
+		<CreaTime>16184600</CreaTime>
+		<ArcGISFormat>1.0</ArcGISFormat>
+		<SyncOnce>TRUE</SyncOnce>
+		<ModDate>20251226</ModDate>
+		<ModTime>192356</ModTime>
+	</Esri>
+	<tool name="CompareCompression" displayname="Compare Compression" toolboxalias="gttk">
+		<summary>Validates compression results by comparing baseline and processed GeoTIFF files with side-by-side analysis.</summary>
+		<usage>
+			<bullet_item>The Baseline file is typically your original, unprocessed GeoTIFF.</bullet_item>
+			<bullet_item>The Comparison file is the processed or compressed version you want to validate.</bullet_item>
+			<bullet_item>The tool generates an HTML or Markdown report showing file size reduction, compression settings, data integrity validation (min/max/mean), COG validation, metadata changes, and performance implications.</bullet_item>
+			<bullet_item>This tool is automatically run after Optimize Compression to validate the compression results.</bullet_item>
+		</usage>
+		<parameters>
+			<param name="baseline_path" displayname="Baseline or Input GeoTIFF 1 (e.g., Original)" type="Required" direction="Input" datatype="Raster Layer; Raster Dataset; File" expression="baseline_path">
+				<dialogReference>The baseline (or original) GeoTIFF file to use as the reference for comparison. This is typically your unprocessed or original file before optimization.</dialogReference>
+			</param>
+			<param name="comparison_path" displayname="Comparison or Output GeoTIFF 2 (e.g., Processed)" type="Required" direction="Input" datatype="Raster Layer; Raster Dataset; File" expression="comparison_path">
+				<dialogReference>The comparison (or processed) GeoTIFF file to validate against the baseline. This is typically the compressed or optimized output file you want to evaluate.</dialogReference>
+			</param>
+			<param name="report_format" displayname="Report File Format" type="Required" direction="Input" datatype="String" expression="report_format">
+				<dialogReference>Output format for the comparison report. Choose HTML (.html) for a rich, interactive report with charts and formatting, or Markdown (.md) for a text-based report suitable for version control and side-by-side comparison.</dialogReference>
+			</param>
+			<param name="report_suffix" displayname="Report Filename Suffix" type="Optional" direction="Input" datatype="String" expression="{report_suffix}">
+				<dialogReference>Suffix to append to the comparison report filename. Default is '_comp' (e.g., 'output_comp.html'). Use a custom suffix to organize multiple reports.</dialogReference>
+			</param>
+			<param name="report_file" displayname="Report File Path" type="Derived" direction="Output" datatype="File" expression="report_file">
+				<dialogReference>The full path where the comparison report will be saved. This is automatically derived from the comparison file path and selected format.</dialogReference>
+			</param>
+			<param name="open_report" displayname="Open Report on Completion" type="Optional" direction="Input" datatype="Boolean" expression="{open_report}">
+				<dialogReference>Automatically open the comparison report in your default browser (HTML) or text editor (Markdown) after generation.</dialogReference>
+			</param>
+		</parameters>
+	</tool>
+</metadata>

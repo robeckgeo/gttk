@@ -42,6 +42,61 @@ gttk_path = script_path.parent.parent
 if str(gttk_path) not in sys.path:
     sys.path.insert(0, str(gttk_path))
 
+# Configure PROJ_LIB for ArcGIS BEFORE importing any modules that use GDAL
+# This must happen before GDAL is imported, as GDAL only reads PROJ_LIB during initialization
+if 'PROJ_LIB' not in os.environ:
+    arcpy.AddMessage("PROJ_LIB not set, attempting configuration...")
+    try:
+        # Load config to get OSGeo4W path
+        config_path = gttk_path / "config.toml"
+        arcpy.AddMessage(f"Looking for config at: {config_path}")
+        
+        if config_path.exists():
+            arcpy.AddMessage("Config file found, attempting to load...")
+            try:
+                import sys
+                if sys.version_info >= (3, 11):
+                    import tomllib
+                else:
+                    try:
+                        import tomli as tomllib
+                    except ImportError:
+                        tomllib = None
+                
+                if tomllib:
+                    with open(config_path, "rb") as f:
+                        config = tomllib.load(f)
+                    arcpy.AddMessage("Config loaded successfully")
+                    
+                    osgeo4w_root = config.get('paths', {}).get('osgeo4w')
+                    arcpy.AddMessage(f"OSGeo4W root from config: {osgeo4w_root}")
+                    
+                    if osgeo4w_root:
+                        osgeo4w_path = Path(osgeo4w_root)
+                        proj_share_path = osgeo4w_path / "share" / "proj"
+                        proj_db_path = proj_share_path / "proj.db"
+                        
+                        arcpy.AddMessage(f"Checking for proj.db at: {proj_db_path}")
+                        if proj_db_path.exists():
+                            os.environ['PROJ_LIB'] = str(proj_share_path)
+                            arcpy.AddMessage(f"✓ PROJ_LIB configured: {proj_share_path}")
+                        else:
+                            arcpy.AddWarning(f"proj.db not found at: {proj_db_path}")
+                    else:
+                        arcpy.AddWarning("OSGeo4W path not found in config.toml")
+                else:
+                    arcpy.AddWarning("tomllib/tomli not available for reading config")
+            except Exception as e:
+                arcpy.AddWarning(f"Error during PROJ_LIB configuration: {e}")
+                import traceback
+                arcpy.AddWarning(traceback.format_exc())
+        else:
+            arcpy.AddWarning(f"Config file not found at: {config_path}")
+    except Exception as e:
+        arcpy.AddWarning(f"Failed to configure PROJ_LIB: {e}")
+else:
+    arcpy.AddMessage(f"PROJ_LIB already set to: {os.environ['PROJ_LIB']}")
+
 try:
     import gttk.tools.compare_compression as cc
     import gttk.tools.optimize_compression_arc as oc
@@ -214,12 +269,6 @@ class CompareCompression:
             parameters[4].value = str(report_path)
 
             messages.addMessage(f"Report generated successfully: {report_path}")
-            if open_report:
-                try:
-                    os.startfile(report_path)
-                    messages.addMessage(f"Opening report: {report_path}")
-                except Exception as e:
-                    messages.addWarningMessage(f"Could not automatically open the report: {e}")
 
         except Exception as e:
             messages.addErrorMessage(f"An error occurred: {e}")
@@ -266,7 +315,7 @@ class OptimizeCompression:
 
         # --- Core Settings ---
         param_product_type = arcpy.Parameter(
-            displayName="Data Type",
+            displayName="Product Type",
             name="product_type",
             datatype="GPString",
             parameterType="Required",
@@ -318,11 +367,11 @@ class OptimizeCompression:
             CA.LERC.value,
             CA.NONE.value
         ]
-        # Set default algorithm based on default data type (DEM)
+        # Set default algorithm based on default product type (DEM)
         param_algorithm.value = CA.DEFLATE.value
 
         param_quality = arcpy.Parameter(
-            displayName="JPEG Quality",
+            displayName="JPEG/JXL Quality",
             name="quality",
             datatype="GPLong",
             parameterType="Optional",
@@ -496,7 +545,7 @@ class OptimizeCompression:
         selected_type_key = self.PRODUCT_TYPE_MAP.get(product_type)
         algorithm = parameters[6].valueAsText
 
-        # --- Set valid algorithms based on data type ---
+        # --- Set valid algorithms based on product type ---
         if selected_type_key == PT.IMAGE.value:
             valid_algorithms = [
                 CA.JPEG.value,
@@ -531,7 +580,7 @@ class OptimizeCompression:
                         algorithm != OptimizeCompression._previous_algorithm)
 
         # --- Handle State Changes ---
-        # On first run, or if the data type changed, reset everything for the new type.
+        # On first run, or if the product type changed, reset everything for the new type.
         if type_changed or OptimizeCompression._previous_product_type is None:
             # Set default algorithm for the new type
             if selected_type_key == PT.IMAGE.value:
@@ -561,7 +610,7 @@ class OptimizeCompression:
         return
 
     def _reset_all_dependents(self, parameters, selected_type_key, algorithm):
-        """Resets all parameters that depend on data type or algorithm."""
+        """Resets all parameters that depend on product type or algorithm."""
         # Reset Raster Type
         if selected_type_key in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value]:
             parameters[3].value = "PixelIsPoint"
@@ -719,7 +768,7 @@ class OptimizeCompression:
 
         # --- Conditionally Nullify Parameters invalid for selected algorithm ---
         if not product_type == PT.DEM.value:
-            vertical_srs = None
+            vertical_srs_name = None
 
         if product_type in [PT.IMAGE.value, PT.THEMATIC.value]:
             decimals = None
@@ -771,19 +820,8 @@ class OptimizeCompression:
 
         # --- Run the optimize_compression script ---
         try:
-            # The script now raises an exception on failure, so we don't need to check status_code
             oc.optimize_compression(args)
             messages.addMessage("Tool completed successfully.")
-
-            # --- Handle Report Opening ---
-            report_path = _get_report_path(output_path, report_suffix, report_format)
-            
-            if open_report:
-                try:
-                    os.startfile(report_path)
-                    messages.addMessage(f"Opening report: {report_path}")
-                except Exception as e:
-                    messages.addWarningMessage(f"Could not automatically open the report: {e}")
 
             if add_to_map:
                 try:
@@ -844,7 +882,7 @@ class TestCompression:
             direction="Output")
         param_output.filter.list = ["xlsx"]
 
-        # --- Input Method (CSV or Data Type) ---
+        # --- Input Method (Product Type or custom CSV) ---
         param_input_method = arcpy.Parameter(
             displayName="Input Method",
             name="input_method",
@@ -852,8 +890,8 @@ class TestCompression:
             parameterType="Required",
             direction="Input")
         param_input_method.filter.type = "ValueList"
-        param_input_method.filter.list = ["Use Data Type Presets", "Use Custom CSV File"]
-        param_input_method.value = "Use Data Type Presets"
+        param_input_method.filter.list = ["Use Product Type Presets", "Use Custom CSV File"]
+        param_input_method.value = "Use Product Type Presets"
 
         param_product_type = arcpy.Parameter(
             displayName="Product Type (for Preset Selection)",
@@ -890,7 +928,7 @@ class TestCompression:
             datatype="GPBoolean",
             parameterType="Optional",
             direction="Input")
-        param_delete_test_files.value = False
+        param_delete_test_files.value = True
 
         # --- Report Options ---
         param_open_report = arcpy.Parameter(
@@ -915,7 +953,7 @@ class TestCompression:
         """Modify parameter states based on input method selection."""
         input_method = parameters[2].valueAsText
         
-        if input_method == "Use Data Type Presets":
+        if input_method == "Use Product Type Presets":
             parameters[3].enabled = True
             parameters[3].parameterType = "Required"
             parameters[4].enabled = False
@@ -957,9 +995,9 @@ class TestCompression:
         """Validate parameters and show warnings/errors."""
         input_method = parameters[2].valueAsText
         
-        if input_method == "Use Data Type Presets":
+        if input_method == "Use Product Type Presets":
             if not parameters[3].value:
-                parameters[3].setErrorMessage("Data Type is required when using presets.")
+                parameters[3].setErrorMessage("Product Type is required when using presets.")
             else:
                 parameters[3].clearMessage()
         elif input_method == "Use Custom CSV File":
@@ -987,9 +1025,9 @@ class TestCompression:
             open_report = parameters[7].value
 
             # --- Validate Input Method ---
-            if input_method == "Use Data Type Presets":
+            if input_method == "Use Product Type Presets":
                 if not product_type_desc:
-                    messages.addErrorMessage("Data Type must be specified when using presets.")
+                    messages.addErrorMessage("Product Type must be specified when using presets.")
                     return
                 product_type = self.PRODUCT_TYPE_MAP.get(product_type_desc, PT.DEM.value)
                 csv_path = None
@@ -1012,6 +1050,7 @@ class TestCompression:
                 csv_path=Path(csv_path) if csv_path else None,
                 temp_dir=Path(temp_dir) if temp_dir else None,
                 delete_test_files=delete_test_files,
+                open_report=open_report,
             )
 
             messages.addMessage(f"Starting compression testing with arguments: {args}")
@@ -1039,14 +1078,6 @@ class TestCompression:
                 
                 messages.addMessage("\nCompression testing completed successfully.")
                 messages.addMessage(f"Results saved to: {output}")
-
-                # --- Open Excel Report ---
-                if open_report:
-                    try:
-                        os.startfile(output)
-                        messages.addMessage(f"Opening Excel report: {output}")
-                    except Exception as e:
-                        messages.addWarningMessage(f"Could not automatically open Excel report: {e}")
 
             except Exception as e:
                 messages.addErrorMessage(f"Test Compression script failed: {e}")
@@ -1365,12 +1396,6 @@ class ReadMetadata:
                 parameters[3].value = str(output_filename)
 
                 messages.addMessage(f"Report generated successfully: {output_filename}")
-                if open_report:
-                    try:
-                        os.startfile(output_filename)
-                        messages.addMessage(f"Opening report: {output_filename}")
-                    except Exception as e:
-                        messages.addWarningMessage(f"Could not automatically open the report: {e}")
 
             except Exception as e:
                 messages.addErrorMessage(f"Read Metadata script failed with error: {e}")

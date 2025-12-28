@@ -84,9 +84,6 @@ class ReportFormatter(ABC):
         """
         self.renderer = renderer
         self.sections: List[ReportSection] = []
-        # Standardized header controls used by all formatters
-        # report_title: logical report name shown in headers (e.g., "Metadata Report", "Compression Comparison")
-        # include_title: for Markdown header only; HTML header always shows report_title
         self.report_title: str = "Metadata Report"
         self.include_title: bool = False
     
@@ -302,7 +299,7 @@ class HtmlReportFormatter(ReportFormatter):
         ...     f.write(html)
     """
     
-    def __init__(self, filename: str = "Unknown", theme: str = "material_light"):
+    def __init__(self, filename: str = "Unknown", report_type: str = "metadata", theme: str = "material_light"):
         """
         Initialize HTML report formatter.
         
@@ -311,6 +308,7 @@ class HtmlReportFormatter(ReportFormatter):
         
         Args:
             filename: The name of the file being reported on.
+            report_type: Type of report (e.g. 'metadata', 'comparison')
             theme: Theme name ('material_light' or 'material_dark').
         """
         super().__init__(MarkdownRenderer())
@@ -318,6 +316,7 @@ class HtmlReportFormatter(ReportFormatter):
         self.renderer.enable_html_styling = True
         
         self.filename = filename
+        self.report_type = report_type
         self.theme = theme
         self.menu_items: List[MenuItem] = []
         self.anchor_map = {}
@@ -676,7 +675,7 @@ class HtmlReportFormatter(ReportFormatter):
     
     def _generate_header(self) -> str:
         """Generate report header with icon and title."""
-        icon_xml = self._get_icon_content('metadata', 'favicon', 'light')
+        icon_xml = self._get_icon_content(self.report_type, 'favicon', 'light')
         title_text = html.escape(getattr(self, 'report_title', 'Metadata Report') or 'Metadata Report')
         return f"""
     <div class="report-header">
@@ -725,14 +724,6 @@ class HtmlReportFormatter(ReportFormatter):
             {banner}
         </div>"""
     
-    def _generate_favicon(self) -> str:
-        """Generate favicon links."""
-        icon_light = self._get_icon_content('metadata', 'favicon', 'light')
-        icon_dark = self._get_icon_content('metadata', 'favicon', 'dark')
-        return f"""
-    <link rel="icon" href="data:image/svg+xml;utf8,{icon_light}" media="(prefers-color-scheme: light)">
-    <link rel="icon" href="data:image/svg+xml;utf8,{icon_dark}" media="(prefers-color-scheme: dark)">"""
-    
     def _get_icon_content(self, icon_name: str, icon_type: str = 'menu', theme: str = 'light') -> str:
         """
         Read an SVG icon file and return its content as a URL-encoded string.
@@ -755,6 +746,14 @@ class HtmlReportFormatter(ReportFormatter):
         except FileNotFoundError:
             logger.warning(f"Icon not found: {icon_file}")
             return ""
+    
+    def _generate_favicon(self) -> str:
+        """Generate favicon links."""
+        icon_light = self._get_icon_content(self.report_type, 'favicon', 'light')
+        icon_dark = self._get_icon_content(self.report_type, 'favicon', 'dark')
+        return f"""
+    <link rel="icon" href="data:image/svg+xml;utf8,{icon_light}" media="(prefers-color-scheme: light)">
+    <link rel="icon" href="data:image/svg+xml;utf8,{icon_dark}" media="(prefers-color-scheme: dark)">"""
     
     def _generate_css(self) -> str:
         """Generate CSS styles using ResourceManager."""

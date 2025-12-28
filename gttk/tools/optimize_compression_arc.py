@@ -194,45 +194,6 @@ def _get_initial_info(input_path: Path) -> Dict[str, Any]:
     except json.JSONDecodeError as e:
         raise ProcessingStepFailedError(f"Failed to parse gdalinfo JSON output: {e}")
 
-def _get_jxl_overview_options(quality: int, effort: int = 7):
-    """
-    Maps an integer quality (1-100) to GDAL JXL creation options.
-   
-    Args:
-        quality_int (int): 1-100 (75-100 recommended for JXL).
-        effort (int): 1-9 (Speed vs Density). 7 is a strong default for JXL.
-       
-    Returns:
-        list: A list of strings for GDAL creation options.
-    """
-    # Build CLI-ready --config pairs (all strings). gdaladdo expects
-    # '--config', KEY, VALUE tuples; keep values stringified to
-    # avoid TypeErrors when joining/printing commands.
-    options: List[str] = []
-
-    # effort is numeric; stringify it for the CLI
-    options.extend(["--config", "JXL_EFFORT", str(effort)])
-
-    if quality == 100:  # Lossless
-        options.extend(["--config", "JXL_LOSSLESS", "YES"])
-        # JXL_DISTANCE is ignored when Lossless is YES
-    else:  # Lossy
-        options.extend(["--config", "JXL_LOSSLESS", "NO"])
-
-        # Calculate Distance using "The Rule of Ten" formula
-        # Q90 -> Dist 1.0 (Visually Lossless)
-        # Q75 -> Dist 2.5 (Standard Web Quality)
-        distance = (100.0 - quality) * 0.1
-
-        # Clamp to safe JXL bounds (minimum quality value is 75 -> max distance 2.5)
-        distance = max(0.01, distance)
-        options.extend(["--config", "JXL_DISTANCE", f"{distance:.2f}"])
-
-        # Explicitly let Alpha follow the main distance
-        options.extend(["--config", "JXL_ALPHA_DISTANCE", "-1"])
-
-    return options
-
 def _get_jxl_options(quality: int, effort: int = 7):
     """
     Maps an integer quality (1-100) to GDAL JXL creation options.
@@ -339,48 +300,130 @@ def _determine_target_nodata_and_remap_status(
     # Valid source NoData, keep it
     return input_info.nodata, False
 
-def _build_nodata_remap_command(
+def _write_nodata_remap_script(
+    script_path: Path,
     input_file: str,
     output_file: str,
     source_nodata: Union[float, str],
     target_nodata: Union[float, str],
     data_type: str
-) -> List[str]:
+):
     """
-    Build gdal_calc.py command to remap NoData values.
-    Mirrors the logic in geotiff_processor.remap_nodata_value() but using gdal_calc.py.
+    Writes a temporary Python script to remap NoData values for all bands.
+    This replaces gdal_calc.py to support multi-band files properly.
+    
+    Args:
+        script_path: Path where the script will be written
+        input_file: Path to the input GeoTIFF file
+        output_file: Path to the output GeoTIFF file
+        source_nodata: Source NoData value to remap from
+        target_nodata: Target NoData value to remap to
+        data_type: GDAL data type string (e.g., 'Float32', 'Int16')
     """
+    # Escape backslashes for the python string
+    input_file_esc = str(input_file).replace('\\', '\\\\')
+    output_file_esc = str(output_file).replace('\\', '\\\\')
+    
+    # Check if this is float data
+    is_float_type = 'Float' in data_type
+    
     # Normalize string "nan" to numpy.nan for comparisons
     source_is_nan = (isinstance(source_nodata, float) and np.isnan(source_nodata))
     target_is_nan = (isinstance(target_nodata, float) and np.isnan(target_nodata)) or (isinstance(target_nodata, str) and target_nodata.lower() == 'nan')
     
-    # Build the numpy.where expression based on source/target types
-    if source_is_nan:
-        calc_expr = f"numpy.where(numpy.isnan(A), {'numpy.nan' if target_is_nan else target_nodata}, A)"
+    # For non-float types, NaN cannot be used
+    if not is_float_type and (source_is_nan or target_is_nan):
+        raise ValueError(f"Cannot use NaN as NoData value for non-float data type: {data_type}")
+    
+    # Build the remap logic
+    if is_float_type:
+        if source_is_nan:
+            remap_expr = "np.where(np.isnan(array), np.nan, array)" if target_is_nan else f"np.where(np.isnan(array), {target_nodata}, array)"
+        else:
+            remap_expr = f"np.where(array == {source_nodata}, np.nan, array)" if target_is_nan else f"np.where(array == {source_nodata}, {target_nodata}, array)"
     else:
-        calc_expr = f"numpy.where(A == {source_nodata}, {'numpy.nan' if target_is_nan else target_nodata}, A)"
+        remap_expr = f"np.where(array == {source_nodata}, {target_nodata}, array)"
     
-    cmd = [
-        "gdal_calc.py",
-        "--calc", calc_expr,
-        "-A", input_file,
-        "--outfile", output_file,
-        "--type", data_type
-    ]
+    # Build target NoData setting code
+    if target_is_nan:
+        set_nodata_code = "dst_band.SetNoDataValue(float('nan'))"
+    else:
+        set_nodata_code = f"dst_band.SetNoDataValue({target_nodata})"
     
-    # Only add --NoDataValue for non-NaN targets (gdal_calc doesn't accept it for NaN)
-    if not target_is_nan:
-        cmd.extend(["--NoDataValue", str(target_nodata)])
+    script_content = f"""
+import sys
+import numpy as np
+from osgeo import gdal
+
+gdal.UseExceptions()
+
+def remap_nodata():
+    input_path = "{input_file_esc}"
+    output_path = "{output_file_esc}"
     
-    return cmd
+    print(f"Opening input dataset: {{input_path}}")
+    src_ds = gdal.Open(input_path, gdal.GA_ReadOnly)
+    if not src_ds:
+        print("Failed to open input dataset")
+        sys.exit(1)
+    
+    # Create output dataset as copy
+    driver = gdal.GetDriverByName('GTiff')
+    dst_ds = driver.CreateCopy(output_path, src_ds, options=['TILED=YES', 'BIGTIFF=YES', 'COMPRESS=LZW'])
+    if not dst_ds:
+        print("Failed to create output dataset")
+        sys.exit(1)
+    
+    band_count = src_ds.RasterCount
+    print(f"Remapping NoData for {{band_count}} band(s)...")
+    
+    for band_idx in range(1, band_count + 1):
+        src_band = src_ds.GetRasterBand(band_idx)
+        dst_band = dst_ds.GetRasterBand(band_idx)
+        
+        print(f"Band {{band_idx}}: Remapping NoData values...")
+        
+        # Read the data
+        array = src_band.ReadAsArray()
+        if array is None:
+            print(f"  Warning: Failed to read band {{band_idx}}")
+            continue
+        
+        # Remap the NoData values
+        remapped_array = {remap_expr}
+        
+        # Write back the remapped data
+        result = dst_band.WriteArray(remapped_array)
+        if result != 0:
+            print(f"  Warning: Failed to write remapped data to band {{band_idx}}")
+            continue
+        
+        # Set the NoData value
+        {set_nodata_code}
+        
+        dst_band.FlushCache()
+        print(f"  Band {{band_idx}}: NoData remapped successfully")
+    
+    # Flush all changes
+    dst_ds.FlushCache()
+    src_ds = None
+    dst_ds = None
+    print("NoData remapping complete.")
+
+if __name__ == "__main__":
+    remap_nodata()
+"""
+    with open(script_path, 'w', encoding='utf-8') as f:
+        f.write(script_content)
 
 def _build_alpha_threshold_command(
     input_file: str,
     thresholded_alpha_file: str,
-    threshold: int = 230
+    threshold: int = 230,
+    alpha_band_index: str = "4"
 ) -> List[str]:
     """
-    Builds a gdal_calc.py command to threshold the alpha band (band 4).
+    Builds a gdal_calc.py command to threshold the alpha band.
     Uses a threshold of 230 (90% opaque) to reduce edge effects.
     Creates a single-band GeoTIFF with the thresholded alpha values.
     """
@@ -388,7 +431,7 @@ def _build_alpha_threshold_command(
         "gdal_calc.py",
         "--calc", f"numpy.where(A>={threshold}, 255, 0)",
         "-A", input_file,
-        "--A_band", "4",
+        "--A_band", alpha_band_index,
         "--outfile", thresholded_alpha_file,
         "--type", "Byte",
         "--NoDataValue", "0"
@@ -397,7 +440,11 @@ def _build_alpha_threshold_command(
 
 def _calculate_overview_levels(x_size: int, y_size: int, tile_size: int = 512) -> List[str]:
     """
-    Calculate optimal overview levels where the highest level has only one tile.
+    Calculate optimal overview levels, stopping when at least one dimension reaches tile_size.
+    
+    Generates overview levels [2, 4, 8, 16, ...] until EITHER width OR height
+    is less than or equal to tile_size. This prevents generating unnecessary
+    overviews for images where one or both dimensions are already small.
     
     Args:
         x_size: Image width in pixels
@@ -405,39 +452,52 @@ def _calculate_overview_levels(x_size: int, y_size: int, tile_size: int = 512) -
         tile_size: Tile/block size (default: 512)
     
     Returns:
-        List of overview levels as strings (e.g., ["2", "4", "8", "16"])
+        List of overview levels as strings (e.g., ["2", "4", "8"])
     
     Example:
-        For a 10240x8192 image with 512 block size:
-        - Level 2: 5120x4096 (10x8 tiles)
-        - Level 4: 2560x2048 (5x4 tiles)
-        - Level 8: 1280x1024 (3x2 tiles)
-        - Level 16: 640x512 (2x1 tiles)
-        - Level 32: 320x256 (1x1 tile) ✓ STOP
+        For a 6000x4000 (width x height) image with 512 tile size:
+        - Level 2: 3000x2000 (both > 512) ✓
+        - Level 4: 1500x1000 (both > 512) ✓
+        - Level 8: 750x500 (height ≤ 512) ✓ STOP
+        Returns: [2, 4, 8]
     """
-    import math
+    levels = []
+    factor = 2
     
-    # Calculate how many levels needed for each dimension to reach <= 1 tile
-    levels_x = math.ceil(math.log2(x_size / tile_size)) if x_size > tile_size else 0
-    levels_y = math.ceil(math.log2(y_size / tile_size)) if y_size > tile_size else 0
+    # Keep generating levels until one dimension reaches tile_size
+    while True:
+        # Calculate dimensions at this overview level
+        overview_width = x_size / factor
+        overview_height = y_size / factor
+        
+        # Add this overview level
+        levels.append(str(factor))
+        
+        # Stop if either dimension is now <= tile_size
+        if overview_width <= tile_size or overview_height <= tile_size:
+            break
+
+        factor *= 2
+        
+        # Safety check to prevent infinite loops
+        if factor > 2**18:  # sufficient for 1m global COG at equator with 256x256 tiles
+            logger.warning(f"Overview calculation stopped at factor {factor}. This is unexpected.")
+            break
     
-    # Use the maximum to ensure both dimensions are <= 1 tile at highest level
-    max_levels = max(levels_x, levels_y)
-    
-    # Generate levels: 2, 4, 8, 16, ..., 2^max_levels
-    # Always include at least level 2 if image is larger than tile_size
-    if max_levels > 0:
-        levels = [str(2 ** i) for i in range(1, max_levels + 1)]
-    else:
-        levels = ["2"]  # Minimum one level for small images
+    # Always include at least one overview level if image is larger than tile_size
+    if not levels and (x_size > tile_size and y_size > tile_size):
+        levels = ["2"]
     
     logger.debug(f"Calculated overview levels for {x_size}x{y_size}: {levels}")
     return levels
 
 def _write_mask_attachment_script(script_path: Path, target_tif: str, mask_tif: str):
     """
-    Writes a temporary Python script to attach a mask to a dataset.
+    Writes a temporary Python script to attach or merge a mask to a dataset.
     This script is intended to be executed by the gdal_runner in the isolated environment.
+    
+    If the target already has an internal mask, this will merge the new mask with the
+    existing one using logical AND (a pixel is valid only if both masks mark it as valid).
     """
     # Escape backslashes for the python string
     target_tif_esc = str(target_tif).replace('\\', '\\\\')
@@ -446,6 +506,7 @@ def _write_mask_attachment_script(script_path: Path, target_tif: str, mask_tif: 
     script_content = f"""
 import sys
 import os
+import numpy as np
 from osgeo import gdal
 
 gdal.UseExceptions()
@@ -466,13 +527,34 @@ def attach_mask():
         print("Failed to open mask dataset")
         sys.exit(1)
         
-    mask_data = mask_ds.GetRasterBand(1).ReadAsArray()
+    new_mask_data = mask_ds.GetRasterBand(1).ReadAsArray()
     
-    print("Creating internal mask band...")
-    ds.CreateMaskBand(gdal.GMF_PER_DATASET)
-    mb = ds.GetRasterBand(1).GetMaskBand()
-    mb.WriteArray(mask_data)
-    mb.FlushCache()
+    # Check if target already has an internal mask
+    band = ds.GetRasterBand(1)
+    mask_flags = band.GetMaskFlags()
+    has_mask = (mask_flags & gdal.GMF_PER_DATASET) != 0
+    
+    if has_mask:
+        print("Existing internal mask detected. Merging masks...")
+        existing_mask = band.GetMaskBand()
+        existing_mask_data = existing_mask.ReadAsArray()
+        
+        # Merge: pixel is valid (255) only if BOTH masks mark it as valid
+        # This is a logical AND operation on the mask values
+        merged_mask_data = np.minimum(existing_mask_data, new_mask_data)
+        
+        # Write merged mask back
+        mb = existing_mask
+        mb.WriteArray(merged_mask_data)
+        mb.FlushCache()
+        print("Masks merged successfully.")
+    else:
+        print("Creating new internal mask band...")
+        ds.CreateMaskBand(gdal.GMF_PER_DATASET)
+        mb = ds.GetRasterBand(1).GetMaskBand()
+        mb.WriteArray(new_mask_data)
+        mb.FlushCache()
+        print("New mask created successfully.")
     
     # Unset NoData
     print("Unsetting NoData values...")
@@ -485,6 +567,93 @@ def attach_mask():
 
 if __name__ == "__main__":
     attach_mask()
+"""
+    with open(script_path, 'w', encoding='utf-8') as f:
+        f.write(script_content)
+
+def _write_round_overviews_script(script_path: Path, target_tif: str, decimals: int):
+    """
+    Writes a temporary Python script to round overview values in-place.
+    This script is intended to be executed by the gdal_runner in the isolated environment.
+    
+    Args:
+        script_path: Path where the script will be written
+        target_tif: Path to the GeoTIFF file containing overviews to round
+        decimals: Number of decimal places to round to
+    """
+    # Escape backslashes for the python string
+    target_tif_esc = str(target_tif).replace('\\', '\\\\')
+    
+    script_content = f"""
+import sys
+import numpy as np
+from osgeo import gdal
+
+gdal.UseExceptions()
+
+def round_overviews():
+    filepath = "{target_tif_esc}"
+    decimals = {decimals}
+    
+    print(f"Opening dataset for overview rounding: {{filepath}}")
+    ds = gdal.Open(filepath, gdal.GA_Update)
+    if not ds:
+        print("Failed to open dataset for overview rounding")
+        sys.exit(1)
+    
+    band_count = ds.RasterCount
+    print(f"Processing {{band_count}} band(s)...")
+    
+    for band_idx in range(1, band_count + 1):
+        band = ds.GetRasterBand(band_idx)
+        overview_count = band.GetOverviewCount()
+        
+        if overview_count == 0:
+            print(f"Band {{band_idx}}: No overviews found")
+            continue
+        
+        print(f"Band {{band_idx}}: Rounding {{overview_count}} overview(s) to {{decimals}} decimal places...")
+        
+        for ovr_idx in range(overview_count):
+            overview_band = band.GetOverview(ovr_idx)
+            
+            # Read the overview data
+            array = overview_band.ReadAsArray()
+            
+            if array is None:
+                print(f"  Warning: Failed to read overview {{ovr_idx}}")
+                continue
+            
+            # Round the data
+            rounded_array = np.round(array, decimals)
+            
+            # Write back the rounded data
+            result = overview_band.WriteArray(rounded_array)
+            if result != 0:
+                print(f"  Warning: Failed to write rounded data to overview {{ovr_idx}}")
+                continue
+            
+            overview_band.FlushCache()
+            print(f"  Overview {{ovr_idx}} ({{overview_band.XSize}}x{{overview_band.YSize}}): Rounded successfully")
+    
+    # Flush all changes
+    ds.FlushCache()
+    filepath_str = filepath
+    ds = None  # Close the dataset
+    
+    # Reopen to ensure changes are visible
+    print("Reopening dataset to verify changes...")
+    ds = gdal.Open(filepath_str, gdal.GA_ReadOnly)
+    if ds:
+        print(f"Dataset reopened successfully with {{ds.RasterCount}} band(s)")
+        ds = None
+    else:
+        print("Warning: Could not reopen dataset for verification")
+    
+    print("Overview rounding complete.")
+
+if __name__ == "__main__":
+    round_overviews()
 """
     with open(script_path, 'w', encoding='utf-8') as f:
         f.write(script_content)
@@ -550,6 +719,72 @@ if __name__ == "__main__":
         f.write(script_content)
 
     
+def _write_round_data_script(script_path: Path, target_tif: str, decimals: int):
+    """
+    Writes a temporary Python script to round raster values in-place.
+    This replaces gdal_calc.py for the main data rounding to support multi-band files easily.
+    
+    Args:
+        script_path: Path where the script will be written
+        target_tif: Path to the GeoTIFF file to round
+        decimals: Number of decimal places to round to
+    """
+    # Escape backslashes for the python string
+    target_tif_esc = str(target_tif).replace('\\', '\\\\')
+    
+    script_content = f"""
+import sys
+import numpy as np
+from osgeo import gdal
+
+gdal.UseExceptions()
+
+def round_dataset():
+    filepath = "{target_tif_esc}"
+    decimals = {decimals}
+    
+    print(f"Opening dataset for rounding: {{filepath}}")
+    ds = gdal.Open(filepath, gdal.GA_Update)
+    if not ds:
+        print("Failed to open dataset for rounding")
+        sys.exit(1)
+    
+    band_count = ds.RasterCount
+    print(f"Processing {{band_count}} band(s)...")
+    
+    for band_idx in range(1, band_count + 1):
+        band = ds.GetRasterBand(band_idx)
+        print(f"Band {{band_idx}}: Rounding to {{decimals}} decimal places...")
+        
+        # Read the data
+        array = band.ReadAsArray()
+        if array is None:
+            print(f"  Warning: Failed to read band {{band_idx}}")
+            continue
+        
+        # Round the data
+        rounded_array = np.round(array, decimals)
+        
+        # Write back the rounded data
+        result = band.WriteArray(rounded_array)
+        if result != 0:
+            print(f"  Warning: Failed to write rounded data to band {{band_idx}}")
+            continue
+        
+        band.FlushCache()
+        print(f"  Band {{band_idx}}: Rounded successfully")
+    
+    # Flush all changes
+    ds.FlushCache()
+    ds = None
+    print("Dataset rounding complete.")
+
+if __name__ == "__main__":
+    round_dataset()
+"""
+    with open(script_path, 'w', encoding='utf-8') as f:
+        f.write(script_content)
+
 def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional[PerformanceTracker] = None):
     """Builds and executes a sequence of GDAL commands."""
     
@@ -622,52 +857,25 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
             assert target_nodata is not None, "target_nodata should not be None when remapping is needed"
             
             remapped_file = tfm.get_temp_path("nodata_remapped.tif")
-            remap_cmd = _build_nodata_remap_command(
-                input_file=str(current_input),
-                output_file=str(remapped_file),
-                source_nodata=input_info.nodata,
-                target_nodata=target_nodata,
-                data_type=input_info.data_type or "Float32"
+            
+            # Use Python script for multi-band NoData remapping
+            logger.info(f"Step 1: Remapping NoData from {input_info.nodata} to {target_nodata}")
+            remap_script_path = tfm.get_temp_path("remap_nodata.py")
+            _write_nodata_remap_script(
+                remap_script_path,
+                str(current_input),
+                str(remapped_file),
+                input_info.nodata,
+                target_nodata,
+                input_info.data_type or "Float32"
             )
-            commands.append({"command": remap_cmd})
+            commands.append({"command": ["python", str(remap_script_path)]})
             current_input = remapped_file
-            logger.info(f"Step 1: Remapped NoData from {input_info.nodata} to {target_nodata}")
             
             if tracker:
                 tracker.stop("nodata_remap")
 
-        # --- Step 2 (Optional): Rounding ---
-        needs_rounding = args.decimals is not None and input_info.data_type and 'Float' in input_info.data_type
-        if needs_rounding:
-            if tracker:
-                tracker.start("rounding")
-            rounded_file = tfm.get_temp_path("rounded.tif")
-            calc_expr = f"round(A, {args.decimals})"
-            cmd = [
-                "gdal_calc.py",
-                "--calc", calc_expr,
-                "-A", str(current_input),
-                "--outfile", str(rounded_file),
-                "--overwrite"
-            ]
-            
-            # Add output data type to match input
-            if input_info.data_type:
-                cmd.extend(["--type", input_info.data_type])
-            
-            # Preserve NoData value during rounding
-            if target_nodata is not None:
-                # Handle NaN specially - gdal_calc doesn't accept --NoDataValue for NaN
-                if not (isinstance(target_nodata, float) and np.isnan(target_nodata)):
-                    cmd.extend(["--NoDataValue", str(target_nodata)])
-            
-            commands.append({"command": cmd})
-            current_input = rounded_file
-            logger.info(f"Step 2: Rounding command created. Output: {current_input}")
-            if tracker:
-                tracker.stop("rounding")
-
-        # --- Step 3: Packed Preprocessing Translate ---
+        # --- Step 2: Packed Preprocessing Translate ---
         if tracker:
             tracker.start("intermediate_processing")
         
@@ -676,7 +884,7 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
                           "--config", "OSR_WKT_FORMAT", "WKT2_2019",
                           "--config", "GTIFF_WRITE_SRS_WKT2", "YES",
                           "--config", "GTIFF_SRS_SOURCE", "WKT",
-                          "-of", "GTiff", "-co", "TILED=YES"]
+                          "-of", "GTiff", "-co", "TILED=YES", "-co", "BIGTIFF=YES"]
 
         # Add metadata
         source_metadata = info.get('metadata', {}).get('', {})
@@ -719,11 +927,18 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
                     if i != alpha_band_index:
                         preprocess_cmd.extend(["-b", str(i)])
                 # Also preserve color interpretation if needed (though mostly redundant if copying all other bands)
+        else:
+             # Explicitly include all bands to avoid single-band default in some cases?
+             # No, default behavior of gdal_translate is to copy all bands.
+             # However, if user reports only 1 band output, we should be explicit.
+             for i in range(1, len(source_bands) + 1):
+                 preprocess_cmd.extend(["-b", str(i)])
 
         if target_nodata is not None:
             # If masking is enabled, the NoData value will be unset later.
             # BUT, we need to preserve it during this step so the mask generation works correctly if it depends on it.
-            if isinstance(target_nodata, float) and np.isnan(target_nodata):
+            # Only use "nan" for float data types
+            if isinstance(target_nodata, float) and np.isnan(target_nodata) and input_info.data_type and 'Float' in input_info.data_type:
                 preprocess_cmd.extend(["-a_nodata", "nan"])
             else:
                 preprocess_cmd.extend(["-a_nodata", str(target_nodata)])
@@ -737,7 +952,23 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
         current_input = preprocessed_file
         logger.info(f"Step 3: Packed preprocessing command created. Output: {current_input}")
         
-        # --- Step 3b: Handle Masking (Alpha to Mask OR NoData Masking) ---
+        # --- Step 3: Rounding (Applied to preprocessed file if needed) ---
+        # Moving rounding here ensures we respect the bands we decided to keep in Step 3
+        # and avoids gdal_calc single-band issue.
+        needs_rounding = args.decimals is not None and input_info.data_type and 'Float' in input_info.data_type
+        if needs_rounding:
+            if tracker:
+                tracker.start("rounding")
+            
+            logger.info(f"Step 3a: Rounding data to {args.decimals} decimal places...")
+            round_data_script_path = tfm.get_temp_path("round_data.py")
+            _write_round_data_script(round_data_script_path, str(current_input), args.decimals or 0)
+            commands.append({"command": ["python", str(round_data_script_path)]})
+            
+            if tracker:
+                tracker.stop("rounding")
+
+        # --- Step 4: Handle Masking (Alpha to Mask OR NoData Masking) ---
         # The 'preprocessed.tif' has data bands.
         # A mask file may need to be created and attached to it.
         
@@ -756,9 +987,19 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
             # But 'current_input' was just updated to 'preprocessed.tif' which DOES NOT have the alpha band!
             input_for_mask = preprocess_cmd[-2]
             
+            # Dynamically determine alpha band index for the CLI call
+            # We need the index of the alpha band in 'input_for_mask'
+            # Note: input_for_mask corresponds to 'current_input' BEFORE the update above, 
+            # so it has all original bands.
+            
+            alpha_idx_arg = "4" # Default fallback for most RGBA files
+            if alpha_band_index:
+                alpha_idx_arg = str(alpha_band_index)
+            
             alpha_threshold_cmd = _build_alpha_threshold_command(
                 input_file=input_for_mask,
-                thresholded_alpha_file=str(thresholded_alpha_file)
+                thresholded_alpha_file=str(thresholded_alpha_file),
+                alpha_band_index=alpha_idx_arg
             )
             commands.append({"command": alpha_threshold_cmd})
             mask_source_file = thresholded_alpha_file
@@ -776,7 +1017,8 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
             
             # Use preprocessed file (current_input) which has the correct NoData set
             # Create mask: 0 where NoData, 255 where valid
-            if isinstance(target_nodata, float) and np.isnan(target_nodata):
+            # Only use isnan for float data types, not for integers
+            if isinstance(target_nodata, float) and np.isnan(target_nodata) and input_info.data_type and 'Float' in input_info.data_type:
                 mask_calc_expr = "numpy.where(numpy.isnan(A), 0, 255)"
             else:
                 mask_calc_expr = f"numpy.where(A == {target_nodata}, 0, 255)"
@@ -814,58 +1056,80 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
         if tracker:
             tracker.stop("intermediate_processing")
 
-        # --- Step 4: Build Internal Overviews on Preprocessed File ---
-        if args.overviews and not args.cog:
+        # --- Step 5: Build and Round Internal Overviews (ONLY IF NEEDED) ---
+        # Determine if file has an internal mask (either newly created or from source)
+        has_internal_mask = (mask_source_file is not None)
+        
+        # Check if input file had a mask that gdal_translate preserved
+        for band in info.get('bands', []):
+            mask_info = band.get('mask', {})
+            flags = mask_info.get('flags', [])
+            if 'PER_DATASET' in flags:
+                has_internal_mask = True
+                logger.info("Detected existing internal mask from input file")
+                break
+        
+        # Determine overview strategy
+        # Rounding workflow requires: float data, lossless compression, and no internal mask
+        # Internal masks conflict with external overview creation and overview rounding
+        should_round_overviews = (
+            args.overviews and
+            args.decimals is not None and
+            args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and
+            args.product_type in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value] and
+            'Float' in str(input_info.data_type) and
+            not has_internal_mask
+        )
+        
+        # Log the decision
+        if args.overviews:
+            if should_round_overviews:
+                logger.info("Overview strategy: ROUNDING workflow (float data, lossless compression, no mask)")
+            elif has_internal_mask:
+                logger.info("Overview strategy: STANDARD workflow (internal mask detected)")
+            else:
+                logger.info("Overview strategy: STANDARD workflow (rounding conditions not met)")
+        # Build and round internal overviews if rounding workflow is active
+        if should_round_overviews:
             if tracker:
                 tracker.start("overview_creation")
             
-            resample_alg = 'NEAREST' if args.product_type in [PT.IMAGE.value, PT.THEMATIC.value] else 'BILINEAR'
+            # Type guard: should_round_overviews is True means args.decimals is not None
+            assert args.decimals is not None, "args.decimals must be set when should_round_overviews is True"
             
-            # Build internal overviews using gdaladdo with -ro flag
-            overview_cmd = [
+            logger.info("Building internal overviews on preprocessed file for rounding (float data, no mask).")
+            resample_alg = 'NEAREST' if args.product_type in [PT.IMAGE.value, PT.THEMATIC.value] else 'BILINEAR'
+            overview_list = _calculate_overview_levels(input_info.x_size, input_info.y_size, tile_size=args.tile_size)
+            logger.info(f"Using overview levels: {', '.join(overview_list)}")
+            
+            # Build uncompressed internal overviews on preprocessed file
+            build_overviews_cmd = [
                 "gdaladdo",
                 "-r", resample_alg,
-                "-ro",  # Read-only mode - creates INTERNAL overviews
+                "-ro",  # Internal overviews
                 "--config", "OSR_WKT_FORMAT", "WKT2_2019",
                 "--config", "GTIFF_WRITE_SRS_WKT2", "YES",
                 "--config", "GTIFF_SRS_SOURCE", "WKT",
-                "--config", "COMPRESS_OVERVIEW", args.algorithm,
+                "--config", "COMPRESS_OVERVIEW", "NONE",  # Uncompressed for rounding
                 "--config", "TILED", "YES",
                 "--config", "BLOCKXSIZE", str(args.tile_size),
                 "--config", "BLOCKYSIZE", str(args.tile_size),
+                str(current_input)
             ]
+            build_overviews_cmd.extend(overview_list)
+            commands.append({"command": build_overviews_cmd})
             
-            # Add algorithm-specific config options
-            if args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and args.predictor:
-                overview_cmd.extend(["--config", "PREDICTOR_OVERVIEW", str(args.predictor)])
-            
-            if args.algorithm == CA.JPEG.value:
-                overview_cmd.extend(["--config", "JPEG_QUALITY_OVERVIEW", str(args.quality)])
-                overview_cmd.extend(["--config", "PHOTOMETRIC_OVERVIEW", "YCBCR"])
-            
-            if args.algorithm == CA.JXL.value and args.quality is not None:
-                jxl_options = _get_jxl_overview_options(args.quality)
-                overview_cmd.extend(jxl_options)
-            
-            if args.algorithm == CA.LERC.value:
-                overview_cmd.extend(["--config", "MAX_Z_ERROR_OVERVIEW", str(args.max_z_error)])
-            
-            # Add filename BEFORE overview levels (gdaladdo syntax requires this)
-            overview_cmd.append(str(preprocessed_file))
-            
-            # Add dynamically calculated overview levels AFTER filename
-            overview_levels = _calculate_overview_levels(input_info.x_size, input_info.y_size, tile_size=args.tile_size)
-            overview_cmd.extend(overview_levels)
-            
-            logger.info(f"Using overview levels: {', '.join(overview_levels)}")
-            
-            commands.append({"command": overview_cmd})
-            logger.info(f"Step 4: Building internal overviews on preprocessed file {preprocessed_file}")
+            # Round the overviews
+            logger.info(f"Rounding overviews to {args.decimals} decimal places...")
+            round_overviews_script_path = tfm.get_temp_path("round_overviews.py")
+            _write_round_overviews_script(round_overviews_script_path, str(current_input), args.decimals)
+            commands.append({"command": ["python", str(round_overviews_script_path)]})
             
             if tracker:
                 tracker.stop("overview_creation")
 
-        # --- Step 5: Final Compression (with COPY_SRC_OVERVIEWS) ---
+
+        # --- Step 6: Final Compression (with COPY_SRC_OVERVIEWS) ---
         if tracker:
             tracker.start("final_translate")
             
@@ -884,25 +1148,37 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
             "NUM_THREADS=ALL_CPUS",
             f"COMPRESS={args.algorithm}"
         ]
+        
         if args.cog:
-            creation_options.extend(
-                [
-                    f'BLOCKSIZE={args.tile_size}',
-                    'OVERVIEWS=IGNORE_EXISTING' if args.overviews else 'OVERVIEWS=NONE'
-                ]
-            )
+            creation_options.extend([
+                f'BLOCKSIZE={args.tile_size}',
+            ])
+            
             if args.overviews:
-                resampling = 'NEAREST' if args.product_type in [PT.IMAGE.value, PT.THEMATIC.value] else 'BILINEAR'
-                creation_options.append(f'OVERVIEW_RESAMPLING={resampling}')
+                if should_round_overviews:
+                    # Use existing overviews (built on intermediate and rounded)
+                    creation_options.append('OVERVIEWS=FORCE_USE_EXISTING')
+                else:
+                    # Let COG driver build overviews (standard workflow)
+                    creation_options.append('OVERVIEWS=AUTO')
+            else:
+                creation_options.append('OVERVIEWS=NONE')
         else:
-            creation_options.extend(
-                [
-                    "TILED=YES",
-                    f"BLOCKXSIZE={args.tile_size}",
-                    f"BLOCKYSIZE={args.tile_size}",
-                    "COPY_SRC_OVERVIEWS=YES" if args.overviews else "COPY_SRC_OVERVIEWS=NO"
-                ]
-            )
+            creation_options.extend([
+                "TILED=YES",
+                f"BLOCKXSIZE={args.tile_size}",
+                f"BLOCKYSIZE={args.tile_size}",
+            ])
+            
+            if args.overviews:
+                if should_round_overviews:
+                    # Copy existing overviews from intermediate
+                    creation_options.append("COPY_SRC_OVERVIEWS=YES")
+                else:
+                    # Don't copy - will build external overviews after
+                    creation_options.append("COPY_SRC_OVERVIEWS=NO")
+            else:
+                creation_options.append("COPY_SRC_OVERVIEWS=NO")
 
         if args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and args.predictor:
             creation_options.append(f"PREDICTOR={args.predictor}")
@@ -998,6 +1274,48 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
         if tracker:
             tracker.stop("final_translate")
 
+        # --- Step 7: Build external overviews for GTiff if using standard workflow ---
+        # If an internal mask is present, use internal overviews (-ro) to avoid GDAL warnings
+        # about unsupported external overviews with internal masks
+        
+        if not args.cog and args.overviews and not should_round_overviews:
+            if tracker:
+                tracker.start("external_overviews")
+            
+            logger.info("Step 6: Building overviews on final GTiff file (standard workflow)...")
+            resample_alg = 'NEAREST' if args.product_type in [PT.IMAGE.value, PT.THEMATIC.value] else 'BILINEAR'
+            overview_levels = _calculate_overview_levels(input_info.x_size, input_info.y_size, tile_size=args.tile_size)
+            
+            external_overview_cmd = [
+                "gdaladdo",
+                "-r", resample_alg,
+                "--config", "OSR_WKT_FORMAT", "WKT2_2019",
+                "--config", "GTIFF_WRITE_SRS_WKT2", "YES",
+                "--config", "GTIFF_SRS_SOURCE", "WKT",
+                "--config", "COMPRESS_OVERVIEW", args.algorithm,
+                "--config", "TILED", "YES",
+                "--config", "BLOCKXSIZE", str(args.tile_size),
+                "--config", "BLOCKYSIZE", str(args.tile_size),
+            ]
+            
+            # If internal mask is present, force internal overviews to avoid warning/issues with external ovr + internal mask
+            if has_internal_mask:
+                 logger.info("Internal mask detected. Forcing internal overviews to avoid GDAL conflicts.")
+                 external_overview_cmd.append("-ro")
+            
+            # Add predictor if applicable
+            if args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and args.predictor:
+                external_overview_cmd.extend(["--config", "PREDICTOR_OVERVIEW", str(args.predictor)])
+            
+            external_overview_cmd.append(str(args.output_path))
+            external_overview_cmd.extend(overview_levels)
+            
+            commands.append({"command": external_overview_cmd})
+            logger.info(f"Overviews will be built with {args.algorithm} compression and levels: {', '.join(overview_levels)}")
+            
+            if tracker:
+                tracker.stop("external_overviews")
+
         # Print all commands staged in order
         logger.info(f"\nGDAL commands staged. Total commands: {len(commands)}")
         logger.info("---------------------------------------\n")
@@ -1086,7 +1404,7 @@ def optimize_compression(args: OptimizeArguments, tracker: Optional[PerformanceT
             
             # Use shared report generation function passing PATHS instead of open datasets
             # to avoid file locking issues affecting tifffile/metadata extraction
-            generate_report_for_datasets(
+            report_path = generate_report_for_datasets(
                 str(args.input_path),
                 str(args.output_path),
                 args,
@@ -1097,6 +1415,7 @@ def optimize_compression(args: OptimizeArguments, tracker: Optional[PerformanceT
             
             if tracker:
                 tracker.stop("report_generation")
+            
         except RuntimeError as e:
             # This is the exception from run_gdal_commands with detailed stderr
             logger.error(f"A GDAL execution error occurred:\n{e}")

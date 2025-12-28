@@ -240,17 +240,25 @@ class GeoKeyParser:
 
         try:
             self.gdal_ds = gdal.Open(str(self.filename))
-            if not self.gdal_ds or not self.gdal_ds.GetSpatialRef():
-                raise ValueError(
-                    f"No spatial reference found in '{self.filename}'.\n"
-                    f"This file does not appear to contain GeoTIFF georeferencing information."
-                )
+            if not self.gdal_ds:
+                raise ValueError(f"Could not open '{self.filename}' with GDAL.")
+            
+            # Check for GeoKey tags - this is the definitive test for a GeoTIFF
+            # We don't require GetSpatialRef() to succeed, as it may fail for
+            # files with custom vertical datums or complex compound CRS definitions
+            if self.tif.series:
+                first_page = self.tif.series[0].keyframe
+                if not (hasattr(first_page, 'tags') and 34735 in first_page.tags):
+                    raise ValueError(
+                        f"No GeoKey directory found in '{self.filename}'.\n"
+                        f"This file does not appear to contain GeoTIFF georeferencing information."
+                    )
         except Exception as e:
             if not self._tiff_file_external:
                 self.tif.close()
             self.gdal_ds = None
             raise RuntimeError(
-                f"Failed to open '{self.filename}' with GDAL or extract spatial reference.\n"
+                f"Failed to open '{self.filename}' or verify GeoTIFF tags.\n"
                 f"Ensure the file is a valid GeoTIFF with georeferencing information.\n"
                 f"Details: {e}"
             )
@@ -478,50 +486,78 @@ def is_geotiff(filepath: Path) -> bool:
     
     A file is considered a GeoTIFF if:
         1. It can be opened by GDAL's GTiff or COG driver
-        2. It contains a valid spatial reference system (SRS)
+        2. It contains GeoKey tags (34735) OR a valid spatial reference system (SRS)
+    
+    The check accepts files with GeoKey tags even if GetSpatialRef() fails
+    to parse them completely, as this can happen with custom vertical datums
+    or compound CRS definitions that require special metadata processing.
     
     Args:
         filepath: Path to the file to check
         
     Returns:
-        True if the file is a valid GeoTIFF with SRS, False otherwise
+        True if the file is a valid GeoTIFF with georeferencing, False otherwise
         
     Example:
         >>> is_geotiff(Path('data.tif'))
+        True
+        >>> is_geotiff(Path('dem_with_custom_vertical.tif'))  # Has GeoKeys but complex SRS
         True
         >>> is_geotiff(Path('regular.tif'))  # No georeferencing
         False
         >>> is_geotiff(Path('image.jpg'))
         False
     """
+    logger = logging.getLogger('read_metadata')
+    
     if not os.path.exists(filepath):
+        logger.debug(f"is_geotiff: File does not exist: {filepath}")
         return False
 
     try:
         # Suppress GDAL errors for invalid files
         gdal.PushErrorHandler('CPLQuietErrorHandler')
-        ds = gdal.Open(filepath)
+        ds = gdal.Open(str(filepath))
         gdal.PopErrorHandler()
 
         if ds is None:
+            logger.debug(f"is_geotiff: GDAL could not open file: {filepath}")
             return False
 
         # 1. Check if the driver is for the TIFF format
         driver_name = ds.GetDriver().ShortName
         if driver_name not in ['GTiff', 'COG']:
+            logger.debug(f"is_geotiff: Not a TIFF file (driver: {driver_name}): {filepath}")
             ds = None
             return False
 
-        # 2. Check for a SRS (the definitive test)
+        # 2. Check for GeoKey tags (34735 - GeoKeyDirectoryTag)
+        # This is more reliable than GetSpatialRef() for files with custom vertical datums
+        try:
+            import tifffile
+            with tifffile.TiffFile(str(filepath)) as tif:
+                if tif.series:
+                    first_page = tif.series[0].keyframe
+                    if hasattr(first_page, 'tags') and 34735 in first_page.tags:
+                        logger.debug(f"is_geotiff: File has GeoKey tags: {filepath}")
+                        ds = None
+                        return True
+        except Exception as e:
+            logger.debug(f"is_geotiff: Could not check for GeoKey tags: {e}")
+
+        # 3. Fallback: Check for a SRS via GDAL (for files without GeoKeys but with other georeferencing)
         srs = ds.GetSpatialRef()
         if srs is not None and srs.ExportToWkt() != '':
+            logger.debug(f"is_geotiff: File has valid SRS: {filepath}")
             ds = None
             return True
 
+        logger.debug(f"is_geotiff: No georeferencing found: {filepath}")
         ds = None
         return False
 
-    except Exception:
+    except Exception as e:
+        logger.debug(f"is_geotiff: Exception during check: {e}")
         # Ensure the dataset is closed if an error occurs after opening
         ds = None
         return False

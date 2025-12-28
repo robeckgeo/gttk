@@ -5,122 +5,108 @@
 		<CreaTime>22024600</CreaTime>
 		<ArcGISFormat>1.0</ArcGISFormat>
 		<SyncOnce>TRUE</SyncOnce>
+		<ModDate>20251226</ModDate>
+		<ModTime>192356</ModTime>
 	</Esri>
 	<tool name="ReadMetadata" displayname="Read Metadata" toolboxalias="gttk">
-		<summary>Reads the metadata in a GeoTIFF header and generates a comprehensive metadata report in HTML or Markdown format.</summary>
+		<summary>Extracts and displays comprehensive metadata from GeoTIFF files with detailed HTML or Markdown reports.</summary>
 		<usage>
-			<bullet_item>The tool generates a detailed analysis of TIFF tags, GeoTIFF keys, projection information, and COG validation.</bullet_item>
+			<bullet_item>Generates detailed analysis of TIFF tags, GeoTIFF keys, projection information, and COG validation.</bullet_item>
 			<bullet_item>HTML format provides syntax highlighting and is best for viewing in web browsers.</bullet_item>
-			<bullet_item>Markdown format is plain text and suitable for documentation systems.</bullet_item>
-			<bullet_item>The output file is automatically named based on the input file with the specified suffix and format extension.</bullet_item>
+			<bullet_item>Markdown format is plain text and useful for side-by-side comparisons for quality assurance.</bullet_item>
+			<bullet_item>Choose between Analyst (compact), Producer (complete), or Custom section selection presets.</bullet_item>
 		</usage>
 		<parameters>
-			<param sync="true" name="input_geotiff" displayname="Input GeoTIFF or Raster Layer" datatype="Raster Layer" direction="Input" expression="input_geotiff" type="Required">
-				<dialogReference>
-					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The GeoTIFF file or raster layer to analyze. You can select a layer from the map or browse to a file on disk.</SPAN></P></DIV></DIV>
-				</dialogReference>
+			<param name="input_geotiff" displayname="Input GeoTIFF or Raster Layer" type="Required" direction="Input" datatype="Raster Layer; Raster Dataset; File" expression="input_geotiff">
+				<dialogReference>The GeoTIFF file or raster layer to analyze. You can select a layer from the map or browse to a file on disk.</dialogReference>
 			</param>
-			<param sync="true" name="output_format" displayname="Output Format" datatype="String" direction="Input" expression="output_format" type="Required">
-				<dialogReference>
-					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>Choose the output format for the metadata report. HTML provides syntax highlighting and is best for viewing, while Markdown is plain text suitable for documentation.</SPAN></P></DIV></DIV>
-				</dialogReference>
+			<param name="output_format" displayname="Output Format" type="Required" direction="Input" datatype="String" expression="output_format">
+				<dialogReference>Choose the output format for the metadata report. HTML provides syntax highlighting and is best for viewing, while Markdown is plain text suitable for documentation and version control.</dialogReference>
 			</param>
-			<param sync="true" name="output_suffix" displayname="Output Filename Suffix" datatype="String" direction="Input" expression="output_suffix" type="Optional">
-				<dialogReference>
-					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>A suffix to append to the output filename before the file extension. Default is '_header'.</SPAN></P></DIV></DIV>
-				</dialogReference>
+			<param name="output_suffix" displayname="Output Filename Suffix" type="Optional" direction="Input" datatype="String" expression="{output_suffix}">
+				<dialogReference>A suffix to append to the output filename before the file extension. Default is '_meta' for metadata reports.</dialogReference>
 			</param>
-			<param sync="true" name="output_file" displayname="Output Report File" datatype="File" direction="Output" expression="output_file" type="Derived">
-				<dialogReference>
-					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>The generated metadata report file. This path is automatically determined based on the input file, format, and suffix selections.</SPAN></P></DIV></DIV>
-				</dialogReference>
+			<param name="output_file" displayname="Output Report File" type="Derived" direction="Output" datatype="File" expression="output_file">
+				<dialogReference>The generated metadata report file. This path is automatically determined based on the input file, format, and suffix selections.</dialogReference>
 			</param>
-			<param sync="true" name="open_report" displayname="Open Report on Completion" datatype="Boolean" direction="Input" expression="open_report" type="Optional">
-				<dialogReference>
-					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>When checked, the generated report file will be automatically opened using the system's default application (e.g., a web browser for HTML files).</SPAN></P></DIV></DIV>
-				</dialogReference>
+			<param name="open_report" displayname="Open Report on Completion" type="Optional" direction="Input" datatype="Boolean" expression="{open_report}">
+				<dialogReference>When checked, the generated report file will be automatically opened using the system's default application (e.g., a web browser for HTML files).</dialogReference>
 			</param>
-			<param sync="true" name="write_pam_xml" displayname="Write Statistics XML (.aux.xml)" datatype="Boolean" direction="Input" expression="write_pam_xml" type="Optional">
-				<dialogReference>
-					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>If checked, an Esri-compatible .aux.xml file containing band statistics and histograms will be created. This allows ArcGIS Pro to skip the 'Calculate Statistics' step when loading the raster.</SPAN></P></DIV></DIV>
-				</dialogReference>
+			<param name="write_pam_xml" displayname="Write Statistics XML (.aux.xml)" type="Optional" direction="Input" datatype="Boolean" expression="{write_pam_xml}">
+				<dialogReference>If checked, an Esri-compatible Persistent Auxiliary Metadata (PAM) .aux.xml file containing band statistics and histograms will be created. This allows ArcGIS Pro to skip the 'Calculate Statistics' step when loading the raster. PAM is a standard format used by GDAL and ArcGIS to store raster statistics and histograms and is read by other GIS software.</dialogReference>
 			</param>
-			<param name="page" displayname="Image File Directory (IFD)" type="Optional">
-				<dialogReference>
-					<DIV STYLE="text-align:Left;"><P><SPAN>The Image File Directory (IFD) number to read. Defaults to 0 (the main image). Overviews and other supplemental images are stored in subsequent IFDs. For example, a GeoTIFF with three overviews will have IFDs 0 through 4, where IFD 0 is the main image and IFDs 1-4 are the overviews.</SPAN></P></DIV>
-				</dialogReference>
+			<param name="page" displayname="Image File Directory (IFD)" type="Optional" direction="Input" datatype="Long" expression="{page}">
+				<dialogReference>The Image File Directory (IFD) number to read. Defaults to 0 (the main image). Overviews and other supplemental images are stored in subsequent IFDs. For example, a GeoTIFF with three overviews and no transparency mask will have IFDs 0-4, where IFD 0 is the main image and IFDs 1-4 are the overviews. If present, the internal transparency mask of the main image is IFD 1.</dialogReference>
 			</param>
-			<param name="banner" displayname="Banner Text" type="Optional">
-				<dialogReference>
-					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>Custom text to display at the top of the report. Useful for classification markings (e.g., CUI, INTERNAL USE ONLY) or project identifiers.</SPAN></P></DIV></DIV>
-				</dialogReference>
+			<param name="banner" displayname="Banner Text" type="Optional" direction="Input" datatype="String" expression="{banner}">
+				<dialogReference>Custom text to display at the top and bottom of the report. Useful for classification markings (e.g., UNCLASSIFIED, Public Domain), source citations or project identifiers.</dialogReference>
 			</param>
-			<param name="reader_type" displayname="Reader Type" type="Optional">
-				<dialogReference>
-					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>Predefined configuration for report content:</SPAN></P>
-							<P><SPAN STYLE="font-weight:bold;">• Analyst (Default):</SPAN><SPAN> Focuses on actionable data for geospatial analysis. Includes standard tags, statistics, and compact tables.</SPAN></P>
-							<P><SPAN STYLE="font-weight:bold;">• Producer:</SPAN><SPAN> Focuses on data production details. Includes all tags (complete scope) and raw text formats.</SPAN></P>
-							<P><SPAN STYLE="font-weight:bold;">• Custom:</SPAN><SPAN> Allows manual selection of specific report sections below.</SPAN></P></DIV></DIV>
-				</dialogReference>
+			<param name="reader_type" displayname="Reader Type" type="Optional" direction="Input" datatype="String" expression="{reader_type}">
+				<dialogReference>Predefined configuration for report content. 'Analyst' focuses on actionable data with compact tables and standard tags. 'Producer' focuses on production details with complete tag scope and raw text formats. 'Custom' allows manual selection of specific report sections.</dialogReference>
 			</param>
-			<param name="tag_scope" displayname="Tag Scope" type="Optional">
-				<dialogReference>
-					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>Controls the verbosity of the TIFF Tag section:</SPAN></P>
-							<P><SPAN STYLE="font-weight:bold;">• Compact:</SPAN><SPAN> Shows only common and critical tags. Hides obscure or empty tags.</SPAN></P>
-							<P><SPAN STYLE="font-weight:bold;">• Complete:</SPAN><SPAN> Lists every single TIFF tag found in the header, including unknown or private tags.</SPAN></P></DIV></DIV>
-				</dialogReference>
+			<param name="tag_scope" displayname="Tag Scope" type="Optional" direction="Input" datatype="String" expression="{tag_scope}">
+				<dialogReference>Controls the verbosity of the TIFF Tag section. 'Compact' shows only the most useful tags. 'Complete' lists every single TIFF tag found in the header, including structural metadata (e.g. StripOffsets, TileByteCounts) or content better reported in other sections (e.g. GeoKeyDirectoryTag, ModelTiePointTag). This is redundant but allows data producers to confirm that the header is correctly formatted.</dialogReference>
 			</param>
-			<param name="xml_type" displayname="XML Format" type="Optional">
-				<dialogReference>
-					<DIV STYLE="text-align:Left;"><DIV><P><SPAN>How XML metadata (GDAL_METADATA, GEO_METADATA, PAM, XMP, and external XML files) is presented in the report:</SPAN></P>
-							<P><SPAN STYLE="font-weight:bold;">• Table:</SPAN><SPAN> Formats XML attributes into a readable table key-value pairs.</SPAN></P>
-							<P><SPAN STYLE="font-weight:bold;">• Text:</SPAN><SPAN> Displays the raw XML string, useful for copy-pasting or debugging syntax errors.</SPAN></P></DIV></DIV>
-				</dialogReference>
+			<param name="xml_type" displayname="XML Format" type="Optional" direction="Input" datatype="String" expression="{xml_type}">
+				<dialogReference>How XML metadata (GDAL_METADATA, GEO_METADATA, PAM, XMP, and external XML files) is presented in the report. 'Table' formats XML attributes into readable key-value pairs, one per row. 'Text' displays the raw XML string with syntax highlighting, useful for copy-pasting or debugging.</dialogReference>
+			</param>
+			<param name="section_tags" displayname="TIFF Tags" type="Optional" direction="Input" datatype="Boolean" expression="{section_tags}">
+				<dialogReference>Detailed listing of all TIFF tags in the header, including tag IDs, names, data types, counts, and values. Essential for understanding file structure and identifying non-standard tags.</dialogReference>
+			</param>
+			<param name="section_gdal-metadata" displayname="GDAL_METADATA (Tag 42112)" type="Optional" direction="Input" datatype="Boolean" expression="{section_gdal-metadata}">
+				<dialogReference>GDAL domain metadata stored in TIFF Tag 42112, including statistics per band, color interpretation, software information, and custom metadata items. Critical for understanding raster interpretation.</dialogReference>
+			</param>
+			<param name="section_xmp-metadata" displayname="Extensible Metadata Platform (XMP)" type="Optional" direction="Input" datatype="Boolean" expression="{section_xmp-metadata}">
+				<dialogReference>Adobe XMP metadata stored in TIFF Tag 700, commonly used for image provenance, copyright, and descriptive metadata in imagery workflows. Less commonly used than GDAL metadata for geospatial data.</dialogReference>
+			</param>
+			<param name="section_geokeys" displayname="GeoKey Directory" type="Optional" direction="Input" datatype="Boolean" expression="{section_geokeys}">
+				<dialogReference>GeoTIFF keys (largely EPSG Registry codes) that define the coordinate reference system, including projection, datum, ellipsoid, and units. The codes and their meanings are defined in the OGC GeoTIFF specification. The same information is captured in the analyst-friendly 'Spatial Reference' section.</dialogReference>
+			</param>
+			<param name="section_georeference" displayname="Spatial Reference" type="Optional" direction="Input" datatype="Boolean" expression="{section_georeference}">
+				<dialogReference>Human-readable summary of the coordinate reference system derived from GeoKeys, including projection name, datum, ellipsoid, and units.</dialogReference>
+			</param>
+			<param name="section_geotransform" displayname="GeoTransform" type="Optional" direction="Input" datatype="Boolean" expression="{section_geotransform}">
+				<dialogReference>Six-parameter affine transformation matrix that maps pixel coordinates to geographic coordinates. Shows pixel size, origin, and skew (rotation) parameters.</dialogReference>
+			</param>
+			<param name="section_bbox" displayname="Bounding Box" type="Optional" direction="Input" datatype="Boolean" expression="{section_bbox}">
+				<dialogReference>Minimum and maximum X/Y coordinates of the raster extent in the native coordinate system, plus center point coordinates. The extents are calculated from the GeoTransform parameters. The raster type (PixelIsArea or PixelIsPoint) is also considered in defining the extent. A PixelIsArea raster extends 1/2 pixel outside the edge pixel centers, while a PixelIsPoint raster extent fall on the outer extents of the raster. In contrast, GDAL does NOT take raster type into account when calculating the bounding box, treating every raster based on an area interpretation of pixels.</dialogReference>
+			</param>
+			<param name="section_geoextent" displayname="Geographic Extent" type="Optional" direction="Input" datatype="Boolean" expression="{section_geoextent}">
+				<dialogReference>Geographic extent in latitude/longitude (WGS84), including corner coordinates and center point. Useful for quick geographic location identification.</dialogReference>
+			</param>
+			<param name="section_statistics" displayname="Statistics" type="Optional" direction="Input" datatype="Boolean" expression="{section_statistics}">
+				<dialogReference>Band statistics including minimum, maximum, mean, standard deviation, and NoData handling. Shows data value ranges and quality.</dialogReference>
+			</param>
+			<param name="section_histogram" displayname="Histogram" type="Optional" direction="Input" datatype="Boolean" expression="{section_histogram}">
+				<dialogReference>Visual histogram chart showing the distribution of pixel values for each band. Helps identify data ranges, outliers, and quality issues.</dialogReference>
+			</param>
+			<param name="section_esri" displayname="ESRI Projection Engine (PE) String" type="Optional" direction="Input" datatype="Boolean" expression="{section_esri}">
+				<dialogReference>Esri Projection Engine string stored in GDAL metadata, used by ArcGIS software for CRS identification. May differ from standard WKT representation.</dialogReference>
+			</param>
+			<param name="section_wkt" displayname="Well Known Text 2 String" type="Optional" direction="Input" datatype="Boolean" expression="{section_wkt}">
+				<dialogReference>Well Known Text version 2 (WKT2) representation of the coordinate reference system, following OGC GeoTIFF v1.1 standard. The authoritative CRS definition.</dialogReference>
+			</param>
+			<param name="section_json" displayname="PROJJSON String" type="Optional" direction="Input" datatype="Boolean" expression="{section_json}">
+				<dialogReference>JSON representation of the coordinate reference system following PROJ conventions. Modern alternative to WKT for CRS exchange.</dialogReference>
+			</param>
+			<param name="section_tiling" displayname="Tiling and Overviews" type="Optional" direction="Input" datatype="Boolean" expression="{section_tiling}">
+				<dialogReference>Internal tiling configuration and overview pyramid structure. Shows tile dimensions, overview levels, and resampling methods. Critical for performance analysis.</dialogReference>
+			</param>
+			<param name="section_ifd" displayname="Image File Directory (IFD) List" type="Optional" direction="Input" datatype="Boolean" expression="{section_ifd}">
+				<dialogReference>Complete list of all Image File Directories (IFDs) in the file, including main image, transparency mask, and overview pages. Shows dimensions, compression, and structure.</dialogReference>
+			</param>
+			<param name="section_cog" displayname="COG Validation" type="Optional" direction="Input" datatype="Boolean" expression="{section_cog}">
+				<dialogReference>Cloud Optimized GeoTIFF (COG) validation results showing compliance with COG specification. Identifies issues that prevent efficient HTTP range request access.</dialogReference>
+			</param>
+			<param name="section_geo-metadata" displayname="GEO_METADATA (Tag 50909)" type="Optional" direction="Input" datatype="Boolean" expression="{section_geo-metadata}">
+				<dialogReference>Embedded XML metadata stored in TIFF Tag 50909, often containing ISO 19115/19139 metadata or custom XML from external sidecar files.</dialogReference>
+			</param>
+			<param name="section_xml-metadata" displayname="External XML Metadata File" type="Optional" direction="Input" datatype="Boolean" expression="{section_xml-metadata}">
+				<dialogReference>Content from external XML sidecar file (e.g., .tif.xml), typically ISO metadata or custom XML documentation accompanying the GeoTIFF.</dialogReference>
+			</param>
+			<param name="section_pam-metadata" displayname="Precision Auxiliary Metadata (PAM)" type="Optional" direction="Input" datatype="Boolean" expression="{section_pam-metadata}">
+				<dialogReference>GDAL Persistent Auxiliary Metadata from .aux.xml file, including statistics, histograms, color tables, and rat band interpretation used by ArcGIS and other GDAL-based software.</dialogReference>
 			</param>
 		</parameters>
-		<scriptExamples>
-			<scriptExample>
-				<title>Generate HTML metadata report</title>
-				<para>This example reads GeoTIFF metadata and creates an HTML report.</para>
-				<code>import arcpy
-arcpy.gttk.ReadMetadata("input.tif", "HTML (.html)")</code>
-			</scriptExample>
-			<scriptExample>
-				<title>Generate Markdown documentation</title>
-				<para>This example creates Markdown metadata documentation with custom suffix.</para>
-				<code>import arcpy
-arcpy.gttk.ReadMetadata("raster.tif", "Markdown (.md)",
-				                    output_suffix="_metadata", write_pam_xml=True)</code>
-			</scriptExample>
-			<scriptExample>
-				<title>Analyze specific IFD (overview)</title>
-				<para>This example reads metadata from a specific Image File Directory.</para>
-				<code>import arcpy
-arcpy.gttk.ReadMetadata("cog.tif", "HTML (.html)", page=1)</code>
-			</scriptExample>
-		</scriptExamples>
-		<tags>
-			<tag>GeoTIFF</tag>
-			<tag>metadata</tag>
-			<tag>TIFF tags</tag>
-			<tag>GeoKeys</tag>
-			<tag>COG validation</tag>
-			<tag>documentation</tag>
-			<tag>analysis</tag>
-		</tags>
 	</tool>
-	<dataIdInfo>
-		<idCredit>GeoTIFF ToolKit - Eric Robeck (robeckgeo@gmail.com)</idCredit>
-		<idAbs>
-			<DIV STYLE="text-align:Left;"><P><SPAN>Extracts and formats comprehensive metadata from GeoTIFF headers including TIFF tags, GeoTIFF keys, projection information, and COG validation. Generates detailed HTML or Markdown reports.</SPAN></P></DIV>
-		</idAbs>
-		<idPurp>Document GeoTIFF technical specifications, validate COG compliance, and extract geospatial metadata for analysis and quality assurance.</idPurp>
-		<resConst>
-			<Consts>
-				<useLimit>
-					<DIV STYLE="text-align:Left;"><P><SPAN>Licensed under the MIT License. Free for commercial and non-commercial use.</SPAN></P></DIV>
-				</useLimit>
-			</Consts>
-		</resConst>
-	</dataIdInfo>
 </metadata>

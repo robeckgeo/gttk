@@ -2,12 +2,11 @@ name: gttk
 channels:
   - conda-forge
 dependencies:
-  - python>=3.13
+  - python>=3.14
   - gdal>=3.11
   - lxml
   - matplotlib
   - mistune
   - numpy
   - openpyxl
-  - pillow
   - tifffile

@@ -30,6 +30,7 @@ from gttk.utils.contexts import banner_context, output_format_context, xml_type_
 from gttk.utils.script_arguments import ReadArguments
 from gttk.utils.section_registry import get_section_ids_from_args, filter_sections_for_page
 from gttk.utils.statistics_calculator import write_pam_xml, build_pam_data_from_stats
+from gttk.utils.log_helpers import setup_logger
 
 # --- Configuration & Setup ---
 gdal.SetConfigOption('GDAL_NUM_THREADS', 'ALL_CPUS')
@@ -155,6 +156,9 @@ def read_metadata(args: ReadArguments):
     Returns:
         0 on success, 1 on failure
     """
+    # Set up logger with appropriate handlers for ArcGIS or CLI
+    setup_logger(is_arc_mode=args.arc_mode, level=logging.INFO)
+    
     logger.info("=== read_metadata.py started ===")
     logger.info(f"Arguments: {args}")
     
@@ -166,8 +170,12 @@ def read_metadata(args: ReadArguments):
         banner_context.set(str(args.banner) if args.banner is not None else None)
         
         with MetadataExtractor(str(args.input_path)) as extractor:
+            # DIAGNOSTIC: Log is_geotiff status before filtering
+            logger.info(f"File is_geotiff status: {extractor.is_geotiff}")
+            
             # Get section IDs based on arguments
             section_ids = get_section_ids_from_args(args)
+            logger.info(f"Section IDs from args (before filtering): {section_ids}")
             
             # Filter sections based on page and GeoTIFF status
             section_ids = filter_sections_for_page(
@@ -176,10 +184,15 @@ def read_metadata(args: ReadArguments):
                 is_geotiff=extractor.is_geotiff
             )
             
-            logger.info(f"Generating report with sections: {section_ids}")
+            logger.info(f"Generating report with sections (after filtering): {section_ids}")
             
             # Build sections using MetadataReportBuilder
-            builder = MetadataReportBuilder(extractor, page=args.page, tag_scope=args.tag_scope or 'complete')
+            builder = MetadataReportBuilder(
+                extractor, 
+                page=args.page, 
+                tag_scope=args.tag_scope or 'complete',
+                reader_type=args.reader_type
+            )
             builder.build(section_ids)
             
             # Create appropriate formatter for desired file type

@@ -717,6 +717,21 @@ class ExcelWriter:
 
         self.current_row += 1
 
+    def update_cell(self, row_idx: int, column_name: str, value: Any):
+        """Updates a single cell in a specific row and column."""
+        if not self.worksheet:
+            return
+            
+        try:
+             col_idx = OUTPUT_COLUMNS.index(column_name) + 1
+        except ValueError:
+             logger.warning(f"Column '{column_name}' not found.")
+             return
+
+        cell = self.worksheet.cell(row=row_idx, column=col_idx)
+        cell_eff = self._get_merge_anchor(cell)
+        cast(Any, cell_eff).value = value
+
     def save(self, success: bool = True):
         """Saves the workbook with controlled print area, selection, and page setup."""
         if not self.worksheet:
@@ -820,10 +835,12 @@ def _process_geotiff_for_metrics(
                     ds_temp = None
                 except Exception:
                     pass
-
-            metrics.size_mb = output_path.stat().st_size / (1024 * 1024)
+            
+            # Approximate compression (space savings) based on uncompressed file size estimate
+            # This rough estimate will be replaced with one using a script-generated baseline file for 100% accuracy
             metrics.compression_pct = calculate_compression_efficiency(str(output_path), debug=True)
-            if is_baseline or write_duration_s > 0 : # write_duration_s is from optimize_geotiff call
+            metrics.size_mb = output_path.stat().st_size / (1024 * 1024)
+            if is_baseline or write_duration_s > 0 :
                  metrics.write_speed_mb_s = _calculate_speed(metrics.size_mb, write_duration_s)
             
             read_speed, read_err = _measure_read_speed(output_path, metrics.size_mb)
@@ -891,6 +908,9 @@ def _format_output_row(
         else:
             row[COL_SIZE_DELTA] = VAL_ERROR
 
+        # Make compression percent based on file size reduction relative to the script-generated baseline
+        if baseline_metrics and baseline_metrics.size_mb and baseline_metrics.size_mb > 0:
+            current_metrics.compression_pct = ((baseline_metrics.size_mb - current_metrics.size_mb) / baseline_metrics.size_mb) * 100
         row[COL_COMPRESSION_PERCENT] = current_metrics.compression_pct
 
         # Improvement vs Original Source: difference between current and original compression
@@ -898,13 +918,11 @@ def _format_output_row(
             row[COL_SIZE_DELTA] = ''  # Baseline compression is irrelevant
             row[COL_IMPROVEMENT_PERCENT] = ''  # Baseline has no improvement to measure
         elif original_compression_pct is not None and current_metrics.compression_pct is not None:
-            improvement_pct = current_metrics.compression_pct - original_compression_pct
-            row[COL_IMPROVEMENT_PERCENT] = improvement_pct
+            row[COL_IMPROVEMENT_PERCENT] = current_metrics.compression_pct - original_compression_pct
         else:
             row[COL_IMPROVEMENT_PERCENT] = VAL_ERROR
             if original_compression_pct is None:
                 error_accumulator += "Original compression % unavailable for improvement calculation; "
-        
         # Write Speed
         if current_metrics.write_speed_mb_s is not None:
             row[COL_WRITE_SPEED] = current_metrics.write_speed_mb_s
@@ -944,7 +962,7 @@ def _format_output_row(
     return row
 
 
-def _process_original_source_file(source_file: Path, args: TestArguments, excel_writer: ExcelWriter) -> Tuple[Optional[float], Optional[float]]:
+def _process_original_source_file(source_file: Path, args: TestArguments, excel_writer: ExcelWriter) -> Tuple[Optional[float], Optional[float], int]:
     """Processes the original source GeoTIFF and writes its row to Excel.
     
     Returns:
@@ -1028,7 +1046,9 @@ def _process_original_source_file(source_file: Path, args: TestArguments, excel_
     output_row_data[COL_COMMENT] = original_metrics.processing_error_msg.strip()
     
     excel_writer.write_row(output_row_data)
-    return original_metrics.size_mb, original_compression_pct
+    original_row_idx = excel_writer.current_row - 1
+    
+    return original_metrics.size_mb, original_compression_pct, original_row_idx
 
 
 def _process_script_baseline(source_file: Path, args: TestArguments, excel_writer: ExcelWriter, first_test_case_type: str, original_size_mb: Optional[float], original_compression_pct: Optional[float]) -> TestResultMetrics:
@@ -1118,7 +1138,7 @@ def _run_compression_tests(source_file: Path, args: TestArguments, test_cases: L
         if not is_source_float and test_params_csv_row.get(COL_NODATA) and str(test_params_csv_row[COL_NODATA]).lower() == 'nan':
             test_params_csv_row[COL_NODATA] = '' # Silently unset by using an empty string
 
-        # Correct for Predictor=3 with integer data.
+        # Correct for Predictor=3 with integer data
         if not is_source_float and test_params_csv_row.get(COL_PREDICTOR) == '3':
             error_msg = f"Predictor 3 is not valid for integer data type ('{source_metadata.gdal_type_name}')."
             error_row_data = _format_output_row(
@@ -1276,8 +1296,7 @@ def test_compression(args: TestArguments):
             # Mark the start of a new file group for border formatting
             excel_writer.mark_group_start()
             
-            original_size_mb, original_compression_pct = _process_original_source_file(file_path, args, excel_writer)
-
+            original_size_mb, original_compression_pct, original_row_idx = _process_original_source_file(file_path, args, excel_writer)
             if original_compression_pct is None:
                 logger.error(f"Failed to get compression percentage of the original source file {file_path}. Skipping.")
                 continue
@@ -1288,6 +1307,13 @@ def test_compression(args: TestArguments):
                 logger.error(f"Failed to process baseline for {file_path}. Skipping.")
                 continue
 
+            # Update the original row with the compression calculated from the script-generated baseline
+            if original_size_mb is not None and original_size_mb > 0:
+                    if script_generated_baseline_metrics.size_mb and script_generated_baseline_metrics.size_mb > 0:
+                        # Calculate Space Savings for original file relative to the new script-generated baseline
+                        # This gives a consistent basis for comparison, even if it was higher due to an alpha band (overestimating space savings)
+                        original_compression_pct = ((script_generated_baseline_metrics.size_mb - float(original_size_mb)) / script_generated_baseline_metrics.size_mb) * 100
+                        excel_writer.update_cell(original_row_idx, COL_COMPRESSION_PERCENT, original_compression_pct)
             _run_compression_tests(file_path, args, test_cases, excel_writer, script_generated_baseline_metrics, original_size_mb, original_compression_pct)
             
             # Mark the end of the file group and apply thick borders
@@ -1296,7 +1322,7 @@ def test_compression(args: TestArguments):
         excel_writer.save()
         logger.info("\nProcessing complete. Report saved.")
 
-        if args.open_report and not args.arc_mode:
+        if args.open_report:
             try:
                 logger.info(f"Attempting to open report: {args.output_path}")
                 os.startfile(args.output_path)
