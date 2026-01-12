@@ -899,7 +899,7 @@ distance = (100 - quality) × 0.1
 
 ## Testing
 
-GTTK includes a comprehensive test suite with **6338 tests** covering unit, integration, end-to-end, benchmark, and validation scenarios. The testing infrastructure ensures code quality, reliability, and maintainability for professional use in enterprise and government environments.
+GTTK includes a comprehensive test suite with **638 tests** covering unit, integration, end-to-end, benchmark, and validation scenarios. The testing infrastructure ensures code quality, reliability, and maintainability for professional use in enterprise and government environments.
 
 ### Test Suite Overview
 
