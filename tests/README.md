@@ -1,6 +1,6 @@
 # GeoTIFF Toolkit - Testing Guide
 
-**Status**: ✅ **246 tests passing** | **Phase 5 Complete** | **Production Ready**
+**Status**: ✅ **623 tests passing** | **Phase 1 Expansion Complete** | **Production Ready**
 
 This guide provides comprehensive information about testing GTTK (GeoTIFF ToolKit).
 
@@ -47,17 +47,19 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 246
+- **Total Tests**: 638 (623 pytest tests + 15 benchmark/validation functions)
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: ~170 tests (data models, mock factory, formatters)
-  - Integration Tests: 13 tests (metadata workflows)
-  - E2E Tests: 63 tests (CLI commands)
+  - Unit Tests: 516 tests (models, processors, extractors, formatters, utilities)
+  - Integration Tests: 31 tests (metadata workflows, statistics validation)
+  - E2E Tests: 76 tests (CLI commands)
+  - Benchmarks: 10 functions (statistics performance)
+  - Validation: 5 functions (accuracy verification)
 
 ### Coverage Targets
 
 | Module Type | Target | Current | Status |
-|-------------|--------|---------|--------|
+| ----------- | ------ | ------- | ------ |
 | Core Tools (CLI) | 85%+ | TBD | 🟢 Target |
 | Data Models | 95%+ | TBD | 🟢 Target |
 | Metadata Extraction | 90%+ | TBD | 🟢 Target |
@@ -66,28 +68,51 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Directory Structure
 
-```
+```text
 tests/
-├── __init__.py                    # Test package initialization
-├── conftest.py                    # Shared fixtures & pytest configuration
-├── README.md                      # Detailed test documentation
-├── fixtures/                      # Mock data factories
+├── __init__.py                                  # Test package initialization
+├── conftest.py                                  # Shared fixtures & pytest configuration
+├── README.md                                    # Detailed test documentation
+├── fixtures/                                    # Mock data factories
 │   ├── __init__.py
-│   └── mock_geotiff_factory.py   # MockGeoTIFF generator
-├── unit/                          # Unit tests (70% of suite)
+│   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator (20 tests)
+│   └── statistics_helpers.py                    # Statistics test utilities
+├── unit/                                        # Unit tests (516 tests, 81%)
 │   ├── __init__.py
-│   ├── test_data_models.py       # Data class tests (~48 tests)
-│   ├── test_mock_factory.py      # Mock factory validation (~60 tests)
-│   └── test_report_formatters.py # Report generation tests (~63 tests)
-├── integration/                   # Integration tests (20% of suite)
+│   ├── test_data_models.py                      # Data class tests (125 tests)
+│   ├── test_geotiff_processor.py                # GeoTIFF processing (82 tests)
+│   ├── test_xml_formatter.py                    # XML formatting (44 tests)
+│   ├── test_srs_logic.py                        # SRS/CRS logic (42 tests)
+│   ├── test_metadata_extractor.py               # Metadata extraction (35 tests)
+│   ├── test_report_formatters.py                # Report generation tests (30 tests)
+│   ├── test_preprocessor.py                     # Data preprocessing (27 tests)
+│   ├── test_statistics_type_utilities.py        # Type utilities (25 tests)
+│   ├── test_statistics_vectorized.py            # Vectorized stats (23 tests)
+│   ├── test_mock_factory.py                     # Mock factory validation (20 tests)
+│   ├── test_statistics_block_infrastructure.py  # Block processing (15 tests)
+│   ├── test_statistics_phase2.py                # Phase 2 optimizations (15 tests)
+│   ├── test_statistics_strategy_selection.py    # Strategy selection (15 tests)
+│   ├── test_section_renderers.py                # Section rendering (15 tests)
+│   ├── test_custom_vertical_crs_compound.py     # Custom CRS (2 tests)
+│   └── test_custom_vertical_datum_storage.py    # Vertical datum (1 test)
+├── integration/                                 # Integration tests (31 tests, 5%)
 │   ├── __init__.py
-│   └── test_metadata_workflow.py # End-to-end workflows (13 tests)
-└── e2e/                          # End-to-end CLI tests (10% of suite)
+│   ├── test_metadata_workflow.py                # End-to-end workflows (13 tests)
+│   ├── test_statistics_native_dtype.py          # Native dtype testing (9 tests)
+│   └── test_statistics_blocked_path.py          # Blocked path validation (9 tests)
+├── e2e/                                         # End-to-end CLI tests (76 tests, 12%)
+│   ├── __init__.py
+│   ├── test_read_command.py                     # `gttk read` tests (17 tests)
+│   ├── test_compare_command.py                  # `gttk compare` tests (15 tests)
+│   ├── test_optimize_command.py                 # `gttk optimize` tests (11 tests)
+│   └── test_test_command.py                     # `gttk test` tests (7 tests)
+├── benchmarks/                                  # Performance benchmarks (10 functions, 2%)
+│   ├── __init__.py
+│   └── benchmark_statistics.py                  # Comprehensive stats benchmarks
+└── validation/                                  # Accuracy validation (5 functions, <1%)
     ├── __init__.py
-    ├── test_read_command.py      # `gttk read` tests (22 tests)
-    ├── test_compare_command.py   # `gttk compare` tests (19 tests)
-    ├── test_optimize_command.py  # `gttk optimize` tests (14 tests)
-    └── test_test_command.py      # `gttk test` tests (8 tests)
+    ├── validate_block_statistics_accuracy.py    # Block accuracy (4 functions)
+    └── validate_phase2_accuracy.py              # Phase 2 accuracy (1 function)
 ```
 
 ---
@@ -192,7 +217,7 @@ pytest --maxfail=3
 
 GTTK follows the testing pyramid pattern:
 
-```
+```text
         E2E Tests (10%)
        /              \
       Integration (20%)
@@ -490,7 +515,7 @@ pytest --cov=gttk --cov-report=html --cov-report=term-missing
 
 **Terminal Report**:
 
-```
+```text
 Name                          Stmts   Miss  Cover   Missing
 -----------------------------------------------------------
 gttk/__init__.py                  5      0   100%
@@ -682,12 +707,34 @@ If tests fail when run together but pass individually:
 
 ## Test Suite Status
 
-**Last Updated**: December 2025
-**Phase**: Phase 4 Complete (Integration & E2E Tests)
+**Last Updated**: January 2026
+**Phase**: Phase 1 Expansion Complete (Priority 1 Modules)
 **Status**: ✅ Production Ready
-**Total Tests**: 246
+**Total Tests/Functions**: 638 (623 pytest tests + 15 benchmark/validation functions)
 **Pass Rate**: 100%
+
+### Recent Updates ⭐
+
+- ✅ **Statistics Benchmarks Consolidated**: Phase 1/2 merged into unified suite (10 functions)
+- ✅ **GeoTIFF Processor**: 82 comprehensive tests added
+- ✅ **XML Formatter**: 44 comprehensive tests added
+- ✅ **SRS Logic**: 42 comprehensive tests added
+- ✅ **Metadata Extractor**: 35 comprehensive tests added
+- ✅ **Preprocessor**: 27 comprehensive tests added
+
+### Test Growth
+
+- **Initial**: 386 tests (pre-expansion)
+- **Current**: 638 tests/functions (+252, 65% increase)
+  - 623 pytest-collected tests (516 unit + 31 integration + 76 e2e)
+  - 10 benchmark functions (not collected by pytest)
+  - 5 validation functions (not collected by pytest)
+- **Target**: 720-750 tests (with Phase 2 & 3 complete)
 
 ---
 
-For questions about testing or to report issues, please refer to the test files themselves or the comprehensive testing plan in `plans/TESTING_PLAN.md`.
+For questions about testing or to report issues, please refer to:
+
+- Test files themselves for implementation details
+- [`plans/testing_expansion_plan.md`](../plans/testing_expansion_plan.md) for comprehensive testing roadmap
+- Individual test plan documents in `plans/` for module-specific details

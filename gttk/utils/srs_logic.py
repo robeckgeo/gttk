@@ -48,8 +48,8 @@ VERTICAL_SRS_ABBREV_MAP: Dict[str, int] = {
     "EGM2008": 3855,
     "EGM96": 5773,
     "NAVD88": 5703,
-    "CGVD2013": 5703,
-    "CGG2013": 6647,
+    "CGVD2013": 6647,
+    "CGG2013": 6647,  # alternate spelling
     "GGM10": 0,
     "EVRF2007": 5621,
     "EVRF2019": 9389,
@@ -124,7 +124,15 @@ def get_srs_from_user_input(srs_input: str) -> Optional[osr.SpatialReference]:
         elif srs_upper in VERTICAL_SRS_ABBREV_MAP:  # Shortcut abbreviation match
             srs.ImportFromEPSG(VERTICAL_SRS_ABBREV_MAP[srs_upper])
         elif srs_upper.startswith('EPSG:'):  # EPSG code with prefix
-            srs.ImportFromEPSG(int(srs_upper.split(':')[1]))
+            epsg_part = srs_upper.split(':')[1]
+            # Check for compound CRS (e.g., "EPSG:32610+5703")
+            if '+' in epsg_part:
+                # Use SetFromUserInput for compound CRS
+                if srs.SetFromUserInput(srs_input) != 0:
+                    return None
+            else:
+                # Simple EPSG code
+                srs.ImportFromEPSG(int(epsg_part))
         elif srs_input.isdigit():  # EPSG code as integer string
             srs.ImportFromEPSG(int(srs_input))
         else:
@@ -146,12 +154,17 @@ def standardize_srs(wkt: str) -> osr.SpatialReference:
     """
     srs = osr.SpatialReference()
     srs.ImportFromWkt(wkt)
-    if srs.AutoIdentifyEPSG() == 0:
-        epsg_code = srs.GetAuthorityCode(None)
-        if epsg_code:
-            clean_srs = osr.SpatialReference()
-            clean_srs.ImportFromEPSG(int(epsg_code))
-            return clean_srs
+    try:
+        if srs.AutoIdentifyEPSG() == 0:
+            epsg_code = srs.GetAuthorityCode(None)
+            if epsg_code:
+                clean_srs = osr.SpatialReference()
+                clean_srs.ImportFromEPSG(int(epsg_code))
+                return clean_srs
+    except RuntimeError:
+        # AutoIdentifyEPSG() can raise RuntimeError for unsupported/custom SRS
+        # In this case, just return the original SRS
+        pass
     return srs
 
 def get_horizontal_srs(srs: osr.SpatialReference) -> osr.SpatialReference:

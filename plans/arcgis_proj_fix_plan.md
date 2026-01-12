@@ -5,12 +5,14 @@
 In ArcGIS Pro's Python environment, `GetSpatialRef()` succeeds but subsequent `osr.SpatialReference` method calls fail silently due to missing `PROJ_LIB` environment variable. This creates incomplete `projection_info` dictionaries that cascade failures to multiple report sections.
 
 ### Affected Sections
+
 - **BoundingBox**: Missing `horizontal_unit` (shows blank instead of "degree" or "metre")
 - **Tiling**: Shows "units" instead of proper unit names ("arc seconds", "metre", etc.)
 - **Georeference**: Missing EPSG codes for datum, missing unit names
 - **GeoExtent**: Wrong coordinates (shows full globe -180/180, -90/90 instead of actual extent)
 
 ### Root Cause
+
 ```python
 # In ArcGIS Pro (without PROJ_LIB set):
 srs = ds.GetSpatialRef()  # ✓ Succeeds, returns SRS object
@@ -21,14 +23,18 @@ srs.GetAuthorityCode('DATUM')  # ✗ Returns None (should return "6326")
 ## Solution Design
 
 ### Detection Strategy
+
 Check if `projection_info` is incomplete after calling `_retrieve_projection_info()`:
+
 - For projected CRS: missing `linear_unit_name`
 - For geographic CRS: missing `angular_unit_name`
 
 ### Fallback Strategy
+
 When incomplete projection_info is detected:
+
 1. Call `get_json_info_from_osgeo4w()` to get full gdalinfo JSON
-2. Parse JSON using `_parse_json_projection_info()` 
+2. Parse JSON using `_parse_json_projection_info()`
 3. Replace incomplete projection_info with complete data from JSON
 
 ### Implementation Changes
@@ -38,6 +44,7 @@ When incomplete projection_info is detected:
 **Modify [`read_geotiff()`](gttk/utils/geotiff_processor.py:1158) function (lines 1173-1232):**
 
 Current logic:
+
 ```python
 srs = ds.GetSpatialRef()
 projection_info = {}
@@ -64,6 +71,7 @@ geographic_corners = _calculate_geographic_corners(ds, srs, gt, projection_info)
 ```
 
 New logic:
+
 ```python
 srs = ds.GetSpatialRef()
 projection_info = {}
@@ -121,19 +129,23 @@ geographic_corners = _calculate_geographic_corners(ds, srs, gt, projection_info)
 #### File: `gttk/utils/gdal_runner.py`
 
 **Remove old function:**
+
 - Delete `get_srs_from_osgeo4w()` function (no longer needed)
 - Keep `get_json_info_from_osgeo4w()` function
 
 **Update imports in other files:**
+
 - Remove `get_srs_from_osgeo4w` from import statements
 - Keep only `get_json_info_from_osgeo4w`
 
 ## Testing Requirements
 
 ### Test Case 1: EPSG:4979 in ArcGIS Pro
+
 **File**: Any GeoTIFF with EPSG:4979 (WGS 84 3D)
 
 **Expected Results**:
+
 - BoundingBox horizontal_unit: "degree"
 - Tiling resolution units: "arc seconds" (not "units")
 - Georeference datum_code: "6326"
@@ -141,24 +153,29 @@ geographic_corners = _calculate_geographic_corners(ds, srs, gt, projection_info)
 - GeoExtent: Actual file extent (not -180/180, -90/90)
 
 ### Test Case 2: Projected CRS (e.g., UTM) in ArcGIS Pro
+
 **File**: Any GeoTIFF with projected CRS (e.g., EPSG:32632)
 
 **Expected Results**:
+
 - BoundingBox horizontal_unit: "metre"
 - Tiling resolution units: "m" (not "units")
 - Georeference linear_unit: "metre"
 - Georeference projected_cs_code: "32632"
 
 ### Test Case 3: CLI Mode (Non-ArcGIS)
+
 **File**: Any GeoTIFF
 
 **Expected Results**:
+
 - All sections work correctly WITHOUT triggering JSON fallback
 - No performance degradation from subprocess calls
 
 ## Implementation Notes
 
 ### Why This Approach Works
+
 1. **Minimal changes**: Only modifies `geotiff_processor.py` and `gdal_runner.py`
 2. **No breaking changes**: CLI mode continues working normally
 3. **Automatic detection**: No need to pass `arc_mode` flag through call chain
@@ -166,12 +183,15 @@ geographic_corners = _calculate_geographic_corners(ds, srs, gt, projection_info)
 5. **Preserves WKT/PROJJSON**: SRS object still available for export functions
 
 ### Why We Don't Need `arc_mode` Flag
+
 The incomplete projection_info is a symptom that's detectable directly:
+
 - Missing unit names = broken PROJ environment
 - This only happens in ArcGIS Pro without PROJ_LIB
 - Automatically triggers fallback without explicit mode flag
 
 ### Performance Considerations
+
 - JSON fallback only triggers when needed (ArcGIS Pro with problematic CRS)
 - CLI users never experience subprocess overhead
 - Subprocess call is already fast (~200ms) and only happens once per file
@@ -179,6 +199,7 @@ The incomplete projection_info is a symptom that's detectable directly:
 ## Rollback Plan
 
 If this fix causes issues:
+
 1. Revert changes to `geotiff_processor.py` lines 1173-1232
 2. Restore previous fallback logic (only when `srs` is None)
 3. Keep diagnostic scripts for manual investigation

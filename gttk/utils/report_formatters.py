@@ -84,7 +84,7 @@ class ReportFormatter(ABC):
         """
         self.renderer = renderer
         self.sections: List[ReportSection] = []
-        self.report_title: str = "Metadata Report"
+        self.report_title: str = "Metadata Content"
         self.include_title: bool = False
     
     def add_section(self, section_id: str, title: str, menu_name: str,data: Any) -> None:
@@ -676,7 +676,7 @@ class HtmlReportFormatter(ReportFormatter):
     def _generate_header(self) -> str:
         """Generate report header with icon and title."""
         icon_xml = self._get_icon_content(self.report_type, 'favicon', 'light')
-        title_text = html.escape(getattr(self, 'report_title', 'Metadata Report') or 'Metadata Report')
+        title_text = html.escape(getattr(self, 'report_title', 'Metadata Content') or 'Metadata Content')
         return f"""
     <div class="report-header">
         <img src="data:image/svg+xml;utf8,{icon_xml}" alt="Metadata Icon" class="header-icon"/>

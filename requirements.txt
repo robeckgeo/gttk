@@ -3,6 +3,7 @@
 gdal>=3.11
 
 # Report generation dependencies
+python>=3.14
 lxml>=5.3.1
 matplotlib>=3.10.0
 mistune>=3.0.0
@@ -10,8 +11,8 @@ numpy>=2.2.0
 openpyxl>=3.1.5
 tifffile>=2025.1.10
 
-# Configuration
-tomli>=2.0.0; python_version < '3.11'
+# Memory detection for adaptive statistics processing
+psutil>=5.9.0
 
 # Testing dependencies (optional)
 pytest>=7.0.0

@@ -48,7 +48,7 @@ from gttk.utils.performance_tracker import PerformanceTracker
 from gttk.utils.preprocessor import find_xml_metadata_file
 from gttk.utils.script_arguments import OptimizeArguments
 from gttk.utils.srs_logic import handle_srs_logic, check_vertical_srs_mismatch
-from gttk.utils.statistics_calculator import calculate_statistics, build_pam_data_from_stats, write_pam_xml
+from gttk.utils.statistics import calculate_statistics, build_pam_data_from_stats, write_pam_xml
 
 try:
     __version__ = metadata.version("geotiff-toolkit")

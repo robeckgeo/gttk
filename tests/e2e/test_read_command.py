@@ -55,7 +55,7 @@ class TestReadCommand:
         # Verify HTML content
         content = expected_report.read_text(encoding='utf-8-sig')
         assert '<!DOCTYPE html>' in content, "Should be valid HTML"
-        assert 'Metadata Report' in content, "Should have title"
+        assert 'Metadata Content' in content, "Should have title"
         assert 'test.tif' in content, "Should include filename"
     
     def test_read_basic_geotiff_markdown(self, tmp_path):
@@ -80,7 +80,7 @@ class TestReadCommand:
         assert expected_report.exists(), "Markdown report should be created"
         
         content = expected_report.read_text(encoding='utf-8')
-        assert '# Metadata Report' in content, "Should have markdown title"
+        assert '# Metadata Content' in content, "Should have markdown title"
         assert '## Report Summary' in content, "Should have summary section"
     
     def test_read_with_custom_suffix(self, tmp_path):

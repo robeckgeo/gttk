@@ -106,9 +106,8 @@ def init_arcpy() -> None:
     try:
         import arcpy # type: ignore
         import importlib
-        from utils import statistics_calculator, histogram_generator
-        importlib.reload(statistics_calculator)
-        importlib.reload(histogram_generator)
+        from utils import statistics
+        importlib.reload(statistics)
         arcpy.env.overwriteOutput = True
     except ImportError:
         pass

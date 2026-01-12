@@ -33,7 +33,7 @@ from gttk.utils.geotiff_processor import (
     calculate_precision_from_tifffile_page
 )
 from gttk.utils.path_helpers import find_xml_metadata_file
-from gttk.utils.statistics_calculator import calculate_statistics
+from gttk.utils.statistics import calculate_statistics
 from gttk.utils.tiff_tag_parser import TiffTagParser
 from gttk.utils.validate_cloud_optimized_geotiff import validate as validate_cog
 from gttk.utils.xml_formatter import read_xml_with_encoding_detection, decode_xml_bytes
@@ -75,6 +75,9 @@ class MetadataExtractor:
         self.tiff: Optional[tifffile.TiffFile] = None
         self.geotiff_info = geotiff_info
         self.is_geotiff = is_geotiff(self.filepath)
+        
+        # Cache for statistics to avoid recalculating for bbox and statistics sections
+        self._statistics_cache: Optional[List[StatisticsBand]] = None
 
     def __enter__(self):
         """Opens file handles and populates GeoTiffInfo if not provided."""
@@ -286,10 +289,12 @@ class MetadataExtractor:
 
     def extract_statistics(self, page: int = 0) -> Optional[List[StatisticsBand]]:
         """
-        Extract statistics for each band.
+        Extract statistics for each band with caching.
         
         Returns StatisticsBand objects directly from calculate_statistics()
-        with all fields populated including histogram data.
+        with all fields populated including histogram data. Results are cached
+        to avoid duplicate calculation when both bbox and statistics sections
+        are requested.
         
         Args:
             page: IFD page index (0 for main image, >0 for overviews)
@@ -301,8 +306,18 @@ class MetadataExtractor:
             return None
         
         if page == 0:
-            return calculate_statistics(self.gdal_ds)
+            # Check cache for main image statistics
+            if self._statistics_cache is not None:
+                logger.debug("Using cached statistics (avoids duplicate calculation)")
+                return self._statistics_cache
+            
+            # Calculate and cache statistics for main image
+            logger.debug("Calculating statistics (will be cached)")
+            stats = calculate_statistics(self.gdal_ds)
+            self._statistics_cache = stats
+            return stats
         else:
+            # Overviews are not cached (typically only requested once)
             main_band = self.gdal_ds.GetRasterBand(1)
             if main_band and page <= main_band.GetOverviewCount():
                 overview_band = main_band.GetOverview(page - 1)

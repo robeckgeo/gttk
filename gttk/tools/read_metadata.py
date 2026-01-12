@@ -29,7 +29,7 @@ from gttk.utils.report_formatters import HtmlReportFormatter, MarkdownReportForm
 from gttk.utils.contexts import banner_context, output_format_context, xml_type_context
 from gttk.utils.script_arguments import ReadArguments
 from gttk.utils.section_registry import get_section_ids_from_args, filter_sections_for_page
-from gttk.utils.statistics_calculator import write_pam_xml, build_pam_data_from_stats
+from gttk.utils.statistics import write_pam_xml, build_pam_data_from_stats
 from gttk.utils.log_helpers import setup_logger
 
 # --- Configuration & Setup ---
@@ -198,10 +198,10 @@ def read_metadata(args: ReadArguments):
             # Create appropriate formatter for desired file type
             if args.report_format == 'html':
                 formatter = HtmlReportFormatter(filename=extractor.filepath.name)
-                formatter.report_title = "Metadata Report"
+                formatter.report_title = "Metadata Content"
             else:
                 formatter = MarkdownReportFormatter(filename=extractor.filepath.name)
-                formatter.report_title = "Metadata Report"
+                formatter.report_title = "Metadata Content"
                 formatter.include_title = True
             
     except (FileNotFoundError, ValueError) as e:

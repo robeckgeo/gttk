@@ -163,9 +163,9 @@ def _generate_report_summary(base_file: str, comp_file: str, base_name: str, com
     current_date_str = datetime.now().strftime('%Y-%m-%d')
     lines = [
         "## Report Summary\n",
+        f"**Report Date:** {current_date_str}  ",
         f"**{base_name}:** {base_file}  ",
         f"**{comp_name}:** {comp_file}  ",
-        f"**Report Date:** {current_date_str}  ",
     ]
     
     return "\n".join(lines)

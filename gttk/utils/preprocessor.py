@@ -32,7 +32,7 @@ from gttk.utils.geotiff_processor import remap_nodata_value, mask_nodata_value, 
 from gttk.utils.geo_metadata_writer import write_geo_metadata
 from gttk.utils.path_helpers import find_xml_metadata_file
 from gttk.utils.script_arguments import OptimizeArguments
-from gttk.utils.statistics_calculator import calculate_statistics
+from gttk.utils.statistics import calculate_statistics
 
 logger = logging.getLogger(__name__)
 

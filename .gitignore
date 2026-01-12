@@ -30,11 +30,30 @@ coverage.xml
 .mypy_cache/
 __pypackages__/
 
-# Editor / OS junk
-.DS_STORE
+# OS junk
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# IDEs and Tools
 .vscode/
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.claude/
 .idea/
+.roo/
+*.swp
+*.swo
 
 # Logs and temp
 *.log
@@ -58,3 +77,8 @@ RasterFunctionTemplates/
 input/
 output/
 temp/
+
+# Custom TOML validation rules
+# Keep example file only as a template
+gttk/resources/rules/*.toml
+!gttk/resources/rules/example_rules.toml

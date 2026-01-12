@@ -1,4 +1,4 @@
-# Compression Efficiency Calculation - Improvement Plan
+# Compression Efficiency Calculation - Implementation Plan
 
 ## Executive Summary
 
@@ -29,7 +29,7 @@ Refine [`calculate_compression_efficiency()`](gttk/utils/geotiff_processor.py:80
 
 ### Formula Issue
 
-```
+```text
 Current: Efficiency = (1 - CompressedFile / TheoreticalUncompressed) × 100
 where:
   TheoreticalUncompressed = Sum(RawPixelData) for ALL IFDs
@@ -46,7 +46,7 @@ Calculate efficiency by properly accounting for invariant overhead components.
 
 #### Conceptual Model
 
-```
+```text
 FileSize = CompressibleData + InvariantOverhead
 
 where:

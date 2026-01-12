@@ -37,7 +37,7 @@ class TestMarkdownReportFormatter:
         formatter = MarkdownReportFormatter(filename="test.tif")
         assert formatter.filename == "test.tif"
         assert formatter.sections == []
-        assert formatter.report_title == "Metadata Report"
+        assert formatter.report_title == "Metadata Content"
         assert formatter.include_title is False
     
     def test_add_section(self):
@@ -106,7 +106,7 @@ class TestMarkdownReportFormatter:
         header = formatter._render_header()
         
         # Should not contain the title header
-        assert "# Metadata Report:" not in header
+        assert "# Metadata Content:" not in header
     
     def test_render_footer(self):
         """Test rendering footer."""

@@ -9,7 +9,7 @@
 # ******************************************************************************
 
 """
-Renderers for GeoTIFF Metadata Reports.
+Renderers for Metadata, Compression, and Validation Reports.
 
 This module provides abstract base class and concrete implementations for rendering
 GeoTIFF metadata in different formats (currently just Markdown and HTML).

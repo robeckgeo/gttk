@@ -19,6 +19,7 @@ import sys
 from osgeo import gdal
 from tests.fixtures.mock_geotiff_factory import MockGeoTIFF
 
+gdal.UseExceptions()
 
 class TestCompareCommand:
     """Test the `gttk compare` command end-to-end."""

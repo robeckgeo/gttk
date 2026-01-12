@@ -55,7 +55,7 @@ from gttk.utils.geotiff_processor import (
     estimate_image_quality,
     get_transparency_str,
 )
-from gttk.utils.histogram_generator import generate_histogram_base64
+from gttk.utils.statistics import generate_histogram_base64
 from gttk.utils.markdown_formatter import format_value
 from gttk.utils.metadata_extractor import MetadataExtractor, PREDICTOR_ABBREV_MAP
 from gttk.utils.script_arguments import OptimizeArguments
@@ -145,6 +145,7 @@ class ReportBuilder(ABC):
         has_mask = any(band.mask_count for band in stats)
         has_alpha = any(band.alpha_0_count for band in stats)
         has_nodata = any(band.nodata_count for band in stats)
+        has_median = any(band.median is not None for band in stats)
         
         present_conditionals = set()
         if has_mask:
@@ -153,6 +154,8 @@ class ReportBuilder(ABC):
             present_conditionals.add('alpha_0_count')
         if has_nodata:
             present_conditionals.add('nodata_count')
+        if has_median:
+            present_conditionals.add('median')
         
         # Build data rows
         data = []
@@ -226,6 +229,7 @@ class MetadataReportBuilder(ReportBuilder):
         has_nodata = any(band.nodata_count for band in stats)
         has_mask = any(band.mask_count for band in stats)
         has_alpha = any(band.alpha_0_count for band in stats)
+        has_median = any(band.median is not None for band in stats)
         
         present_conditionals = set()
         if has_mask:
@@ -234,6 +238,8 @@ class MetadataReportBuilder(ReportBuilder):
             present_conditionals.add('alpha_0_count')
         if has_nodata:
             present_conditionals.add('nodata_count')
+        if has_median:
+            present_conditionals.add('median')
         
         data = []
         for display_name, field_name, always_show in display_fields:

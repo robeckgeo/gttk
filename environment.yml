@@ -10,3 +10,8 @@ dependencies:
   - numpy
   - openpyxl
   - tifffile
+  # Memory detection for adaptive statistics processing
+  - psutil
+  # Development/Testing dependencies
+  - pytest>=7.0.0
+  - pytest-cov>=4.0.0

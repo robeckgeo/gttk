@@ -122,7 +122,7 @@ A compression report is also generated each time `gttk optimize` is run, compari
 #### Command-Line Arguments
 
 | Argument | Short | Type | Required | Default | Description |
-|----------|-------|------|----------|---------|-------------|
+| -------- | ----- | ---- | -------- | ------- | ----------- |
 | `--input` | `-i` | Path | Yes | - | The baseline (or original) GeoTIFF for comparison |
 | `--output` | `-o` | Path | Yes | - | The comparison (or processed) GeoTIFF |
 | `--config` | `-c` | str | No | `config.toml` | Path to a custom configuration file |
@@ -189,7 +189,7 @@ This powerful tool combines multiple optimization techniques into a single, stre
 #### Command-Line Arguments
 
 | Argument | Short | Type | Required | Default | Description |
-|----------|-------|------|----------|---------|-------------|
+| -------- | ----- | ---- | -------- | ------- | ----------- |
 | `--input` | `-i` | Path | Yes | - | Input source GeoTIFF file path |
 | `--output` | `-o` | Path | Yes | - | Output COG file path |
 | `--product-type` | `-t` | str | Yes | - | Type of GeoTIFF product (`dem`, `image`, `error`, `scientific`, `thematic`) |
@@ -197,7 +197,7 @@ This powerful tool combines multiple optimization techniques into a single, stre
 | `--algorithm` | `-a` | str | No | Auto | Compression algorithm (`JPEG`, `JXL`, `LZW`, `DEFLATE`, `ZSTD`, `LERC`, `NONE`) |
 | `--vertical-srs` | `-s` | str | Varies | - | Vertical SRS for elevation products (required for `dem` type) |
 | `--nodata` | `-n` | float | No | - | NoData value |
-| `--decimals` | `-d` | int | No | Auto | Decimal places for rounding  |
+| `--decimals` | `-d` | int | No | Auto | Decimal places for rounding |
 | `--predictor` | `-p` | int | No | Auto | Predictor for LZW/DEFLATE/ZSTD compression (1, 2, or 3) |
 | `--max-z-error` | `-z` | float | No | Auto | Max Z error for LERC compression |
 | `--level` | `-l` | int | No | Auto | Compression level for DEFLATE or ZSTD |
@@ -236,7 +236,7 @@ gttk optimize -i scientific.tif -o scientific_lerc.tif -t scientific -a LERC \
 
 **1. [INEGI_f13a35e4_ms_comp.html](example_reports/INEGI_f13a35e4_ms_comp.html)**
 
-**Description**: A 1.5m Digital Surface Model (DSM) over Mazatlán, Mexico produced and distributed by the Instituto Nacional de Estadística y Geografía (INEGI) [here](https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/espanol/bvinegi/productos/geografia/imagen_cartografica/1_10_000/lidar/1_5m/Superficie/889463844341_t.zip).The producer-grade (`--reader-type=producer`) [OLD](example_reports/INEGI_f13a35e4_ms_OLD_meta.html) and [NEW](example_reports/INEGI_f13a35e4_ms_NEW_meta.html) metadata reports are provided for context.
+**Description**: A 1.5m Digital Surface Model (DSM) over Mazatlán, Mexico produced and distributed by the Instituto Nacional de Estadística y Geografía (INEGI) on their [portal](https://www.inegi.org.mx/contenidos/productos/prod_serv/contenidos/espanol/bvinegi/productos/geografia/imagen_cartografica/1_10_000/lidar/1_5m/Superficie/889463844341_t.zip).The producer-grade (`--reader-type=producer`) [OLD](example_reports/INEGI_f13a35e4_ms_OLD_meta.html) and [NEW](example_reports/INEGI_f13a35e4_ms_NEW_meta.html) metadata reports are provided for context.
 
 - The sidecar XML file packaged with the OLD file was written to the internal GEO_METADATA TIFF Tag (#50909) in the NEW file.
 - For comparison, the OLD report shows the XML in `text` format and the NEW report shows it in `table` format.
@@ -279,7 +279,7 @@ File Size and Compression sections also include a `Delta (%)` column, which is t
 #### Command-Line Arguments
 
 | Argument | Short | Type | Required | Default | Description |
-|----------|-------|------|----------|---------|-------------|
+| -------- | ----- | ---- | -------- | ------- | ----------- |
 | `--input` | `-i` | Path | Yes | - | Source GeoTIFF file or directory for testing |
 | `--output` | `-o` | Path | No | Auto | Path to save the output report table in Excel format (.xlsx) |
 | `--csv-params` | `-c` | Path | Excl.¹ | - | Path to CSV file with compression parameters to test |
@@ -358,7 +358,7 @@ Metadata reports provide comprehensive information about a single GeoTIFF file, 
 #### Command-Line Arguments
 
 | Argument | Short | Type | Required | Default | Description |
-|----------|-------|------|----------|---------|-------------|
+| -------- | ----- | ---- | -------- | ------- | ----------- |
 | `--input` | `-i` | Path | Yes | - | Path to the input GeoTIFF file |
 | `--page` | `-p` | int | No | `0` | Image File Directory (IFD) page to read |
 | `--banner` | `-b` | str | No | - | Text for a banner at the top/bottom of report (e.g., classification) |
@@ -653,7 +653,7 @@ file = "gttk.log"
 ### Key Differences from `gttk optimize`
 
 | Feature | `gttk optimize` | `gttk optimize-arc` |
-|---------|-----------------|---------------------|
+| ------- | --------------- | ------------------- |
 | **Execution Method** | GDAL Python API (in-memory) | GDAL CLI utilities (subprocess) |
 | **Performance** | Faster (no subprocess overhead) | Slightly slower (subprocess calls) |
 | **ArcGIS Compatibility** | Limited (ArcGIS GDAL conflicts) | Full (isolated environment) |
@@ -683,7 +683,7 @@ gttk optimize-arc -i input_dir/ -o output_dir/ -t image -a JPEG -q 90
 
 When using `gttk optimize-arc`, all GDAL commands are logged. Example output:
 
-```
+```text
 GDAL commands staged. Total commands: 4
 ---------------------------------------
 
@@ -886,7 +886,7 @@ distance = (100 - quality) × 0.1
 **Implementation Table:**
 
 | Quality | Logic | JXL_LOSSLESS | JXL_DISTANCE | Result Description |
-|---------|-------|--------------|--------------|-------------------|
+| ------- | ----- | ------------ | ------------ | ----------------- |
 | 100 | Perfect | YES | N/A | Mathematically lossless. Pixel-for-pixel identical. |
 | 95-99 | High | NO | 0.1 - 0.5 | Near-lossless. Artifacts statistically present but invisible to the human eye. |
 | 90 | Standard | NO | 1.0 | **Visually lossless** (the "sweet spot"). Artifacts at the threshold of human perception (1 JND). |
@@ -899,43 +899,20 @@ distance = (100 - quality) × 0.1
 
 ## Testing
 
-GTTK includes a comprehensive test suite with 247+ tests covering unit, integration, and end-to-end scenarios. The testing infrastructure ensures code quality, reliability, and maintainability for professional use in enterprise and government environments.
+GTTK includes a comprehensive test suite with **6338 tests** covering unit, integration, end-to-end, benchmark, and validation scenarios. The testing infrastructure ensures code quality, reliability, and maintainability for professional use in enterprise and government environments.
 
 ### Test Suite Overview
 
-- **Unit Tests (70%)**: Test individual functions and classes in isolation
-- **Integration Tests (20%)**: Test component interactions and workflows
-- **End-to-End Tests (10%)**: Test complete CLI commands and real-world scenarios
+| Category | Test Count | Percentage | Files |
+| -------- | --------- | ---------- | ----- |
+| **Unit Tests** | ~516 | 81% | 16 files |
+| **Integration Tests** | ~31 | 5% | 3 files |
+| **E2E Tests** | ~76 | 12% | 4 files |
+| **Benchmarks** | 10 | 2% | 1 file |
+| **Validation** | 5 | <1% | 2 files |
+| **TOTAL** | **638** | **100%** | **26 files** |
 
-### Running Tests
-
-```bash
-# Run all tests
-pytest
-
-# Run with coverage report
-pytest --cov=gttk --cov-report=html --cov-report=term
-
-# Run specific test categories
-pytest tests/unit/         # Unit tests only
-pytest tests/integration/  # Integration tests only
-pytest tests/e2e/          # End-to-end tests only
-
-# Run tests by marker
-pytest -m unit             # All unit tests
-pytest -m integration      # All integration tests
-pytest -m e2e              # All E2E tests
-```
-
-### Test Coverage Targets
-
-| Module Type | Target Coverage | Current Status |
-|-------------|-----------------|----------------|
-| Core Tools | 85%+ | ✅ Achieved |
-| Data Models | 95%+ | ✅ Achieved |
-| Metadata Extraction | 90%+ | ✅ Achieved |
-| GeoTIFF Processing | 90%+ | ✅ Achieved |
-| Report Formatters | 85%+ | ✅ Achieved |
+**Phase 1 Expansion Complete** ✅: All Priority 1 critical modules now have comprehensive test coverage, including GeoTIFF processing, metadata extraction, SRS logic, preprocessing, and XML formatting utilities.
 
 ### Documentation
 
@@ -950,6 +927,7 @@ For detailed information about testing, including:
 see the comprehensive testing documentation:
 
 - **[`tests/README.md`](tests/README.md)**: Complete testing guide for developers
-- **[`plans/testing_plan.md`](plans/testing_plan.md)**: Testing strategy and implementation plan
+- **[`plans/testing_plan.md`](plans/testing_plan.md)**: Initial testing strategy covering the first 247 tests
+- **[`plans/testing_expansion_plan.md`](plans/testing_expansion_plan.md)**: Testing roadmap and Phase 1 completion report
 
 ---

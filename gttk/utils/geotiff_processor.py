@@ -193,10 +193,10 @@ def _retrieve_projection_info(ds: gdal.Dataset, srs: osr.SpatialReference) -> Di
     raster_type = metadata.get('AREA_OR_POINT', 'Area').lower()
     info['raster_type'] = 'PixelIsArea' if raster_type == 'area' else 'PixelIsPoint'
     
-    # CS types
-    info['is_geographic'] = srs.IsGeographic()
-    info['is_projected'] = srs.IsProjected()
-    info['is_compound'] = srs.IsCompound()
+    # CS types - convert to bool (GDAL returns 1/0)
+    info['is_geographic'] = bool(srs.IsGeographic())
+    info['is_projected'] = bool(srs.IsProjected())
+    info['is_compound'] = bool(srs.IsCompound())
     
     # Geographic CS (store name and code separately)
     if srs.IsGeographic() or srs.IsProjected():
@@ -598,7 +598,9 @@ def determine_decimal_precision(ds: gdal.Dataset, sample_size: int = 10000) -> U
     for i in range(ds.RasterCount):
         band = ds.GetRasterBand(i + 1)
         precisions.append(calculate_band_precision(band, sample_size))
-        
+    
+    if len(precisions) == 0:
+        return 0
     if len(precisions) == 1:
         return precisions[0]
     return precisions
@@ -1315,27 +1317,49 @@ def is_nodata_valid(nodata: float, dtype: str) -> bool:
         # NaN is always valid for floating-point types
         return 'Float' in dtype
     
-    if 'Float32' in dtype:
+    if dtype == 'Float32':
         finfo = np.finfo(np.float32)
-        return bool(abs(nodata) < finfo.max)
-    elif 'Float64' in dtype:
+        # Suppress overflow warnings when comparing very large values
+        with np.errstate(over='ignore', invalid='ignore'):
+            try:
+                return bool(abs(nodata) < finfo.max)
+            except (OverflowError, TypeError):
+                # Value too large for Float32
+                return False
+    elif dtype == 'Float64':
         finfo = np.finfo(np.float64)
-        return bool(abs(nodata) < finfo.max)
-    elif 'Int16' in dtype:
+        # Suppress overflow warnings when comparing very large values
+        with np.errstate(over='ignore', invalid='ignore'):
+            try:
+                return bool(abs(nodata) < finfo.max)
+            except (OverflowError, TypeError):
+                # Value too large for Float64
+                return False
+    elif dtype == 'Int16':
         iinfo = np.iinfo(np.int16)
         return bool(iinfo.min <= nodata <= iinfo.max)
-    elif 'Int32' in dtype:
+    elif dtype == 'Int32':
         iinfo = np.iinfo(np.int32)
         return bool(iinfo.min <= nodata <= iinfo.max)
-    elif 'UInt16' in dtype:
+    elif dtype == 'UInt16':
+        # For unsigned types, explicitly check for negative values
+        # and ensure value is within [0, 65535]
+        if nodata < 0:
+            return False
         iinfo = np.iinfo(np.uint16)
-        return bool(iinfo.min <= nodata <= iinfo.max)
-    elif 'UInt32' in dtype:
+        return bool(nodata <= iinfo.max)
+    elif dtype == 'UInt32':
+        # For unsigned types, explicitly check for negative values
+        if nodata < 0:
+            return False
         iinfo = np.iinfo(np.uint32)
-        return bool(iinfo.min <= nodata <= iinfo.max)
-    elif 'Byte' in dtype:
+        return bool(nodata <= iinfo.max)
+    elif dtype == 'Byte':
+        # Byte is unsigned (0-255)
+        if nodata < 0:
+            return False
         iinfo = np.iinfo(np.uint8)
-        return bool(iinfo.min <= nodata <= iinfo.max)
+        return bool(nodata <= iinfo.max)
     
     # Unknown type, assume valid
     return True

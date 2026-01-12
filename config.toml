@@ -26,3 +26,63 @@ cache_ttl_seconds = 3600
 # Logging Configuration
 level = "INFO"
 file = "gttk.log"
+
+[statistics]
+# === Statistics Configuration ===
+# The system automatically selects fast (in-memory) or blocked (chunked) processing
+# based on file size and available RAM. All settings below are configurable.
+
+# Maximum pixels per band for fast path (0 = auto-detect from RAM)
+# Fast path loads entire image into memory for optimal performance
+# Blocked path processes in chunks for memory-constrained scenarios
+# Set to 0 for automatic detection based on 25% of available RAM
+# Example values:
+#   0            # Auto-detect (default, recommended)
+#   268435456    # 16,384² pixels (conservative for 16GB systems)
+#   1073741824   # 32,768² pixels (high-memory systems)
+max_pixels_fast_path = 0
+
+# Block size for large file processing [height, width] in pixels
+# Larger blocks = fewer I/O operations but more memory per block
+# Smaller blocks = more I/O operations but less memory required
+# Default: [4096, 4096] = 16.7MP blocks (~67MB for Float32 data, safe for 16GB RAM)
+block_size = [4096, 4096]
+
+# Force specific strategy ("auto", "fast", or "blocked")
+# Use this to override automatic selection for testing/debugging
+# "auto" = automatic selection based on file size and available RAM (default)
+# "fast" = always use fast path (may cause memory errors on large files)
+# "blocked" = always use blocked path (slower but works for any size)
+force_strategy = "auto"
+
+# === Block Caching ===
+
+# Cache alpha band blocks (reduces redundant I/O)
+# When enabled, alpha band blocks are read once and reused for all color bands
+# Typical speedup: 1.3-1.5x for RGBA imagery
+cache_alpha_blocks = true
+
+# Cache transparency mask blocks (reduces redundant I/O)
+# When enabled, transparency mask blocks are read once per block position
+# Applies to files with IFD #1 transparency masks
+cache_transparency_masks = true
+
+# Threshold for detecting strictly binary alpha (0 or max only)
+# Percentage of pixels that must be 0 or max to consider binary
+# Default: 0.999 (99.9% binary pixels)
+alpha_binary_threshold = 0.999
+
+# Threshold for near-binary alpha with compression artifacts
+# Default: 0.99 (99% binary pixels, but some artifacts present)
+alpha_near_binary_threshold = 0.99
+
+# Treat near-binary alpha as binary mask (apply tolerance)?
+# If true, values near 0 or 255 are treated as binary with tolerance
+# If false, calculate full statistics even for near-binary
+treat_near_binary_as_mask = true
+
+# Maximum tolerance for artifact correction in near-binary alpha
+# Values in range [0, tolerance] treated as 0 (transparent)
+# Values in range [255-tolerance, 255] treated as 255 (opaque)
+# Default: 5 (handles common JPEG artifacts)
+alpha_artifact_tolerance = 5

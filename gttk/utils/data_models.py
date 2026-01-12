@@ -813,7 +813,7 @@ class StatisticsBand:
             ("Maximum", "maximum", True),
             ("Mean", "mean", True),
             ("Std Dev", "std_dev", True),
-            ("Median", "median", True),
+            ("Median", "median", False),
         ]
     
     def range(self) -> Optional[float]:

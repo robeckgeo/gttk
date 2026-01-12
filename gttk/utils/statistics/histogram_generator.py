@@ -79,10 +79,11 @@ def generate_histogram_base64(stats_data: Dict[str, Any], file_name: str, figure
                 rgb_bands.append((i, counts, bins, name))
         
         # Determine if byte data for x-axis limits (check RGB bands only)
+        # Note: Byte data histogram bins now go from 0 to 255 (not 0 to 256)
         is_byte_data = False
         if rgb_bands:
             is_byte_data = all(
-                bins[0] == 0 and bins[-1] == 256
+                bins[0] == 0 and bins[-1] == 255
                 for _, _, bins, _ in rgb_bands if len(bins) > 0
             )
 
@@ -99,7 +100,8 @@ def generate_histogram_base64(stats_data: Dict[str, Any], file_name: str, figure
                 counts = np.array(counts)
                 bin_edges = np.array(bin_edges)
                 
-                color = '#808080'  # Gray for alpha
+                # Use ColorManager for consistent color assignment with statistics table
+                color = color_manager.get_color(i, band_name)
                 
                 # Convert to density
                 bin_widths = np.diff(bin_edges)
@@ -183,15 +185,21 @@ def generate_histogram_base64(stats_data: Dict[str, Any], file_name: str, figure
             patch.set_edgecolor(edge_color)
             patch.set_linewidth(1.5)
         
-        # Set x-axis limits for byte data
-        if is_byte_data:
-            ax1.set_xlim(0, 256)
-            if ax2:
-                ax2.set_xlim(0, 256)
-        
+        # Perform all layout operations first
         fig.tight_layout()
-        plt.title(file_name, fontsize=10, weight='bold')
+        ax1.set_title(file_name, fontsize=10, weight='bold')  # Use axes method instead of plt.title()
         plt.subplots_adjust(top=0.95)  # remove whitespace above chart
+        
+        # Set x-axis limits for byte data AFTER all layout operations
+        # This ensures no subsequent layout operation can re-trigger autoscaling
+        if is_byte_data:
+            # Set limits on both axes to match the data range (0-255)
+            ax1.set_xlim(0, 255)
+            ax1.autoscale(enable=False, axis='x')  # Lock x-axis to prevent matplotlib from adding margins
+            
+            if ax2:
+                ax2.set_xlim(0, 255)
+                ax2.autoscale(enable=False, axis='x')  # Lock x-axis to prevent matplotlib from adding margins
 
         buf = io.BytesIO()
         fig.savefig(buf, format='png')

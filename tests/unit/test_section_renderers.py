@@ -145,8 +145,8 @@ class TestMarkdownRendererTilingComparison:
         assert "## Tiling and Overviews" in output
         assert "### Baseline" in output
         assert "### Comparison" in output
-        # Empty tiles show a message instead of empty table
-        assert "*No tiling information available*" in output
+        # Empty tiles show "This file is not tiled." message
+        assert "This file is not tiled." in output
     
     def test_render_comparison_tiling_custom_title(self):
         """Test rendering with custom title override."""
