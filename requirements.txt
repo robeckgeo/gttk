@@ -3,7 +3,7 @@
 gdal>=3.11
 
 # Report generation dependencies
-python>=3.14
+python>=3.12
 lxml>=5.3.1
 matplotlib>=3.10.0
 mistune>=3.0.0

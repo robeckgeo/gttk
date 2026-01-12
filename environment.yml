@@ -2,7 +2,7 @@ name: gttk
 channels:
   - conda-forge
 dependencies:
-  - python>=3.14
+  - python>=3.12
   - gdal>=3.11
   - lxml
   - matplotlib
