@@ -4,7 +4,7 @@
 # Project: GeoTIFF ToolKit (GTTK)
 # Author: Eric Robeck <robeckgeo@gmail.com>
 #
-# Copyright (c) 2025, Eric Robeck
+# Copyright (c) 2026, Eric Robeck
 # Licensed under the MIT License
 # ******************************************************************************
 
@@ -22,6 +22,7 @@ from osgeo import gdal
 from pathlib import Path
 from typing import Union
 from gttk.utils.metadata_extractor import MetadataExtractor
+from gttk.utils.path_helpers import open_file
 from gttk.utils.report_builders import ComparisonReportBuilder
 from gttk.utils.report_formatters import HtmlReportFormatter, MarkdownReportFormatter
 from gttk.utils.script_arguments import CompareArguments
@@ -62,12 +63,11 @@ def generate_report_for_datasets(
 
     base_file = os.path.basename(base_path_str)
     comp_file = os.path.basename(comp_path_str)
-    summary = _generate_report_summary(base_file, comp_file, base_name, comp_name)
 
     try:
         with MetadataExtractor(base_path_str) as base_extractor, \
              MetadataExtractor(comp_path_str) as comp_extractor:
-            
+
             builder = ComparisonReportBuilder(
                 base_extractor,
                 comp_extractor,
@@ -76,6 +76,12 @@ def generate_report_for_datasets(
                 args
             )
             builder.add_all_sections()
+
+            # Get FileComparison data for summary (stored as builder attribute)
+            file_comparison = builder.file_comparison
+
+            # Generate summary with FileComparison data
+            summary = _generate_report_summary(base_file, comp_file, base_name, comp_name, file_comparison)
 
             comp_file = Path(comp_path_str)
 
@@ -131,13 +137,13 @@ def generate_report_for_datasets(
             return None
 
         # Open report if requested
-        open_report = getattr(args, 'open_report', False)
-        if open_report:
+        should_open = getattr(args, 'open_report', False)
+        if should_open:
             try:
-                os.startfile(report_path)
-                logger.info(f"Opening report: {report_path}")
+                open_file(report_path)
+                logger.info(f"Opened report: {report_path}")
             except Exception as e:
-                logger.warning(f"Could not automatically open the report: {e}")
+                logger.warning(f"Could not open report: {e}")
         
         return report_path
         
@@ -145,29 +151,41 @@ def generate_report_for_datasets(
         logger.exception("Failed to generate comparison report")
         return None
 
-def _generate_report_summary(base_file: str, comp_file: str, base_name: str, comp_name: str) -> str:
+def _generate_report_summary(base_file: str, comp_file: str, base_name: str, comp_name: str,
+                            file_comparison: Optional['FileComparison'] = None) -> str:
     """
-    Generate a simple report summary section for comparison reports.
+    Generate report summary section for comparison reports with FileComparison table.
 
     Args:
         base_file: Name of the baseline GeoTIFF file
         comp_file: Name of the comparison GeoTIFF file
         base_name: Display label for the baseline file (e.g., 'Input File')
         comp_name: Display label for the comparison file (e.g., 'Output File')
+        file_comparison: Optional FileComparison dataclass with comparison data
 
     Returns:
-        Markdown-formatted summary section placed above all other sections
+        Markdown-formatted summary section with FileComparison table
     """
+    from gttk.utils.section_renderers import MarkdownRenderer
 
-    # Build summary
+    # Build summary header
     current_date_str = datetime.now().strftime('%Y-%m-%d')
     lines = [
         "## Report Summary\n",
         f"**Report Date:** {current_date_str}  ",
         f"**{base_name}:** {base_file}  ",
         f"**{comp_name}:** {comp_file}  ",
+        ""  # Blank line before FileComparison table
     ]
-    
+
+    # Add FileComparison table if available
+    if file_comparison:
+        renderer = MarkdownRenderer()
+        file_comparison_content = renderer.render_file_comparison(file_comparison)
+        lines.append(file_comparison_content)
+    else:
+        lines.append("_Comparison table could not be generated._")
+
     return "\n".join(lines)
 
 def compare_compression(args: CompareArguments):

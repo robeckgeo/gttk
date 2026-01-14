@@ -4,7 +4,7 @@
 # Project: GeoTIFF ToolKit (GTTK)
 # Author: Eric Robeck <robeckgeo@gmail.com>
 #
-# Copyright (c) 2025, Eric Robeck
+# Copyright (c) 2026, Eric Robeck
 # Licensed under the MIT License
 # ******************************************************************************
 
@@ -44,7 +44,7 @@ from gttk.utils.exceptions import CSVLoadError, OptimizationError
 from gttk.utils.geotiff_processor import calculate_compression_efficiency, determine_decimal_precision
 from gttk.utils.log_helpers import shutdown_logger, init_arcpy, ArcpyLogHandler
 from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
-from gttk.utils.path_helpers import get_geotiff_files
+from gttk.utils.path_helpers import get_geotiff_files, open_file
 from gttk.utils.script_arguments import TestArguments, OptimizeArguments
 from gttk.utils.validate_cloud_optimized_geotiff import validate as validate_cog
 
@@ -1324,11 +1324,10 @@ def test_compression(args: TestArguments):
 
         if args.open_report:
             try:
-                logger.info(f"Attempting to open report: {args.output_path}")
-                os.startfile(args.output_path)
-                logger.info(f"Report opened: {args.output_path}")
+                open_file(args.output_path)
+                logger.info(f"Opened report: {args.output_path}")
             except Exception as e:
-                logger.warning(f"Could not automatically open the report: {e}")
+                logger.warning(f"Could not open report: {e}")
 
         logger.info("Exiting test_compression with success code 0.")
         return 0

@@ -4,7 +4,7 @@
 # Project: GeoTIFF ToolKit (GTTK)
 # Author: Eric Robeck <robeckgeo@gmail.com>
 #
-# Copyright (c) 2025, Eric Robeck
+# Copyright (c) 2026, Eric Robeck
 # Licensed under the MIT License
 # ******************************************************************************
 
@@ -17,6 +17,8 @@ directory structures, and locating associated XML metadata files based on
 common naming conventions.
 """
 import os
+import sys
+import subprocess
 from pathlib import Path
 import logging
 from gttk.utils.geokey_parser import is_geotiff
@@ -25,6 +27,93 @@ from typing import List, Optional
 logger = logging.getLogger(__name__)
 
 SUPPORTED_EXTENSIONS = ('.tif', '.tiff')
+
+def _is_wsl() -> bool:
+    """
+    Detect if running in Windows Subsystem for Linux (WSL).
+
+    Returns:
+        bool: True if running in WSL, False otherwise
+    """
+    try:
+        with open('/proc/version', 'r') as f:
+            return 'microsoft' in f.read().lower()
+    except (OSError, IOError):
+        return False
+
+def _convert_wsl_path_to_windows(wsl_path: str) -> str:
+    """
+    Convert WSL Linux path to Windows path format using wslpath utility.
+
+    Args:
+        wsl_path: Linux path in WSL (e.g., /home/user/file.html)
+
+    Returns:
+        Windows-formatted path (e.g., \\wsl.localhost\\Ubuntu\\home\\user\\file.html)
+    """
+    try:
+        # Use wslpath utility to convert Linux path to Windows path
+        result = subprocess.run(
+            ['wslpath', '-w', wsl_path],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=5
+        )
+        windows_path = result.stdout.strip()
+        return windows_path
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+        # Fallback: manually construct path
+        # Modern WSL uses wsl.localhost, older versions use wsl$
+        wsl_path = os.path.abspath(wsl_path)
+        windows_path = f"\\\\wsl.localhost\\Ubuntu{wsl_path.replace('/', '\\')}"
+        return windows_path
+
+def open_file(filename: str) -> None:
+    """
+    Open a file using the appropriate system default application.
+
+    Handles platform-specific behavior:
+    - Windows: Uses os.startfile()
+    - macOS: Uses 'open' command
+    - Linux (native): Uses xdg-open
+    - WSL: Special handling based on file type:
+        - HTML files: Opens in Windows default browser
+        - Markdown files: Opens in WSL VS Code
+        - Other files: Opens in Windows default application
+
+    Args:
+        filename: Path to the file to open
+
+    Raises:
+        Exception: If the file cannot be opened
+    """
+    filename = str(filename)  # Ensure string (handles Path objects)
+
+    if sys.platform == "win32":
+        # Native Windows
+        os.startfile(filename)
+    elif _is_wsl():
+        # Windows Subsystem for Linux
+        file_ext = Path(filename).suffix.lower()
+
+        if file_ext in ('.md', '.markdown'):
+            # Open Markdown files in WSL VS Code
+            subprocess.run(['code', filename], check=True)
+        else:
+            # Open HTML and other files in Windows default application
+            # Use PowerShell Start-Process which handles Windows paths reliably
+            windows_path = _convert_wsl_path_to_windows(filename)
+            # Use Popen to avoid waiting for the app to close
+            subprocess.Popen(
+                ['powershell.exe', '-Command', f'Start-Process "{windows_path}"'],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+    else:
+        # macOS or native Linux
+        opener = "open" if sys.platform == "darwin" else "xdg-open"
+        subprocess.run([opener, filename], check=True)
 
 def get_geotiff_files(input_path: str) -> List[str]:
     """

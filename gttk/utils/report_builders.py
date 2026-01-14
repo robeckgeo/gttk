@@ -4,7 +4,7 @@
 # Project: GeoTIFF ToolKit (GTTK)
 # Author: Eric Robeck <robeckgeo@gmail.com>
 #
-# Copyright (c) 2025, Eric Robeck
+# Copyright (c) 2026, Eric Robeck
 # Licensed under the MIT License
 # ******************************************************************************
 
@@ -40,7 +40,8 @@ from gttk.utils.data_models import (
     TiffTagsData,
     StatisticsData,
     IfdInfoData,
-    DifferencesComparison,
+    FileInfo,
+    FileComparison,
     StatisticsComparison,
     HistogramComparison,
     IfdInfoComparison,
@@ -575,25 +576,28 @@ class ComparisonReportBuilder(ReportBuilder):
         self.base_name = base_name
         self.comp_name = comp_name
         self.args = args
-        
+
+        # File comparison data (used in Report Summary, not as a separate section)
+        self.file_comparison = None
+
         # Cached statistics to avoid recomputation across sections
         self._base_stats_bands = None
         self._comp_stats_bands = None
         self._base_stats_data = None
         self._comp_stats_data = None
 
-    def add_all_sections(self, differences: Optional[DifferencesComparison] = None) -> None:
+    def add_all_sections(self, differences: Optional[FileComparison] = None) -> None:
         """
         Builds all sections for the comparison report.
 
         Args:
-            differences: Optional precomputed DifferencesComparison. If provided,
+            differences: Optional precomputed FileComparison. If provided,
                         it will be used directly; otherwise the builder will
                         compute the differences internally.
         """
         if differences is not None:
             # Backward-compatible path if caller supplies precomputed differences
-            self.add_section('differences', differences)
+            self.file_comparison = differences
         else:
             # Standard path: compute differences from datasets
             self.add_differences_section()
@@ -644,50 +648,21 @@ class ComparisonReportBuilder(ReportBuilder):
             is_comparison_cog_str += "*"
             cog_creation_failed = True
 
-        headers = ['File', 'Type', 'COG', 'Algorithm']
-        base_row = [self.base_name, base_info.data_type, is_base_cog_str, base_compression]
-        comp_row = [self.comp_name, comp_info.data_type, is_comparison_cog_str, comp_compression]
+        # Determine which conditional columns to include
+        has_quality = any(c in ['JPEG', 'YCbCr JPEG', 'JXL'] for c in [comp_compression, base_compression])
+        has_decimals = 'Float' in str(comp_info.data_type)
+        has_predictor = any(c in ['LZW', 'DEFLATE', 'ZSTD'] for c in [base_compression, comp_compression])
+        has_lerc = 'LERC' in [comp_compression, base_compression]
 
-        headers.extend(['Bands', 'Transparency'])
-        base_row.extend([base_info.bands, get_transparency_str(base_info)])
-        comp_row.extend([comp_info.bands, get_transparency_str(comp_info)])
-        
-        if any(c in ['JPEG', 'YCbCr JPEG', 'JXL'] for c in [comp_compression, base_compression]):
-            headers.append('Quality')
-            
-            # --- BASELINE QUALITY LOGIC ---
-            # Existing file, so we must estimate if JXL, or return N/A if JPEG
+        # --- Build BASE FileInfo ---
+        base_quality = None
+        if has_quality:
             base_quality = estimate_image_quality(base_ds, base_compression)
-            base_row.append(base_quality)
 
-            # --- COMPARISON QUALITY LOGIC ---
-            # If we just created this file (optimize mode), use the known args.quality
-            if isinstance(self.args, OptimizeArguments) and self.args.quality is not None and comp_compression in ['JPEG', 'JXL']:
-                comp_quality = self.args.quality
-            else:
-                # Otherwise (compare mode), estimate it from the file
-                comp_quality = estimate_image_quality(comp_ds, comp_compression)
-            
-            comp_row.append(comp_quality)
-
-        if 'Float' in str(comp_info.data_type):
-            headers.append('Decimals')
-            
-            # Helper to format decimals (int or list of ints)
-            def fmt_decimals(val):
-                if isinstance(val, list):
-                    return str(val)
-                return str(val)
-                
-            base_row.append(fmt_decimals(base_decimals))
-            comp_row.append(fmt_decimals(comp_decimals))
-
-        if any(c in ['LZW', 'DEFLATE', 'ZSTD'] for c in [base_compression, comp_compression]):
-            headers.append('Predictor')
+        base_predictor = None
+        if has_predictor:
             with TiffTagParser(base_path, tiff_file=self.base_extractor.tiff) as base_parser:
                 base_tags = base_parser.get_tags()
-            with TiffTagParser(comp_path, tiff_file=self.comp_extractor.tiff) as comp_parser:
-                comp_tags = comp_parser.get_tags()
 
             def get_predictor_val(tags: List[TiffTag]) -> int:
                 for tag in tags:
@@ -698,37 +673,83 @@ class ComparisonReportBuilder(ReportBuilder):
             base_pred_val = get_predictor_val(base_tags)
             if base_compression in ['LZW', 'DEFLATE', 'ZSTD']:
                 base_predictor = PREDICTOR_ABBREV_MAP.get(base_pred_val, "")
+
+        base_lerc_error = None
+        if has_lerc:
+            base_lerc_error = get_lerc_max_z_error(base_ds)
+
+        base_ratio = 100 / (100 - base_efficiency)
+        base_file = FileInfo(
+            name=self.base_name,
+            data_type=base_info.data_type or "Unknown",
+            is_cog=is_base_cog_str,
+            is_bigtiff="Yes" if base_info.is_bigtiff else "No",
+            algorithm=base_compression,
+            bands=base_info.bands,
+            transparency=get_transparency_str(base_info),
+            quality=base_quality,
+            decimals=base_decimals if has_decimals else None,
+            predictor=base_predictor,
+            max_z_error=base_lerc_error,
+            size_mb=f"{base_size_mb:,.2f}",
+            space_saving=f"{base_efficiency:.2f}%",
+            ratio=f"{base_ratio:.2f}x"
+        )
+
+        # --- Build COMP FileInfo ---
+        comp_quality = None
+        if has_quality:
+            # If we just created this file (optimize mode), use the known args.quality
+            if isinstance(self.args, OptimizeArguments) and self.args.quality is not None and comp_compression in ['JPEG', 'JXL']:
+                comp_quality = self.args.quality
             else:
-                base_predictor = ""
-            
+                # Otherwise (compare mode), estimate it from the file
+                comp_quality = estimate_image_quality(comp_ds, comp_compression)
+
+        comp_predictor = None
+        if has_predictor:
+            with TiffTagParser(comp_path, tiff_file=self.comp_extractor.tiff) as comp_parser:
+                comp_tags = comp_parser.get_tags()
+
+            def get_predictor_val(tags: List[TiffTag]) -> int:
+                for tag in tags:
+                    if tag.code == 317:
+                        return tag.value if isinstance(tag.value, int) else 1
+                return 1
+
             comp_pred_val = get_predictor_val(comp_tags)
             if comp_compression in ['LZW', 'DEFLATE', 'ZSTD']:
                 comp_predictor = PREDICTOR_ABBREV_MAP.get(comp_pred_val, "")
-            else:
-                comp_predictor = ""
-                
-            base_row.append(base_predictor)
-            comp_row.append(comp_predictor)
 
-        if 'LERC' in [comp_compression, base_compression]:
-            headers.append('Max Z Error')
-            base_row.append(get_lerc_max_z_error(base_ds))
-            comp_row.append(get_lerc_max_z_error(comp_ds))
+        comp_lerc_error = None
+        if has_lerc:
+            comp_lerc_error = get_lerc_max_z_error(comp_ds)
 
-        headers.extend(['Size (MB)', 'Space Savings', 'Ratio'])
-        base_ratio = 100 / (100 - base_efficiency)
         comp_ratio = 100 / (100 - comp_efficiency)
-        base_row.extend([f"{base_size_mb:,.2f}", f"{base_efficiency:.2f}%", f"{base_ratio:.2f}x"])
-        comp_row.extend([f"{comp_size_mb:,.2f}", f"{comp_efficiency:.2f}%", f"{comp_ratio:.2f}x"])
+        comp_file = FileInfo(
+            name=self.comp_name,
+            data_type=comp_info.data_type or "Unknown",
+            is_cog=is_comparison_cog_str,
+            is_bigtiff="Yes" if comp_info.is_bigtiff else "No",
+            algorithm=comp_compression,
+            bands=comp_info.bands,
+            transparency=get_transparency_str(comp_info),
+            quality=comp_quality,
+            decimals=comp_decimals if has_decimals else None,
+            predictor=comp_predictor,
+            max_z_error=comp_lerc_error,
+            size_mb=f"{comp_size_mb:,.2f}",
+            space_saving=f"{comp_efficiency:.2f}%",
+            ratio=f"{comp_ratio:.2f}x"
+        )
 
         size_difference_mb = comp_size_mb - base_size_mb
         size_difference_pct = (size_difference_mb / base_size_mb * 100) if base_size_mb > 0 else 0
         efficiency_difference = comp_efficiency - base_efficiency
 
-        differences_data = DifferencesComparison(
-            headers=headers,
-            base_row=base_row,
-            comp_row=comp_row,
+        file_comparison = FileComparison(
+            base_file=base_file,
+            comp_file=comp_file,
             base_name=self.base_name,
             comp_name=self.comp_name,
             base_size_mb=base_size_mb,
@@ -740,7 +761,8 @@ class ComparisonReportBuilder(ReportBuilder):
             cog_errors=out_err if cog_creation_failed else None,
             cog_warnings=out_warn if cog_creation_failed else None
         )
-        self.add_section('differences', differences_data)
+        # Store as attribute (used in Report Summary, not as a separate section)
+        self.file_comparison = file_comparison
     
     def _ensure_stats_cached(self) -> None:
         """

@@ -4,7 +4,7 @@
 # Project: GeoTIFF ToolKit (GTTK)
 # Author: Eric Robeck <robeckgeo@gmail.com>
 #
-# Copyright (c) 2025, Eric Robeck
+# Copyright (c) 2026, Eric Robeck
 # Licensed under the MIT License
 # ******************************************************************************
 
@@ -18,19 +18,18 @@ band statistics and COG validation.
 """
 
 import logging
-import os
 from pathlib import Path
 from datetime import datetime, timezone
 from osgeo import gdal
-from gttk.utils.geotiff_processor import calculate_compression_efficiency, check_transparency, get_uncompressed_size
+from gttk.utils.contexts import banner_context, output_format_context, xml_type_context
+from gttk.utils.log_helpers import setup_logger
 from gttk.utils.metadata_extractor import MetadataExtractor
+from gttk.utils.path_helpers import open_file
 from gttk.utils.report_builders import MetadataReportBuilder
 from gttk.utils.report_formatters import HtmlReportFormatter, MarkdownReportFormatter
-from gttk.utils.contexts import banner_context, output_format_context, xml_type_context
 from gttk.utils.script_arguments import ReadArguments
 from gttk.utils.section_registry import get_section_ids_from_args, filter_sections_for_page
 from gttk.utils.statistics import write_pam_xml, build_pam_data_from_stats
-from gttk.utils.log_helpers import setup_logger
 
 # --- Configuration & Setup ---
 gdal.SetConfigOption('GDAL_NUM_THREADS', 'ALL_CPUS')
@@ -57,18 +56,31 @@ def get_report_path(input_path: str, suffix: str, format: str) -> str:
 
 def _generate_report_summary(input_path: str) -> str:
     """
-    Generate report summary section with file information.
-    
+    Generate report summary section with file information and FileInfo table.
+
     Args:
         input_path: Path to GeoTIFF file
-        
+
     Returns:
-        Markdown-formatted summary section
+        Markdown-formatted summary section with FileInfo table
     """
+    from gttk.utils.geotiff_processor import (
+        get_transparency_str,
+        calculate_compression_efficiency,
+        read_geotiff,
+        determine_decimal_precision,
+        estimate_image_quality,
+        get_lerc_max_z_error
+    )
+    from gttk.utils.validate_cloud_optimized_geotiff import validate as validate_cog
+    from gttk.utils.data_models import FileInfo
+    from gttk.utils.section_renderers import MarkdownRenderer
+    from gttk.utils.tiff_tag_parser import TiffTagParser
+    from gttk.utils.metadata_extractor import PREDICTOR_ABBREV_MAP
+
     filepath = Path(input_path)
     file_stat = filepath.stat()
-    file_size_mb = file_stat.st_size / (1024 * 1024)
-    
+
     # Date created
     try:
         creation_time = getattr(file_stat, 'st_birthtime', file_stat.st_ctime)
@@ -77,72 +89,105 @@ def _generate_report_summary(input_path: str) -> str:
     except Exception:
         creation_time = getattr(file_stat, 'st_birthtime', file_stat.st_ctime)
         date_created_str = datetime.fromtimestamp(creation_time).strftime('%Y-%m-%d %H:%M:%S')
-    
+
     # Date modified
     try:
         dt_modified_utc = datetime.fromtimestamp(file_stat.st_mtime, timezone.utc)
         date_modified_str = dt_modified_utc.strftime('%Y-%m-%d %H:%M:%S UTC')
     except Exception:
         date_modified_str = datetime.fromtimestamp(file_stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
-    
-    # Get compression info
-    uncompressed_size_mb_str = "N/A"
-    compression_efficiency_str = "N/A"
-    has_mask_str = "N/A"
-    
-    try:
-        gdal.PushErrorHandler('CPLQuietErrorHandler')
-        ds = gdal.Open(str(filepath), gdal.GA_ReadOnly)
-        gdal.PopErrorHandler()
-        
-        if ds and ds.RasterCount > 0:
-            # Check transparency
-            transparency_info = check_transparency(ds)
-            if not transparency_info:
-                has_mask_str = "No"
-            else:
-                parts = []
-                if transparency_info.get('Alpha'):
-                    parts.append("Alpha Band")
-                if transparency_info.get('Mask'):
-                    parts.append("Internal Mask")
-                if transparency_info.get('NoData'):
-                    parts.append(f"NoData ({transparency_info['NoData']})")
-                has_mask_str = f"Yes – {', '.join(parts)}"
-            
-            # Get uncompressed size
-            uncompressed_size_bytes = get_uncompressed_size(str(filepath))
-            if uncompressed_size_bytes > 0:
-                uncompressed_size_mb = uncompressed_size_bytes / (1024 * 1024)
-                uncompressed_size_mb_str = f"{uncompressed_size_mb:.1f} MB"
-                
-                efficiency = calculate_compression_efficiency(str(filepath))
-                ratio = 100 / (100 - efficiency)
-                compression_efficiency_str = f"{efficiency:.2f}% ({ratio:.2f}x)"
-        
-        ds = None
-    except Exception as e:
-        logger.debug(f"Error calculating compression info: {e}")
-    
-    # Build summary
+
+    # Build text summary (without removed rows)
     current_date_str = datetime.now().strftime('%Y-%m-%d')
     lines = [
         "## Report Summary\n",
         f"**Report Date:** {current_date_str}  ",
         f"**File Name:** {filepath.name}  ",
-        f"**File Size on Disk:** {file_size_mb:.1f} MB  ",
-        f"**Uncompressed Size:** {uncompressed_size_mb_str}  "
-    ]
-    
-    if compression_efficiency_str != "N/A":
-        lines.append(f"**Compression Efficiency:** {compression_efficiency_str}  ")
-    
-    lines.extend([
-        f"**Transparency:** {has_mask_str}  ",
         f"**Date Created:** {date_created_str}  ",
         f"**Date Modified:** {date_modified_str}  ",
-    ])
-    
+        ""  # Blank line before FileInfo table
+    ]
+
+    # Build FileInfo table
+    try:
+        gdal.PushErrorHandler('CPLQuietErrorHandler')
+        ds = gdal.Open(str(filepath), gdal.GA_ReadOnly)
+        gdal.PopErrorHandler()
+
+        if ds and ds.RasterCount > 0:
+            # Get metadata for FileInfo
+            info = read_geotiff(ds)
+            file_size_bytes = filepath.stat().st_size
+            size_mb = file_size_bytes / (1024 * 1024)
+            efficiency = calculate_compression_efficiency(str(filepath))
+            ratio = 100 / (100 - efficiency) if efficiency != 100 else 0
+
+            compression = ds.GetMetadataItem('COMPRESSION', 'IMAGE_STRUCTURE') or 'NONE'
+            decimals = determine_decimal_precision(ds)
+
+            _, cog_errors, _ = validate_cog(ds, full_check=True)
+            is_cog_str = "Yes" if not cog_errors else "No"
+            is_bigtiff_str = "Yes" if info.is_bigtiff else "No"
+
+            # Determine conditional columns
+            has_quality = compression in ['JPEG', 'YCbCr JPEG', 'JXL']
+            has_decimals = 'Float' in str(info.data_type)
+            has_predictor = compression in ['LZW', 'DEFLATE', 'ZSTD']
+            has_lerc = 'LERC' in compression
+
+            # Get quality if applicable
+            quality = None
+            if has_quality:
+                quality = estimate_image_quality(ds, compression)
+
+            # Get predictor if applicable
+            predictor = None
+            if has_predictor:
+                with TiffTagParser(str(filepath)) as parser:
+                    tags = parser.get_tags()
+
+                def get_predictor_val(tags):
+                    for tag in tags:
+                        if tag.code == 317:
+                            return tag.value if isinstance(tag.value, int) else 1
+                    return 1
+
+                pred_val = get_predictor_val(tags)
+                predictor = PREDICTOR_ABBREV_MAP.get(pred_val, "")
+
+            # Get LERC error if applicable
+            lerc_error = None
+            if has_lerc:
+                lerc_error = get_lerc_max_z_error(ds)
+
+            # Create FileInfo (without 'File' column for single-file report)
+            file_info = FileInfo(
+                name=filepath.name,  # Not used since include_name=False
+                data_type=info.data_type or "Unknown",
+                is_cog=is_cog_str,
+                is_bigtiff=is_bigtiff_str,
+                algorithm=compression,
+                bands=info.bands,
+                transparency=get_transparency_str(info),
+                quality=quality,
+                decimals=decimals if has_decimals else None,
+                predictor=predictor,
+                max_z_error=lerc_error,
+                size_mb=f"{size_mb:,.2f}",
+                space_saving=f"{efficiency:.2f}%",
+                ratio=f"{ratio:.2f}x"
+            )
+
+            # Render FileInfo table (without 'File' column)
+            renderer = MarkdownRenderer()
+            file_info_table = renderer.render_file_info(file_info, include_name=False)
+            lines.append(file_info_table)
+
+        ds = None
+    except Exception as e:
+        logger.debug(f"Error generating FileInfo table: {e}")
+        lines.append("_File information table could not be generated._")
+
     return "\n".join(lines)
 
 
@@ -290,7 +335,7 @@ def read_metadata(args: ReadArguments):
     # Open report if requested
     if args.open_report:
         try:
-            os.startfile(output_path)
+            open_file(output_path)
             logger.info(f"Opened report: {output_path}")
         except Exception as e:
             logger.warning(f"Could not open report: {e}")
