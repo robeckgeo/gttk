@@ -4,7 +4,7 @@
 # Project: GeoTIFF ToolKit (GTTK)
 # Author: Eric Robeck <robeckgeo@gmail.com>
 #
-# Copyright (c) 2025, Eric Robeck
+# Copyright (c) 2026, Eric Robeck
 # Licensed under the MIT License
 # ******************************************************************************
 

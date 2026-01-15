@@ -4,7 +4,7 @@
 # Project: GeoTIFF ToolKit (GTTK)
 # Author: Eric Robeck <robeckgeo@gmail.com>
 #
-# Copyright (c) 2025, Eric Robeck
+# Copyright (c) 2026, Eric Robeck
 # Licensed under the MIT License
 # ******************************************************************************
 
@@ -42,7 +42,8 @@ Wrapper classes (*Data suffix):
     IfdInfoData: Full multi-IFD table data
 
 Comparison container classes (*Comparison suffix):
-    DifferencesComparison: Comparison data for compression analysis
+    FileInfo: Single-file information for comparison tables
+    FileComparison: Comparison data for compression analysis
     HistogramComparison: Comparison data for histogram analysis
     StatisticsComparison: Comparison data for statistics analysis
     IfdInfoComparison: Comparison data for IFD analysis
@@ -103,6 +104,7 @@ class GeoTiffInfo:
     has_alpha: bool = False
     transparency_info: Dict[str, Any] = field(default_factory=dict)
     projection_info: Optional[Dict[str, Any]] = None
+    is_bigtiff: bool = False
     native_bbox: Optional[Dict[str, float]] = None
     geographic_corners: Optional[Dict[str, Tuple[float, float]]] = None
     cached_projjson: Optional[str] = None
@@ -1362,18 +1364,148 @@ class IfdInfoData:
 # ============================================================================
 
 @dataclass
-class DifferencesComparison:
+class FileInfo:
+    """
+    File information for a single GeoTIFF file.
+
+    Encapsulates metadata for a single file that can be rendered as a table row
+    in comparison reports or as a standalone table in metadata reports.
+
+    Attributes:
+        name: Display name/label for the file
+        data_type: GDAL data type ('Byte', 'Int16', 'Float32', etc.)
+        is_cog: Whether the file is a valid Cloud-Optimized GeoTIFF
+        is_bigtiff: Whether the file uses BigTIFF format
+        algorithm: Compression algorithm name
+        bands: Number of bands
+        transparency: Transparency description (e.g., 'Alpha', 'Mask', 'None')
+        quality: JPEG/JXL quality setting (optional, only for lossy formats)
+        decimals: Decimal precision for float types (optional, can be int or list)
+        predictor: Predictor setting for LZW/DEFLATE/ZSTD (optional)
+        max_z_error: Max Z error for LERC compression (optional)
+        size_mb: File size in megabytes
+        space_saving: Compression efficiency as percentage string
+        ratio: Compression ratio string
+
+    Example:
+        >>> info = FileInfo(
+        ...     name='Input',
+        ...     data_type='Float32',
+        ...     is_cog=True,
+        ...     is_bigtiff=False,
+        ...     algorithm='DEFLATE',
+        ...     bands=3,
+        ...     transparency='None',
+        ...     predictor='Horizontal',
+        ...     size_mb=25.5,
+        ...     space_saving='75.00%',
+        ...     ratio='4.00x'
+        ... )
+    """
+    name: str
+    data_type: str
+    is_cog: str  # "Yes" or "No"
+    is_bigtiff: str  # "Yes" or "No"
+    algorithm: str
+    bands: int
+    transparency: str
+    quality: Optional[Any] = None
+    decimals: Optional[Union[int, List[int]]] = None
+    predictor: Optional[str] = None
+    max_z_error: Optional[str] = None
+    size_mb: Optional[str] = None
+    space_saving: Optional[str] = None
+    ratio: Optional[str] = None
+
+    def get_headers(self, include_name: bool = True) -> List[str]:
+        """
+        Get applicable column headers based on which fields are set.
+
+        Args:
+            include_name: Whether to include the 'File' column (False for single-file reports)
+
+        Returns:
+            List of column header strings
+        """
+        headers = []
+        if include_name:
+            headers.append('File')
+        headers.extend(['Type', 'COG', 'BigTIFF', 'Algorithm', 'Bands', 'Transparency'])
+
+        if self.quality is not None:
+            headers.append('Quality')
+        if self.decimals is not None:
+            headers.append('Decimals')
+        if self.predictor is not None:
+            headers.append('Predictor')
+        if self.max_z_error is not None:
+            headers.append('Max Z Error')
+        if self.size_mb is not None:
+            headers.extend(['Size (MB)', 'Space Savings', 'Ratio'])
+
+        return headers
+
+    def to_row(self, headers: List[str]) -> List[Any]:
+        """
+        Generate table row values matching the given headers.
+
+        Args:
+            headers: List of column headers to match
+
+        Returns:
+            List of values corresponding to each header
+        """
+        row = []
+        for header in headers:
+            if header == 'File':
+                row.append(self.name)
+            elif header == 'Type':
+                row.append(self.data_type)
+            elif header == 'COG':
+                row.append(self.is_cog)
+            elif header == 'BigTIFF':
+                row.append(self.is_bigtiff)
+            elif header == 'Algorithm':
+                row.append(self.algorithm)
+            elif header == 'Bands':
+                row.append(self.bands)
+            elif header == 'Transparency':
+                row.append(self.transparency)
+            elif header == 'Quality':
+                row.append(self.quality if self.quality is not None else '')
+            elif header == 'Decimals':
+                # Format decimals (int or list of ints)
+                if isinstance(self.decimals, list):
+                    row.append(str(self.decimals))
+                else:
+                    row.append(str(self.decimals) if self.decimals is not None else '')
+            elif header == 'Predictor':
+                row.append(self.predictor if self.predictor is not None else '')
+            elif header == 'Max Z Error':
+                row.append(self.max_z_error if self.max_z_error is not None else '')
+            elif header == 'Size (MB)':
+                row.append(self.size_mb if self.size_mb is not None else '')
+            elif header == 'Space Savings':
+                row.append(self.space_saving if self.space_saving is not None else '')
+            elif header == 'Ratio':
+                row.append(self.ratio if self.ratio is not None else '')
+            else:
+                row.append('')
+        return row
+
+
+@dataclass
+class FileComparison:
     """
     Comparison data for compression analysis reports.
-    
+
     Encapsulates all metrics needed to compare two GeoTIFF files, typically
     used for compression comparison reports. Includes file sizes, compression
     efficiency, COG status, and format details.
-    
+
     Attributes:
-        headers: Column headers for the comparison table
-        base_row: Data values for the baseline/input file
-        comp_row: Data values for the comparison/output file
+        base_file: FileInfo for the baseline/input file
+        comp_file: FileInfo for the comparison/output file
         base_name: Display name for baseline file (default: 'Baseline')
         comp_name: Display name for comparison file (default: 'Comparison')
         base_size_mb: Baseline file size in megabytes
@@ -1384,23 +1516,23 @@ class DifferencesComparison:
         cog_creation_failed: Whether COG creation was requested but failed
         cog_errors: List of COG validation errors
         cog_warnings: List of COG validation warnings
-    
+
     Example:
-        >>> diff = DifferencesComparison(
-        ...     headers=['File', 'Type', 'Size (MB)'],
-        ...     base_row=['Float32', '100.0'],
-        ...     comp_row=['Float32', '25.0'],
+        >>> base = FileInfo(name='Input', data_type='Float32', is_cog='Yes', is_bigtiff='No', ...)
+        >>> comp = FileInfo(name='Output', data_type='Float32', is_cog='Yes', is_bigtiff='No', ...)
+        >>> comparison = FileComparison(
+        ...     base_file=base,
+        ...     comp_file=comp,
         ...     base_size_mb=100.0,
         ...     comp_size_mb=25.0,
         ...     size_difference_mb=-75.0,
         ...     size_difference_pct=-75.0
         ... )
-        >>> diff.get_result_text()
+        >>> comparison.get_result_text()
         'Decreased by 75.00 MB (75.0% smaller).'
     """
-    headers: List[str]
-    base_row: List[Any]
-    comp_row: List[Any]
+    base_file: 'FileInfo'
+    comp_file: 'FileInfo'
     base_name: str = 'Baseline'
     comp_name: str = 'Comparison'
     base_size_mb: float = 0.0
@@ -1411,6 +1543,11 @@ class DifferencesComparison:
     cog_creation_failed: bool = False
     cog_errors: Optional[List[str]] = None
     cog_warnings: Optional[List[str]] = None
+
+    @property
+    def headers(self) -> List[str]:
+        """Get column headers from the base file (both files have same columns)."""
+        return self.base_file.get_headers(include_name=True)
     
     def get_result_text(self) -> str:
         """

@@ -4,7 +4,7 @@
 # Project: GeoTIFF ToolKit (GTTK)
 # Author: Eric Robeck <robeckgeo@gmail.com>
 #
-# Copyright (c) 2025, Eric Robeck
+# Copyright (c) 2026, Eric Robeck
 # Licensed under the MIT License
 # ******************************************************************************
 
@@ -1754,6 +1754,14 @@ def read_geotiff(ds: gdal.Dataset) -> GeoTiffInfo:
 
     transparency_info = check_transparency(ds)
 
+    # Check if file is BigTIFF format
+    is_bigtiff = False
+    try:
+        with tifffile.TiffFile(filepath) as tif:
+            is_bigtiff = tif.is_bigtiff
+    except Exception as e:
+        logger.debug(f"Could not determine BigTIFF status: {e}")
+
     return GeoTiffInfo(
         filepath=filepath, x_size=ds.RasterXSize, y_size=ds.RasterYSize, bands=bands,
         wkt_string=wkt_string, geo_transform=gt, res_x=abs(gt[1]), res_y=abs(gt[5]), srs=srs,
@@ -1761,5 +1769,5 @@ def read_geotiff(ds: gdal.Dataset) -> GeoTiffInfo:
         nodata=nodata_val, color_interp=color_interp_name, has_alpha=has_alpha_band,
         transparency_info=transparency_info, projection_info=projection_info,
         native_bbox=native_bbox, geographic_corners=geographic_corners,
-        cached_projjson=cached_projjson
+        cached_projjson=cached_projjson, is_bigtiff=is_bigtiff
     )
