@@ -4,7 +4,7 @@
 # Project: GeoTIFF ToolKit (GTTK)
 # Author: Eric Robeck <robeckgeo@gmail.com>
 #
-# Copyright (c) 2025, Eric Robeck
+# Copyright (c) 2026, Eric Robeck
 # Licensed under the MIT License
 # ******************************************************************************
 
@@ -174,15 +174,8 @@ SECTION_CONFIGS: Dict[str, SectionConfig] = {
         icon='aux',
         renderer='render_pam_metadata'
     ),
-    
+
     # Comparison report sections
-    'differences': SectionConfig(
-        id='differences',
-        title='Differences',
-        menu_name='Differences',
-        icon='differences',
-        renderer='render_differences'
-    ),
     'comparison-ifd': SectionConfig(
         id='comparison-ifd',
         title='IFDs',

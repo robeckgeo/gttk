@@ -4,7 +4,7 @@
 # Project: GeoTIFF ToolKit (GTTK)
 # Author: Eric Robeck <robeckgeo@gmail.com>
 #
-# Copyright (c) 2025, Eric Robeck
+# Copyright (c) 2026, Eric Robeck
 # Licensed under the MIT License
 # ******************************************************************************
 
@@ -33,7 +33,7 @@ from gttk.utils.data_models import (
     BoundingBox, StatisticsBand, HistogramImage, TileInfo, IfdInfo,
     WktString, JsonString, CogValidation, XmlMetadata,
     TiffTagsData, StatisticsData, IfdInfoData,
-    DifferencesComparison, IfdInfoComparison, StatisticsComparison,
+    FileInfo, FileComparison, IfdInfoComparison, StatisticsComparison,
     HistogramComparison, CogValidationComparison, TilingComparison
 )
 
@@ -1035,32 +1035,63 @@ class MarkdownRenderer(Renderer):
         """Render Precision Auxiliary Metadata (PAM) section."""
         return self._render_xml_content(data, "Precision Auxiliary Metadata (PAM)", title)
 
-    def render_differences(self, data: DifferencesComparison, title: str = "Differences") -> str:
+    def render_file_info(self, data: 'FileInfo', include_name: bool = True) -> str:
         """
-        Render differences comparison table.
-        
+        Render single-file information table.
+
+        Creates a table showing file format, COG status, compression algorithm,
+        and size metrics for a single file (used in metadata reports).
+
+        Args:
+            data: FileInfo dataclass with file metrics
+            include_name: Whether to include the 'File' column
+
+        Returns:
+            Markdown formatted table
+        """
+        lines = []
+
+        # Get headers and build table
+        headers = data.get_headers(include_name=include_name)
+        row = data.to_row(headers)
+
+        lines.append(f"| {' | '.join(headers)} |")
+        lines.append(f"| {' | '.join(['---'] * len(headers))} |")
+        lines.append(f"| {' | '.join([str(v) for v in row])} |")
+
+        return "\n".join(lines)
+
+    def render_file_comparison(self, data: 'FileComparison') -> str:
+        """
+        Render file comparison table (without section title).
+
         Creates a comparison table showing the differences between two files,
         including file format, COG status, compression algorithm, and size metrics.
-        
+        This renderer does NOT include a section header - it's meant to be embedded
+        in the Report Summary.
+
         Args:
-            data: DifferencesComparison dataclass with comparison metrics
-            title: Section title
-            
+            data: FileComparison dataclass with comparison metrics
+
         Returns:
-            Markdown formatted table with result summary
+            Markdown formatted table with result summary and optional COG failure footer
         """
-        lines = [f"## {title}", ""]
-        
-        # Build comparison table
-        lines.append(f"| {' | '.join(data.headers)} |")
-        lines.append(f"| {' | '.join(['---'] * len(data.headers))} |")
-        lines.append(f"| {' | '.join([str(v) for v in data.base_row])} |")
-        lines.append(f"| {' | '.join([str(v) for v in data.comp_row])} |")
+        lines = []
+
+        # Build comparison table from FileInfo objects
+        headers = data.headers
+        base_row = data.base_file.to_row(headers)
+        comp_row = data.comp_file.to_row(headers)
+
+        lines.append(f"| {' | '.join(headers)} |")
+        lines.append(f"| {' | '.join(['---'] * len(headers))} |")
+        lines.append(f"| {' | '.join([str(v) for v in base_row])} |")
+        lines.append(f"| {' | '.join([str(v) for v in comp_row])} |")
         lines.append("")
-        
+
         # Add result summary
         lines.append(f"**Result**: *{data.get_result_text()}*")
-        
+
         # Use the helper only if attempt to create COG failed
         if data.cog_creation_failed:
             status_lines = self._render_cog_status(
@@ -1071,7 +1102,24 @@ class MarkdownRenderer(Renderer):
                 failure_label="\n\\* The request to make a COG failed."
             )
             lines.extend(status_lines)
-        
+
+        return "\n".join(lines)
+
+    def render_differences(self, data: 'FileComparison', title: str = "Differences") -> str:
+        """
+        Render differences comparison table (legacy method for backwards compatibility).
+
+        This method is deprecated and wraps render_file_comparison() with a section header.
+
+        Args:
+            data: FileComparison dataclass with comparison metrics
+            title: Section title
+
+        Returns:
+            Markdown formatted table with section header, result summary, and footer
+        """
+        lines = [f"## {title}", ""]
+        lines.append(self.render_file_comparison(data))
         return "\n".join(lines)
     
     def render_ifd_table(self, data: IfdInfoData, title: Optional[str] = None) -> str:
