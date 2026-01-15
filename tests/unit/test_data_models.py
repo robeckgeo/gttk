@@ -4,7 +4,7 @@
 # Project: GeoTIFF ToolKit (GTTK)
 # Author: Eric Robeck <robeckgeo@gmail.com>
 #
-# Copyright (c) 2026, Eric Robeck
+# Copyright (c) 2025, Eric Robeck
 # Licensed under the MIT License
 # ******************************************************************************
 
@@ -15,7 +15,7 @@ This module tests all dataclasses defined in gttk.utils.data_models, including:
 - Report framework classes (MenuItem, ReportSection, SectionConfig)
 - Domain model classes (TiffTag, GeoKey, StatisticsBand, etc.)
 - Wrapper classes (TiffTagsData, StatisticsData, IfdInfoData)
-- Comparison classes (FileInfo, FileComparison, etc.)
+- Comparison classes (DifferencesComparison, etc.)
 
 Test coverage target: 95%+
 
@@ -48,8 +48,7 @@ from gttk.utils.data_models import (
     TiffTagsData,
     StatisticsData,
     IfdInfoData,
-    FileInfo,
-    FileComparison,
+    DifferencesComparison,
     IfdInfoComparison,
     StatisticsComparison,
     HistogramComparison,
@@ -1405,132 +1404,82 @@ class TestIfdInfoData:
 
 @pytest.mark.unit
 @pytest.mark.models
-class TestFileComparison:
-    """Test FileComparison data model."""
-
+class TestDifferencesComparison:
+    """Test DifferencesComparison data model."""
+    
     def test_instantiation(self):
-        """Test creating FileComparison with FileInfo objects."""
-        base_info = FileInfo(
-            name='Baseline',
-            data_type='Float32',
-            is_cog='Yes',
-            is_bigtiff='No',
-            algorithm='DEFLATE',
-            bands=3,
-            transparency='None',
-            size_mb='100.00',
-            space_saving='50.00%',
-            ratio='2.00x'
-        )
-        comp_info = FileInfo(
-            name='Optimized',
-            data_type='Float32',
-            is_cog='Yes',
-            is_bigtiff='No',
-            algorithm='LERC',
-            bands=3,
-            transparency='None',
-            size_mb='25.00',
-            space_saving='75.00%',
-            ratio='4.00x'
-        )
-
-        comparison = FileComparison(
-            base_file=base_info,
-            comp_file=comp_info,
+        """Test creating DifferencesComparison with all fields."""
+        diff = DifferencesComparison(
+            headers=['File', 'Type', 'Size (MB)'],
+            base_row=['Float32', '100.0'],
+            comp_row=['Float32', '25.0'],
             base_name='Baseline',
             comp_name='Optimized',
             base_size_mb=100.0,
             comp_size_mb=25.0,
             size_difference_mb=-75.0,
             size_difference_pct=-75.0,
-            efficiency_difference=25.0
+            efficiency_difference=5.0
         )
-
-        assert comparison.base_size_mb == 100.0
-        assert comparison.comp_size_mb == 25.0
-        assert comparison.size_difference_mb == -75.0
-        assert comparison.size_difference_pct == -75.0
-        assert comparison.base_file.name == 'Baseline'
-        assert comparison.comp_file.name == 'Optimized'
-
+        
+        assert diff.base_size_mb == 100.0
+        assert diff.comp_size_mb == 25.0
+        assert diff.size_difference_mb == -75.0
+        assert diff.size_difference_pct == -75.0
+    
     def test_get_result_text_decreased(self):
         """Test get_result_text for decreased file size."""
-        base_info = FileInfo(
-            name='Base', data_type='Float32', is_cog='Yes', is_bigtiff='No',
-            algorithm='NONE', bands=1, transparency='None'
-        )
-        comp_info = FileInfo(
-            name='Comp', data_type='Float32', is_cog='Yes', is_bigtiff='No',
-            algorithm='DEFLATE', bands=1, transparency='None'
-        )
-
-        comparison = FileComparison(
-            base_file=base_info,
-            comp_file=comp_info,
+        diff = DifferencesComparison(
+            headers=[],
+            base_row=[],
+            comp_row=[],
             base_size_mb=100.0,
             comp_size_mb=25.0,
             size_difference_mb=-75.0,
             size_difference_pct=-75.0,
             efficiency_difference=5.0
         )
-
-        result = comparison.get_result_text()
-
+        
+        result = diff.get_result_text()
+        
         assert "Decreased by 75.00 MB" in result
         assert "75.0% smaller" in result
         assert "5.0% more efficient" in result
-
+    
     def test_get_result_text_increased(self):
         """Test get_result_text for increased file size."""
-        base_info = FileInfo(
-            name='Base', data_type='Float32', is_cog='Yes', is_bigtiff='No',
-            algorithm='DEFLATE', bands=1, transparency='None'
-        )
-        comp_info = FileInfo(
-            name='Comp', data_type='Float32', is_cog='Yes', is_bigtiff='No',
-            algorithm='NONE', bands=1, transparency='None'
-        )
-
-        comparison = FileComparison(
-            base_file=base_info,
-            comp_file=comp_info,
+        diff = DifferencesComparison(
+            headers=[],
+            base_row=[],
+            comp_row=[],
             base_size_mb=25.0,
             comp_size_mb=100.0,
             size_difference_mb=75.0,
             size_difference_pct=300.0,
             efficiency_difference=-5.0
         )
-
-        result = comparison.get_result_text()
-
+        
+        result = diff.get_result_text()
+        
         assert "Increased by 75.00 MB" in result
         assert "300.0% larger" in result
         assert "5.0% less efficient" in result
-
+    
     def test_get_result_text_no_efficiency_change(self):
         """Test get_result_text when efficiency change is negligible."""
-        base_info = FileInfo(
-            name='Base', data_type='Float32', is_cog='Yes', is_bigtiff='No',
-            algorithm='DEFLATE', bands=1, transparency='None'
-        )
-        comp_info = FileInfo(
-            name='Comp', data_type='Float32', is_cog='Yes', is_bigtiff='No',
-            algorithm='DEFLATE', bands=1, transparency='None'
-        )
-
-        comparison = FileComparison(
-            base_file=base_info,
-            comp_file=comp_info,
+        diff = DifferencesComparison(
+            headers=[],
+            base_row=[],
+            comp_row=[],
             base_size_mb=100.0,
             comp_size_mb=95.0,
             size_difference_mb=-5.0,
             size_difference_pct=-5.0,
             efficiency_difference=0.01  # Negligible
         )
-
-        result = comparison.get_result_text()
-
+        
+        result = diff.get_result_text()
+        
         assert "Decreased by 5.00 MB" in result
         assert "efficient" not in result  # No efficiency text
 
