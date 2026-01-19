@@ -599,8 +599,8 @@ xpath = "//idinfo/citation/citeinfo/title"
 # Select attribute value
 xpath = "//gmd:MD_ScopeCode/@codeListValue"
 
-# Select with multiple predicates
-xpath = "//gmd:CI_ResponsibleParty[gmd:role/gmd:CI_RoleCode/@codeListValue='pointOfContact']/gmd:contactInfo//gmd:URL"
+# Select with predicate(s)
+xpath = "//gmd:CI_ResponsibleParty[gmd:role/gmd:CI_RoleCode/@codeListValue='pointOfContact']/gmd:contactInfo/gmd:CI_Contact/gmd:address/gmd:CI_Address/gmd:city/gco:CharacterString"
 
 # Select from specific position
 xpath = "//gmd:keyword[1]/gco:CharacterString"
@@ -743,10 +743,11 @@ Validation creates an output folder containing:
 
 ```
 {input_basename}_validation/
-├── validation_results.json   # Complete results with metadata and rule outcomes
-├── validation_map.gpkg       # GeoPackage with file footprints for GIS
-├── file1_PASS.html          # Individual report (if --write-reports)
-└── file2_FAIL.html          # Individual report with failures
+├── {input_basename}_validation_results.json  # Complete results with metadata and rules
+├── {input_basename}_validation_map.gpkg      # GeoPackage with file footprints for GIS
+└── reports/                                  # Individual reports (if `--write-reports=True`)
+    ├── file1_PASS.html  # File passed
+    └── file2_FAIL.html  # File failed
 ```
 
 ---
