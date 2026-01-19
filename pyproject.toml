@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "geotiff-toolkit"
-version = "0.8.2"
+version = "0.9.0"
 description = "GeoTIFF ToolKit (GTTK): A Python toolkit for analyzing and optimizing GeoTIFF data."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -29,6 +29,7 @@ classifiers = [
 
 dependencies = [
   "gdal>=3.11",
+  "jsonpath-ng>=1.5.0",
   "lxml>=5.3.1",
   "matplotlib>=3.10.0",
   "mistune>=3.0.0",

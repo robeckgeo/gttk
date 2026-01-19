@@ -36,6 +36,11 @@ from gttk.utils.data_models import (
     FileInfo, FileComparison, IfdInfoComparison, StatisticsComparison,
     HistogramComparison, CogValidationComparison, TilingComparison
 )
+from gttk.utils.validation.models import (
+    ValidationTableData,
+    ValidationSummary,
+    ValidationResult,
+)
 
 XMP_TAG = 700
 GEO_ASCII_PARAMS_TAG = 34737
@@ -330,7 +335,7 @@ class Renderer(ABC):
         pass
 
     @abstractmethod
-    def render_differences(self, data: DifferencesComparison, title: str = "Differences") -> str:
+    def render_differences(self, data: FileComparison, title: str = "Differences") -> str:
         """
         Render differences comparison table.
         
@@ -445,11 +450,43 @@ class Renderer(ABC):
     def render_comparison_cog(self, data: CogValidationComparison, title: Optional[str] = None) -> str:
         """
         Render grouped COG validation comparison data.
-        
+
         Args:
             data: CogValidationComparison with multiple file COG validations
             title: Optional override title
-            
+
+        Returns:
+            Formatted string representation
+        """
+        pass
+
+    # =========================================================================
+    # Validation Report Methods
+    # =========================================================================
+
+    @abstractmethod
+    def render_validation_summary(self, data: ValidationSummary, title: str = "Validation Summary") -> str:
+        """
+        Render validation summary header section.
+
+        Args:
+            data: ValidationSummary with overall statistics
+            title: Section title
+
+        Returns:
+            Formatted string representation
+        """
+        pass
+
+    @abstractmethod
+    def render_validation_table(self, data: ValidationTableData, title: Optional[str] = None) -> str:
+        """
+        Render validation results table for a section.
+
+        Args:
+            data: ValidationTableData with results for one section
+            title: Optional override title
+
         Returns:
             Formatted string representation
         """
@@ -1105,7 +1142,7 @@ class MarkdownRenderer(Renderer):
 
         return "\n".join(lines)
 
-    def render_differences(self, data: 'FileComparison', title: str = "Differences") -> str:
+    def render_differences(self, data: FileComparison, title: str = "Differences") -> str:
         """
         Render differences comparison table (legacy method for backwards compatibility).
 
@@ -1395,22 +1432,22 @@ class MarkdownRenderer(Renderer):
     def render_comparison_cog(self, data: CogValidationComparison, title: Optional[str] = None) -> str:
         """
         Render grouped COG validation comparison data with subheaders for each file.
-        
+
         Args:
             data: CogValidationComparison with multiple file COG validations
             title: Optional override title
-            
+
         Returns:
             Markdown formatted grouped COG validation comparison
         """
         title = title or data.title
         lines = [f"## {title}", ""]
-        
+
         for file_label, cog in data.files:
             # Add subheader for each file
             lines.append(f"### {file_label}")
             lines.append("")
-            
+
             status_lines = self._render_cog_status(
                 is_valid=cog.is_valid(),
                 errors=cog.errors,
@@ -1419,5 +1456,131 @@ class MarkdownRenderer(Renderer):
             )
             lines.extend(status_lines)
             lines.append("")
-        
+
+        return "\n".join(lines)
+
+    # =========================================================================
+    # Validation Report Methods
+    # =========================================================================
+
+    def render_validation_summary(self, data: ValidationSummary, title: str = "Validation Summary") -> str:
+        """
+        Render validation summary header section.
+
+        Displays overall validation statistics including pass/fail counts
+        and overall status determination.
+
+        Args:
+            data: ValidationSummary with overall statistics
+            title: Section title
+
+        Returns:
+            Markdown formatted validation summary
+        """
+        lines = [f"## {title}", ""]
+
+        # File and product info
+        lines.append(f"**Report Date:** {data.report_date}  ")
+        lines.append(f"**Test File:** {data.input_file}  ")
+        lines.append(f"**Rules File:** {data.rules_file}  ")
+        lines.append(f"**Product:** {data.product}"  )
+        lines.append("")
+
+        # Status counts with icons
+        if data.passed > 0:
+            lines.append(f"**✅ PASSED:** {data.passed} of {data.total_rules} rules ({data.pass_rate:.0f}%)  ")
+        if data.failed > 0:
+            lines.append(f"**❌ FAILED:** {data.failed} of {data.total_rules} rules ({data.fail_rate:.0f}%)  ")
+        if data.skipped > 0:
+            skip_rate = (data.skipped / data.total_rules * 100) if data.total_rules > 0 else 0
+            lines.append(f"**⚠️ SKIPPED:** {data.skipped} of {data.total_rules} rules ({skip_rate:.0f}%)  ")
+
+        lines.append("")
+
+        # Overall status
+        overall = data.overall_status
+        if overall == 'PASS':
+            lines.append("**Overall Status: ✅ PASS**")
+        elif overall == 'FAIL':
+            lines.append("**Overall Status: ❌ FAIL**")
+        else:
+            lines.append("**Overall Status: ⚠️ SKIP** (no rules evaluated)")
+
+        return "\n".join(lines)
+
+    def render_validation_table(self, data: ValidationTableData, title: Optional[str] = None) -> str:
+        """
+        Render validation results table for a section.
+
+        Displays validation results in a table format with status icons,
+        descriptions, actual values, and messages.
+
+        Args:
+            data: ValidationTableData with results for one section
+            title: Optional override title
+
+        Returns:
+            Markdown formatted validation results table
+        """
+        section_title = title or data.section_name
+        lines = [f"## {section_title}", ""]
+
+        if not data.results:
+            lines.append("*No validation rules for this section.*")
+            return "\n".join(lines)
+
+        # Table header
+        lines.append("| Result | Description | Value | Message |")
+        lines.append("|--------|-------------|-------|---------|")
+
+        # Table rows
+        for result in data.results:
+            # Status icon and text
+            icon = result.get_icon()
+            status_text = result.status
+
+            # Format status cell
+            if self.enable_html_styling:
+                if result.passed:
+                    status_cell = f'<span class="pass">{icon} {status_text}</span>'
+                elif result.failed:
+                    status_cell = f'<span class="fail">{icon} {status_text}</span>'
+                else:
+                    status_cell = f'<span class="skip">{icon} {status_text}</span>'
+            else:
+                status_cell = f"{icon} {status_text}"
+
+            # Description from rule
+            description = result.rule.description
+
+            # Value (formatted, with truncation for long values)
+            if result.value is not None:
+                value_str = str(result.value)
+                if len(value_str) > 50:
+                    value_str = value_str[:47] + "..."
+            else:
+                value_str = "-"
+
+            # Message (may contain value interpretation)
+            message = result.message
+            if len(message) > 100:
+                message = message[:97] + "..."
+
+            # Format message cell with styling
+            if self.enable_html_styling:
+                if result.passed:
+                    message_cell = f'<span class="pass">{message}</span>'
+                elif result.failed:
+                    message_cell = f'<span class="fail">{message}</span>'
+                else:
+                    message_cell = f'<span class="skip">{message}</span>'
+            else:
+                message_cell = message
+
+            lines.append(f"| {status_cell} | {description} | {value_str} | {message_cell} |")
+
+        # Section summary
+        lines.append("")
+        lines.append(f"*{data.passed_count} passed, {data.failed_count} failed, {data.skipped_count} skipped*")
+
         return "\n".join(lines)

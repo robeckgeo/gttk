@@ -24,7 +24,7 @@ Classes:
     TestArguments: Arguments for the test_compression tool.
 """
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, List
 from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
@@ -42,14 +42,14 @@ class BaseArguments:
     arc_mode: bool = False
     verbose: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Coerce path-like arguments to Path objects."""
         if self.input_path and isinstance(self.input_path, str):
             self.input_path = Path(self.input_path)
         if self.output_path and isinstance(self.output_path, str):
             self.output_path = Path(self.output_path)
 
-    def handle_error(self, message: str):
+    def handle_error(self, message: str) -> None:
         """Logs an error and raises ValueError."""
         logger.error(message)
         raise ValueError(message)
@@ -64,14 +64,14 @@ class CompareArguments(BaseArguments):
     report_suffix: str = '_comp'
     cog: bool = True
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validation for compare_compression arguments."""
         try:
             self._validate_compare()
         except ValueError as e:
             self.handle_error(str(e))
 
-    def _validate_compare(self):
+    def _validate_compare(self) -> None:
         """Perform validation checks for compare_compression arguments."""
         if self.input_path and isinstance(self.input_path, Path):
             if not self.input_path.exists():
@@ -103,7 +103,7 @@ class OptimizeArguments(BaseArguments):
     report_format: str = 'html'
     report_suffix: str = '_comp'
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validation and default resolution for optimization arguments."""
         super().__post_init__()
         try:
@@ -112,7 +112,7 @@ class OptimizeArguments(BaseArguments):
         except ValueError as e:
             self.handle_error(str(e))
 
-    def _validate_optimize(self):
+    def _validate_optimize(self) -> None:
         """Perform validation checks for optimization arguments."""
         if self.input_path and isinstance(self.input_path, Path):
             if not self.input_path.exists():
@@ -139,7 +139,7 @@ class OptimizeArguments(BaseArguments):
                         raise
                     pass
 
-    def _resolve_defaults(self):
+    def _resolve_defaults(self) -> None:
         """Set context-aware default values."""
         if self.product_type is None:
             raise ValueError("The 'product_type' argument is required.")
@@ -186,7 +186,7 @@ class TestArguments(OptimizeArguments):
     log_file: Optional[Path] = None
     optimize_script_path: Optional[Path] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Validation for test_compression arguments."""
         super().__post_init__()
         try:
@@ -194,7 +194,7 @@ class TestArguments(OptimizeArguments):
         except ValueError as e:
             self.handle_error(str(e))
 
-    def _validate_test(self):
+    def _validate_test(self) -> None:
         """Perform validation checks for test-compression arguments."""
         if self.input_path is None:
             raise ValueError("The 'input_path' argument is required for test-compression.")
@@ -203,7 +203,7 @@ class TestArguments(OptimizeArguments):
         if self.csv_path and not self.csv_path.is_file():
             raise ValueError(f"Input CSV not found: {self.csv_path}")
 
-    def _validate_optimize(self):
+    def _validate_optimize(self) -> None:
         """
         Override parent validation. TestArguments acts as a runner config;
         specific compression parameters (like vertical_srs) are supplied
@@ -223,3 +223,122 @@ class ReadArguments(BaseArguments):
     report_format: str = 'html'
     report_suffix: str = '_meta'
     write_pam_xml: bool = True
+
+
+@dataclass
+class ValidateArguments(BaseArguments):
+    """
+    Arguments for the validate_metadata tool.
+
+    Validates GeoTIFF files against product-specific requirements
+    using TOML-based validation rules.
+
+    Attributes:
+        product: Validation product name (e.g., 'DGED5', 'GLO-30')
+        rules_dir: Directory containing TOML validation rule files
+        sections: Optional list of sections to validate
+        name_string: Filter files by name substring (directory mode only)
+        output_dir: Optional parent directory for output folder
+        write_reports: Whether to write individual HTML/MD reports
+        report_format: Report format ('html' or 'md')
+        output_folder: Computed path to output folder (set in __post_init__)
+        json_output_path: Computed path to JSON output file (set in __post_init__)
+        gpkg_output_path: Computed path to GeoPackage output file (set in __post_init__)
+    """
+    product: Optional[str] = None
+    rules_dir: Path = field(default_factory=lambda: Path('gttk/resources/rules'))
+    sections: Optional[List[str]] = None
+    name_string: str = ''
+    output_dir: Optional[Path] = None
+    write_reports: bool = True
+    report_format: str = 'html'
+
+    # Computed paths (set in __post_init__)
+    output_folder: Optional[Path] = field(default=None, init=False)
+    json_output_path: Optional[Path] = field(default=None, init=False)
+    gpkg_output_path: Optional[Path] = field(default=None, init=False)
+
+    def __post_init__(self) -> None:
+        """Validation for validate_metadata arguments."""
+        super().__post_init__()
+        try:
+            self._validate_arguments()
+            self._setup_output_paths()
+        except ValueError as e:
+            self.handle_error(str(e))
+
+    def _validate_arguments(self) -> None:
+        """Perform validation checks for validate arguments."""
+        if self.input_path is None:
+            raise ValueError("The 'input_path' argument is required.")
+
+        if not self.input_path.exists():
+            raise ValueError(f"Input path not found: {self.input_path}")
+
+        # Accept both files and directories
+        if self.input_path.is_file():
+            # Single file mode
+            if self.input_path.suffix.lower() not in ['.tif', '.tiff']:
+                raise ValueError("Input file must be a GeoTIFF (.tif or .tiff)")
+
+            # Warn if name_string provided for single file (ignored)
+            if self.name_string:
+                logger.warning(
+                    f"--name-string '{self.name_string}' is only applicable when "
+                    f"--input is a directory. Ignoring for single file validation."
+                )
+
+        elif self.input_path.is_dir():
+            # Directory/batch mode
+            geotiffs = list(self.input_path.glob('*.tif')) + list(self.input_path.glob('*.tiff'))
+
+            if not geotiffs:
+                raise ValueError(f"No GeoTIFF files found in directory: {self.input_path}")
+
+            # Apply name filter if provided
+            if self.name_string:
+                filtered = [f for f in geotiffs if self.name_string in f.name]
+                if not filtered:
+                    raise ValueError(
+                        f"No GeoTIFF files matching name string '{self.name_string}' "
+                        f"found in directory: {self.input_path}"
+                    )
+                logger.info(
+                    f"Name filter '{self.name_string}': {len(filtered)} of {len(geotiffs)} files match"
+                )
+        else:
+            raise ValueError(f"Input path must be a file or directory: {self.input_path}")
+
+        # Validate rules directory
+        if not self.rules_dir.exists():
+            raise ValueError(f"Rules directory not found: {self.rules_dir}")
+
+        if not self.rules_dir.is_dir():
+            raise ValueError(f"Rules path is not a directory: {self.rules_dir}")
+
+        # Check for at least one .toml file
+        toml_files = list(self.rules_dir.glob('*.toml'))
+        if not toml_files:
+            raise ValueError(f"No TOML rule files found in: {self.rules_dir}")
+
+        # Validate product is provided
+        if self.product is None:
+            raise ValueError("The 'product' argument is required.")
+
+    def _setup_output_paths(self) -> None:
+        """Setup output folder, JSON file, and GeoPackage paths."""
+        # Import here to avoid circular dependency
+        from gttk.utils.validation.output import generate_output_paths
+
+        # input_path is guaranteed to be not None by _validate_arguments()
+        assert self.input_path is not None, "input_path must be validated before calling _setup_output_paths"
+
+        self.output_folder, self.json_output_path, self.gpkg_output_path = generate_output_paths(
+            self.input_path,
+            self.output_dir
+        )
+
+        # Create output folder
+        if not self.output_folder.exists():
+            self.output_folder.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Created output directory: {self.output_folder}")

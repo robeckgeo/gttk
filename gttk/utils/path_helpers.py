@@ -78,9 +78,8 @@ def open_file(filename: str) -> None:
     - macOS: Uses 'open' command
     - Linux (native): Uses xdg-open
     - WSL: Special handling based on file type:
-        - HTML files: Opens in Windows default browser
-        - Markdown files: Opens in WSL VS Code
-        - Other files: Opens in Windows default application
+        - Markdown/JSON files: Opens in WSL VS Code if available, else Windows default
+        - HTML and other files: Opens in Windows default application
 
     Args:
         filename: Path to the file to open
@@ -96,20 +95,58 @@ def open_file(filename: str) -> None:
     elif _is_wsl():
         # Windows Subsystem for Linux
         file_ext = Path(filename).suffix.lower()
+        opened_successfully = False
 
-        if file_ext in ('.md', '.markdown'):
-            # Open Markdown files in WSL VS Code
-            subprocess.run(['code', filename], check=True)
-        else:
-            # Open HTML and other files in Windows default application
-            # Use PowerShell Start-Process which handles Windows paths reliably
-            windows_path = _convert_wsl_path_to_windows(filename)
-            # Use Popen to avoid waiting for the app to close
-            subprocess.Popen(
-                ['powershell.exe', '-Command', f'Start-Process "{windows_path}"'],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
+        if file_ext in ('.md', '.markdown', '.json'):
+            # Try to open in VS Code first (common in WSL development environments)
+            # Check if 'code' command is available
+            code_available = subprocess.run(
+                ['which', 'code'],
+                capture_output=True,
+                timeout=2
+            ).returncode == 0
+
+            if code_available:
+                try:
+                    result = subprocess.run(
+                        ['code', filename],
+                        check=False,  # Don't raise on non-zero exit
+                        capture_output=True,
+                        text=True,
+                        timeout=5
+                    )
+                    if result.returncode == 0:
+                        opened_successfully = True
+                        try:
+                            logger.debug(f"Opened {filename} in VS Code")
+                        except:
+                            pass  # Ignore logging errors
+                except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+                    try:
+                        logger.debug(f"Failed to open in VS Code: {e}")
+                    except:
+                        pass  # Ignore logging errors
+
+        # If not opened in VS Code, use Windows default application
+        if not opened_successfully:
+            try:
+                windows_path = _convert_wsl_path_to_windows(filename)
+                try:
+                    logger.debug(f"Opening {windows_path} with Windows default application")
+                except:
+                    pass  # Ignore logging errors
+                # Use Popen to avoid waiting for the app to close
+                subprocess.Popen(
+                    ['powershell.exe', '-Command', f'Start-Process "{windows_path}"'],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL
+                )
+            except Exception as e:
+                try:
+                    logger.error(f"Failed to open file with Windows application: {e}")
+                except:
+                    pass  # Ignore logging errors
+                raise
     else:
         # macOS or native Linux
         opener = "open" if sys.platform == "darwin" else "xdg-open"

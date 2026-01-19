@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.9.0] - 2026-01-19
+
+### Added
+
+- **Validate Metadata tool** (`gttk validate`): New command-line tool for validating GeoTIFF files against product-specific requirements defined in TOML rule files
+- **Validation engine**: Comprehensive validation system supporting 7 section types (tag, geokey, gdal, geo, xmp, xml, projjson) and 7 constraint types (exact, enum, regex, range, ranges, exists, forbidden)
+- **On-demand statistics validation**: STATISTICS_* keys computed directly from raster data, working even without GDAL_METADATA tag
+- **Color interpretation validation**: COLORINTERP keys queried via GDAL for all bands or specific bands using `name:sample` syntax
+- **Batch validation**: Directory processing with name substring filtering and JSON/GeoPackage output
+- **ArcGIS Validate Metadata tool**: GUI interface in the Python Toolbox with dynamic product selection and multi-select section filtering
+- **Extended data types**: Added support for date, datetime, url, and email validation with format checking
+- **XPath and JSONPath support**: Full XPath 1.0 for XML sections and JSONPath for PROJJSON validation
+- **Table of Contents**: Added comprehensive navigation to README.md and validation/README.md
+
+### Changed
+
+- Updated documentation to reflect 5 tools (added Validate Metadata alongside existing Compare, Optimize, Test, Read)
+- Corrected CLI argument names in documentation: `--rules-dir`, `--output-dir`, `--name-string` (previously documented as `--rules`, `--output`, `--name-filter`)
+- Enhanced GDAL Metadata documentation with clear band suffix syntax and examples
+- Reorganized validation output structure to use folders with JSON summary, GeoPackage map, and optional individual reports
+
+### Documentation
+
+- Added "Available Toolbox Tools" section documenting all 5 ArcGIS tools
+- Added detailed Validate Metadata tool parameter documentation
+- Added comprehensive GDAL Metadata validation examples with band-specific and all-bands syntax
+- Updated all example commands to use correct argument names
+
 ## [0.8.2] - 2026-01-11
 
 ### Added

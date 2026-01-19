@@ -20,7 +20,7 @@ import sys
 import numpy as np
 from pathlib import Path
 from gttk.utils.log_helpers import setup_logger
-from gttk.utils.script_arguments import CompareArguments, ReadArguments, OptimizeArguments, TestArguments
+from gttk.utils.script_arguments import CompareArguments, ReadArguments, OptimizeArguments, TestArguments, ValidateArguments
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -158,6 +158,92 @@ def main():
     read_metadata_parser.add_argument('--arc-mode', type=str2bool, default=False, dest='arc_mode', help='Flag to indicate ArcPy execution mode.')
     read_metadata_parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', help='Enable verbose logging.')
 
+    # --- Validate Metadata Tool ---
+    validate_parser = subparsers.add_parser(
+        'validate',
+        help='Validate GeoTIFF metadata against product-specific requirements.',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+    )
+    validate_parser.add_argument(
+        '-i', '--input',
+        required=True,
+        type=Path,
+        dest='input_path',
+        help='Path to GeoTIFF file or directory to validate. '
+             'If directory, all .tif/.tiff files will be processed (optionally filtered by --name-string).'
+    )
+    validate_parser.add_argument(
+        '-p', '--product',
+        required=True,
+        type=str,
+        dest='product',
+        help='Validation product name (must match a profile in the rules file). '
+             'Example: DGED5, 3DEP, NAIP, GLO-30'
+    )
+    validate_parser.add_argument(
+        '-r', '--rules-dir',
+        type=Path,
+        default=Path('gttk/resources/rules'),
+        dest='rules_dir',
+        help='Directory containing TOML validation rule files.'
+    )
+    validate_parser.add_argument(
+        '-s', '--sections',
+        type=str,
+        nargs='*',
+        dest='sections',
+        help='Specific sections to validate (e.g., tag geokey gdal xml). '
+             'If not provided, all sections with rules will be validated.'
+    )
+    validate_parser.add_argument(
+        '-n', '--name-string',
+        type=str,
+        default='',
+        dest='name_string',
+        help='Filter files by name substring when processing directories. '
+             'Only files containing this string will be validated. '
+             'Example: --name-string DSM processes only files with "DSM" in the name. '
+             'Only applicable when --input is a directory.'
+    )
+    validate_parser.add_argument(
+        '-o', '--output-dir',
+        type=Path,
+        default=None,
+        dest='output_dir',
+        help='Parent directory for validation output folder. '
+             'If not specified, creates {basename}_validation/ alongside input. '
+             'Output folder contains JSON results and optional HTML/MD reports.'
+    )
+    validate_parser.add_argument(
+        '-w', '--write-reports',
+        type=str2bool,
+        default=True,
+        dest='write_reports',
+        help='Write individual HTML/MD validation reports for each file. '
+             'Reports include _PASS or _FAIL suffix.'
+    )
+    validate_parser.add_argument(
+        '-f', '--report-format',
+        type=str.lower,
+        default='html',
+        choices=['html', 'md'],
+        dest='report_format',
+        help='Output format for validation reports (html or md).'
+    )
+    validate_parser.add_argument(
+        '--open-report',
+        type=str2bool,
+        default=True,
+        dest='open_report',
+        help='Automatically open the JSON results file after generation.'
+    )
+    validate_parser.add_argument(
+        '-v', '--verbose',
+        action='store_true',
+        dest='verbose',
+        help='Enable verbose logging for detailed debugging information.'
+    )
+
     args = parser.parse_args()
     tool = args.tool
     args_dict = vars(args)
@@ -194,6 +280,10 @@ def main():
             from gttk.tools.read_metadata import read_metadata
             script_args = ReadArguments(**args_dict)
             read_metadata(script_args)
+        elif tool == 'validate':
+            from gttk.tools.validate_metadata import validate_metadata
+            script_args = ValidateArguments(**args_dict)
+            validate_metadata(script_args)
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)
         sys.exit(1)

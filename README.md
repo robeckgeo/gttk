@@ -1,20 +1,50 @@
 # GeoTIFF ToolKit (GTTK): GeoTIFF Analysis and Optimization Tools
 
 <p align="left">
-  <img src="https://img.shields.io/badge/version-0.8.2-orange" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.9.0-orange" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 </p>
 
-A Python toolkit for analyzing, optimizing, and compressing GeoTIFF files. GTTK provides a modular command-line interface (`gttk`) with four core tools designed for professional geospatial workflows, while an ArcGIS Pro Python toolbox provides Esri software users a convenient way to run each tool in a GUI while leveraging the full potential of GDAL.
+A Python toolkit for analyzing, optimizing, and compressing GeoTIFF files. GTTK provides a modular command-line interface (`gttk`) with five core tools designed for professional geospatial workflows, while an ArcGIS Pro Python toolbox provides Esri software users a convenient way to run each tool in a GUI while leveraging the full potential of GDAL.
+
+## Table of Contents
+
+- [What is GTTK?](#what-is-gttk)
+- [Why Use GTTK?](#why-use-gttk)
+- [Installation](#installation)
+  - [Prerequisites](#prerequisites)
+  - [Recommended: Conda Environment](#recommended-conda-environment)
+  - [Module Installation](#module-installation)
+  - [Key Dependencies](#key-dependencies)
+- [Usage Guide](#usage-guide)
+  - [The `gttk` Command](#the-gttk-command)
+  - [Tool: Compare Compression](#tool-compare-compression-gttk-compare)
+  - [Tool: Optimize Compression](#tool-optimize-compression-gttk-optimize)
+  - [Tool: Test Compression](#tool-test-compression-gttk-test)
+  - [Tool: Read Metadata](#tool-read-metadata-gttk-read)
+  - [Tool: Validate Metadata](#tool-validate-metadata-gttk-validate)
+- [ArcGIS Pro Toolbox](#arcgis-pro-toolbox)
+  - [OSGeo4W Installation](#osgeo4w-installation-required-dependency)
+  - [Python Environment Setup](#python-environment-setup)
+- [Configuration](#configuration)
+- [Advanced Tools: `gttk optimize-arc`](#advanced-tools-gttk-optimize-arc)
+- [User Recommendations & Best Practices](#user-recommendations--best-practices)
+  - [Compression Best Practices](#compression-best-practices)
+  - [LERC Compression Warning](#️-lerc-compression-warning-for-hydro-conditioned-dems)
+  - [Understanding JXL Quality Settings](#understanding-jxl-quality-settings)
+- [Testing](#testing)
+
+---
 
 ## What is GTTK?
 
-GTTK is a comprehensive suite of tools accessible through a single `gttk` command-line interface or ArcGIS toolbox. It provides four specialized modules:
+GTTK is a comprehensive suite of tools accessible through a single `gttk` command-line interface or ArcGIS toolbox. It provides five specialized modules:
 
 1. **Compare Compression** (`gttk compare`): Validate compression results with side-by-side analysis
 2. **Optimize Compression** (`gttk optimize`): Compress and create Cloud-Optimized GeoTIFFs (COGs) with intelligent defaults
 3. **Test Compression** (`gttk test`): Benchmark multiple compression settings to find optimal configurations
 4. **Read Metadata** (`gttk read`): Generate detailed metadata reports in HTML or Markdown format
+5. **Validate Metadata** (`gttk validate`): Validate GeoTIFF metadata against product-specific rules
 
 All tools feature automated report generation, intelligent data-aware processing, and seamless integration with ArcGIS Pro via the included Python Toolbox.
 
@@ -71,24 +101,26 @@ This makes the `gttk` command available system-wide within your Conda environmen
 
 The `environment.yml` includes:
 
-- `python>=3.13`
+- `python>=3.12`
 - `gdal>=3.11`
+- `jsonpath-ng`
 - `lxml`
 - `matplotlib`
 - `mistune`
 - `numpy`
 - `openpyxl`
 - `tifffile`
+- `psutil`
 
 ## Usage Guide
 
-GTTK provides four specialized command-line tools, each designed for a specific workflow in GeoTIFF analysis and optimization. Every tool generates comprehensive reports to document results and validate changes.
+GTTK provides five specialized command-line tools, each designed for a specific workflow in GeoTIFF analysis and optimization. Every tool generates comprehensive reports to document results and validate changes.
 
 The [`example_reports/`](example_reports/) directory contains sample HTML reports demonstrating each tool's output format. These examples are referenced below in the tool descriptions to illustrate real-world applications and results.
 
 ### The `gttk` Command
 
-GTTK provides a unified command-line interface with four specialized tools. Use the `--help` flag to see available tools and options:
+GTTK provides a unified command-line interface with five specialized tools. Use the `--help` flag to see available tools and options:
 
 ```bash
 # Show all available tools
@@ -99,6 +131,7 @@ gttk compare --help
 gttk optimize --help
 gttk test --help
 gttk read --help
+gttk validate --help
 ```
 
 ### Tool: Compare Compression (`gttk compare`)
@@ -408,6 +441,77 @@ gttk read -i classified.tif --report-format md --banner "UNCLASSIFIED"
 
 ---
 
+### Tool: Validate Metadata (`gttk validate`)
+
+#### Description
+
+**Purpose**: Validate GeoTIFF metadata against user-defined rules for quality assurance and compliance checking.
+
+The Validate Metadata tool enables automated validation of GeoTIFF files against product-specific requirements, supporting:
+
+- **TIFF Tag validation**: Verify bit depth, compression, sample format, and other core metadata
+- **GeoKey validation**: Check spatial reference parameters (CRS codes, raster type, datum)
+- **GDAL Metadata validation**: Validate statistics, area/point designation, and custom metadata
+- **XML Metadata validation**: Validate embedded (GEO_METADATA, XMP) or external XML using XPath
+- **PROJJSON validation**: Validate coordinate reference system definitions using JSONPath
+- **Extended data types**: Validate date, datetime, URL, and email formats
+- **Batch processing**: Validate entire directories with filename pattern filtering
+
+Rules are defined in TOML format and organized by data product (e.g., 3DEP, NAIP, GLO-30). See [`gttk/utils/validation/README.md`](gttk/utils/validation/README.md) for comprehensive documentation on creating validation rules.
+
+#### Command-Line Arguments
+
+| Argument | Short | Type | Required | Default | Description |
+| -------- | ----- | ---- | -------- | ------- | ----------- |
+| `--input` | `-i` | Path | Yes | - | Input GeoTIFF file or directory to validate |
+| `--product` | `-p` | str | Yes | - | Product name to validate against (must exist in rules file) |
+| `--rules-dir` | `-r` | Path | No | `gttk/resources/rules` | Directory containing TOML validation rule files |
+| `--sections` | `-s` | str[] | No | All | Specific sections to validate (e.g., `tag geokey gdal`) |
+| `--name-string` | `-n` | str | No | - | Filter files by name substring (directory mode only) |
+| `--output-dir` | `-o` | Path | No | Auto | Parent directory for validation output folder |
+| `--write-reports` | `-w` | bool | No | `True` | Write individual HTML/MD reports for each file |
+| `--report-format` | `-f` | str | No | `html` | Output format for individual reports (`html` or `md`) |
+| `--open-report` | - | bool | No | `True` | Open the JSON results file after generation |
+| `--verbose` | `-v` | flag | No | `False` | Enable verbose logging |
+
+#### Output Structure
+
+When validation completes, GTTK creates an output folder containing:
+
+- **`validation_results.json`**: Complete validation results with file metadata, statistics, and rule outcomes
+- **`validation_map.gpkg`**: GeoPackage with file footprints and validation status for GIS visualization
+- **Individual reports** (if `--write-reports` is enabled): HTML or Markdown reports with `_PASS` or `_FAIL` suffix
+
+The output folder is named `{input_basename}_validation/` and placed alongside the input by default, or in the directory specified by `--output-dir`.
+
+#### Example Usage
+
+```bash
+# Validate a single file against DGED5 product rules
+gttk validate -i elevation.tif -p DGED5
+
+# Validate all files in a directory
+gttk validate -i /data/dems/ -p 3DEP
+
+# Filter files by name substring (directory mode)
+gttk validate -i /data/ -p NAIP --name-string "ortho"
+
+# Use custom rules directory and specify output location
+gttk validate -i input.tif -p GLO-30 -r /path/to/rules/ -o /reports/
+
+# Generate Markdown reports instead of HTML
+gttk validate -i input.tif -p 3DEP --report-format md
+
+# Validate specific sections only
+gttk validate -i input.tif -p DGED5 -s tag geokey gdal
+```
+
+#### Example Reports
+
+<!-- TODO: Add example report links here -->
+
+---
+
 ## ArcGIS Pro Toolbox
 
 The GTTK ArcGIS Pro Toolbox stored in `toolbox/GTTK_Toolbox.pyt` provides a complete GUI interface for GIS analysts who prefer point-and-click workflows over command-line interfaces. The toolbox abstracts the complexity of 20+ command-line arguments into intuitive, validated parameter dialogs with smart defaults and dynamic updates.
@@ -418,7 +522,7 @@ The GTTK ArcGIS Pro Toolbox stored in `toolbox/GTTK_Toolbox.pyt` provides a comp
 - **Dynamic UI updates** that adjust available options based on product type and algorithm
 - **Integrated with ArcGIS workflows** - add outputs directly to maps
 - **Automatic report generation** with options to open results immediately
-- **Four complete tools** matching all CLI capabilities
+- **Five complete tools** matching all CLI capabilities
 
 <p align="center">
   <img src="images/arcgis_toolbox_panels.png" alt="GTTK Toolbox Parameter Panels" width="800">
@@ -899,20 +1003,25 @@ distance = (100 - quality) × 0.1
 
 ## Testing
 
-GTTK includes a comprehensive test suite with **638 tests** covering unit, integration, end-to-end, benchmark, and validation scenarios. The testing infrastructure ensures code quality, reliability, and maintainability for professional use in enterprise and government environments.
+GTTK includes a comprehensive test suite with **936 tests** covering unit, integration, end-to-end, and validation scenarios. The testing infrastructure ensures code quality, reliability, and maintainability for professional use in enterprise and government environments.
 
 ### Test Suite Overview
 
-| Category | Test Count | Percentage | Files |
-| -------- | --------- | ---------- | ----- |
-| **Unit Tests** | ~516 | 81% | 16 files |
-| **Integration Tests** | ~31 | 5% | 3 files |
-| **E2E Tests** | ~76 | 12% | 4 files |
-| **Benchmarks** | 10 | 2% | 1 file |
-| **Validation** | 5 | <1% | 2 files |
-| **TOTAL** | **638** | **100%** | **26 files** |
+| Category | Test Count | Percentage | Description |
+| -------- | --------- | ---------- | ----------- |
+| **Unit Tests** | 832 | 89% | Isolated component tests |
+| **Integration Tests** | 51 | 5% | Component interaction tests |
+| **E2E Tests** | 53 | 6% | Full CLI workflow tests |
+| **TOTAL** | **936** | **100%** | |
 
-**Phase 1 Expansion Complete** ✅: All Priority 1 critical modules now have comprehensive test coverage, including GeoTIFF processing, metadata extraction, SRS logic, preprocessing, and XML formatting utilities.
+**Test Coverage Includes:**
+- Core tools: Compare, Optimize, Test, Read, Validate
+- GeoTIFF processing and metadata extraction
+- SRS logic and coordinate reference systems
+- Validation engine with all constraint types
+- Extended data types (date, datetime, url, email)
+- XPath and JSONPath extraction
+- Report generation and formatting
 
 ### Documentation
 

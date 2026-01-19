@@ -2,6 +2,9 @@
 # Core GDAL dependencies (installed separately)
 gdal>=3.11
 
+# JSONPath support for PROJJSON validation
+jsonpath-ng>=1.5.0
+
 # Report generation dependencies
 python>=3.12
 lxml>=5.3.1

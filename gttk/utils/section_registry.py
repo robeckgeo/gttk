@@ -211,6 +211,64 @@ SECTION_CONFIGS: Dict[str, SectionConfig] = {
         icon='checkbox',
         renderer='render_comparison_cog'
     ),
+
+    # Validation report sections
+    'validation-summary': SectionConfig(
+        id='validation-summary',
+        title='Validation Summary',
+        menu_name='Summary',
+        icon='validation',
+        renderer='render_validation_summary'
+    ),
+    'validation-tag': SectionConfig(
+        id='validation-tag',
+        title='TIFF Tags Validation',
+        menu_name='Tags',
+        icon='tag',
+        renderer='render_validation_table'
+    ),
+    'validation-geokey': SectionConfig(
+        id='validation-geokey',
+        title='GeoKeys Validation',
+        menu_name='GeoKeys',
+        icon='key',
+        renderer='render_validation_table'
+    ),
+    'validation-gdal': SectionConfig(
+        id='validation-gdal',
+        title='GDAL Metadata Validation',
+        menu_name='GDAL',
+        icon='earth',
+        renderer='render_validation_table'
+    ),
+    'validation-geo': SectionConfig(
+        id='validation-geo',
+        title='GEO_METADATA Validation',
+        menu_name='GEO',
+        icon='geo',
+        renderer='render_validation_table'
+    ),
+    'validation-xmp': SectionConfig(
+        id='validation-xmp',
+        title='XMP Metadata Validation',
+        menu_name='XMP',
+        icon='xmp',
+        renderer='render_validation_table'
+    ),
+    'validation-xml': SectionConfig(
+        id='validation-xml',
+        title='External XML Validation',
+        menu_name='XML',
+        icon='xml',
+        renderer='render_validation_table'
+    ),
+    'validation-projjson': SectionConfig(
+        id='validation-projjson',
+        title='PROJJSON Validation',
+        menu_name='JSON',
+        icon='json',
+        renderer='render_validation_table'
+    ),
 }
 
 

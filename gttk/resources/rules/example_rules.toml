@@ -1,0 +1,751 @@
+# ==============================================================================
+# Example Validation Rules for GeoTIFF ToolKit
+# ==============================================================================
+# This file demonstrates the validation rule schema with product-level organization.
+# Users can create their own rules files following this format.
+#
+# File naming conventions:
+# - example_rules.toml (this file) - tracked in Git as reference
+# - *_rules.toml - ignored by Git (for custom product rules)
+#
+# Products can be defined across multiple files, but each product name
+# must be unique across all files in the rules directory.
+# ==============================================================================
+
+# ==============================================================================
+# DGED5 - Defense Gridded Elevation Data Level 5
+# ==============================================================================
+[DGED5]
+title = "Defense Gridded Elevation Data Level 5"
+description = "Validation rules for DGED5 DSM/DTM elevation products"
+author = "National Geospatial-Intelligence Agency (NGA)"
+updated = "2026-01-15"
+
+# ------------------------------------------------------------------------------
+# TIFF Tags (section: tag)
+# ------------------------------------------------------------------------------
+
+[[DGED5.tag]]
+tag = 258
+description = "BitsPerSample"
+data_type = "integer"
+constraint = "exact"
+expected = 32
+comment = "Must be 32-bit floating point"
+
+[[DGED5.tag]]
+tag = 259
+description = "Compression"
+data_type = "integer"
+constraint = "enum"
+expected = [5, 8]
+comment = "Either 5=LZW (legacy) or 8=DEFLATE (new) is acceptable"
+
+[[DGED5.tag]]
+tag = 270
+description = "ImageDescription"
+data_type = "string"
+constraint = "exists"
+comment = "Description required but content not validated"
+
+[[DGED5.tag]]
+tag = 306
+description = "DateTime"
+data_type = "string"
+constraint = "regex"
+expected = "^\\d{4}:\\d{2}:\\d{2} \\d{2}:\\d{2}:\\d{2}$"
+comment = "TIFF DateTime does not follow ISO 8601, only 20 chars including terminating NUL"
+
+[[DGED5.tag]]
+tag = 296
+description = "ResolutionUnit"
+data_type = "integer"
+constraint = "forbidden"
+comment = "Should not be present - only supports Inch or Centimeter for documents"
+
+[[DGED5.tag]]
+tag = 269
+description = "DocumentName"
+data_type = "string"
+constraint = "regex"
+expected = "^U_.*_20km_.*_GeoData_.*(?:DSM|DTM).*_\\d{2}$"
+optional = true
+comment = "Optional but must match file name sans suffix if present"
+
+# ------------------------------------------------------------------------------
+# GeoKeys (section: geokey)
+# ------------------------------------------------------------------------------
+
+[[DGED5.geokey]]
+geokey = 1024
+description = "GTModelTypeGeoKey"
+data_type = "integer"
+constraint = "exact"
+expected = 1
+comment = "1 = ModelTypeProjected (UTM or UPS)"
+
+[[DGED5.geokey]]
+geokey = 1025
+description = "GTRasterTypeGeoKey"
+data_type = "integer"
+constraint = "exact"
+expected = 2
+comment = "2 = RasterPixelIsPoint for elevation"
+
+[[DGED5.geokey]]
+geokey = 3072
+description = "ProjectedCRSGeoKey"
+data_type = "integer"
+constraint = "ranges"
+expected = [
+  { min = 32601, max = 32660 },
+  { min = 32701, max = 32760 },
+  { min = 5041, max = 5042 }
+]
+comment = "Valid UTM/UPS zone EPSG codes"
+
+[[DGED5.geokey]]
+geokey = 4096
+description = "VerticalGeoKey"
+data_type = "integer"
+constraint = "exact"
+expected = 3855
+comment = "EPSG:3855 = EGM2008 geoid height"
+
+[[DGED5.geokey]]
+geokey = 2048
+description = "GeodeticCRSGeoKey"
+data_type = "integer"
+constraint = "forbidden"
+comment = "Must not be present in projected CRS files"
+
+# ------------------------------------------------------------------------------
+# GDAL Metadata with On-Demand Statistics (section: gdal)
+# STATISTICS_* keys are computed on-demand from raster data via NumPy.
+# Other keys are looked up in GDAL_METADATA tag (42112).
+# Use colon delimiter for specific band (e.g., STATISTICS_MINIMUM:0).
+# Without band suffix, statistics are validated against ALL bands.
+# ------------------------------------------------------------------------------
+
+[[DGED5.gdal]]
+name = "STATISTICS_MINIMUM"
+description = "Minimum Elevation (all bands)"
+data_type = "float"
+constraint = "range"
+expected = { min = -430.0, max = 8850.0 }
+comment = "Minimum elevation must be within valid global dry land range"
+
+[[DGED5.gdal]]
+name = "STATISTICS_MAXIMUM"
+description = "Maximum Elevation (all bands)"
+data_type = "float"
+constraint = "range"
+expected = { min = -430.0, max = 8850.0 }
+comment = "Maximum elevation must be within valid global dry land range"
+
+# ==============================================================================
+# USGS 3D Elevation Program (3DEP)
+# ==============================================================================
+# Note: 3DEP produces DEMs (technically DTMs showing bare earth).
+
+[3DEP]
+title = "USGS 3DEP Digital Elevation Model"
+description = "Validation rules for USGS 3DEP DEM products"
+author = "United States Geological Survey"
+updated = "2026-01-16"
+
+[[3DEP.tag]]
+tag = 258
+description = "BitsPerSample"
+data_type = "integer"
+constraint = "exact"
+expected = 32
+comment = "32-bit float required for elevation data"
+
+[[3DEP.tag]]
+tag = 339
+description = "SampleFormat"
+data_type = "integer"
+constraint = "exact"
+expected = 3
+comment = "3 = IEEE floating point"
+
+[[3DEP.geokey]]
+geokey = 1025
+description = "GTRasterTypeGeoKey"
+data_type = "integer"
+constraint = "exact"
+expected = 2
+comment = "2 = RasterPixelIsPoint for elevation"
+
+[[3DEP.geokey]]
+geokey = 3072
+description = "ProjectedCRSGeoKey"
+data_type = "integer"
+constraint = "ranges"
+expected = [
+  { min = 26901, max = 26920 },
+  { min = 26955, max = 26955 }
+]
+comment = "Valid NAD83 or WGS84 UTM zone EPSG codes"
+
+# ------------------------------------------------------------------------------
+# GDAL Metadata with On-Demand Statistics
+# ------------------------------------------------------------------------------
+
+[[3DEP.gdal]]
+name = "STATISTICS_MINIMUM"
+description = "Minimum Elevation (all bands)"
+data_type = "float"
+constraint = "range"
+expected = { min = -86.0, max = 6190.0 }
+comment = "Minimum elevation must be within valid U.S. dry land range (Death Valley to Denali)"
+
+[[3DEP.gdal]]
+name = "STATISTICS_MAXIMUM"
+description = "Maximum Elevation (all bands)"
+data_type = "float"
+constraint = "range"
+expected = { min = -86.0, max = 6190.0 }
+comment = "Maximum elevation must be within valid U.S. dry land range (Death Valley to Denali)"
+
+# ==============================================================================
+# USDA NAIP Orthoimagery (National Agriculture Imagery Program)
+# ==============================================================================
+
+[NAIP]
+title = "USDA NAIP Orthoimagery"
+description = "Validation rules for NAIP 4-band orthoimagery products"
+author = "USDA Farm Service Agency"
+updated = "2026-01-15"
+
+[[NAIP.tag]]
+tag = 258
+description = "BitsPerSample"
+data_type = "integer"
+constraint = "exact"
+expected = [8, 8, 8, 8]
+comment = "8-bit image depth"
+
+[[NAIP.tag]]
+tag = 262
+description = "PhotometricInterpretation"
+data_type = "integer"
+constraint = "exact"
+expected = 2
+comment = "2 = RGB"
+
+[[NAIP.tag]]
+tag = 270
+description = "ImageDescription"
+data_type = "string"
+constraint = "regex"
+expected = ".*USDA Farm Service Agency.*National Agriculture Imagery Program.*NAIP.*"
+comment = "Must contain NAIP attribution text"
+
+[[NAIP.tag]]
+tag = 277
+description = "SamplesPerPixel"
+data_type = "integer"
+constraint = "exact"
+expected = 4
+comment = "4 bands (R, G, B, NIR) - No alpha band"
+
+[[NAIP.geokey]]
+geokey = 1025
+description = "GTRasterTypeGeoKey"
+data_type = "integer"
+constraint = "exact"
+expected = 1
+comment = "1 = RasterPixelIsArea for orthoimagery"
+
+[[NAIP.geokey]]
+geokey = 3072
+description = "ProjectedCRSGeoKey"
+data_type = "integer"
+constraint = "ranges"
+expected = [
+  { min = 26901, max = 26920 },
+  { min = 26955, max = 26955 }
+]
+comment = "NAD83 UTM zones for CONUS and Guam"
+
+# ------------------------------------------------------------------------------
+# GDAL Metadata with On-Demand Statistics and Color Interpretation
+# ------------------------------------------------------------------------------
+
+[[NAIP.gdal]]
+name = "STATISTICS_VALID_PERCENT"
+description = "Valid Pixel Percentage (all bands)"
+data_type = "float"
+constraint = "exact"
+expected = 100.0
+comment = "NAIP tiles must have 100% valid pixels"
+
+[[NAIP.gdal]]
+name = "COLORINTERP:0"
+description = "Band 1 Color Interpretation"
+data_type = "string"
+constraint = "exact"
+expected = "Red"
+comment = "Band 1 must be Red"
+
+[[NAIP.gdal]]
+name = "COLORINTERP:1"
+description = "Band 2 Color Interpretation"
+data_type = "string"
+constraint = "exact"
+expected = "Green"
+comment = "Band 2 must be Green"
+
+[[NAIP.gdal]]
+name = "COLORINTERP:2"
+description = "Band 3 Color Interpretation"
+data_type = "string"
+constraint = "exact"
+expected = "Blue"
+comment = "Band 3 must be Blue"
+
+[[NAIP.gdal]]
+name = "COLORINTERP:3"
+description = "Band 4 Color Interpretation"
+data_type = "string"
+constraint = "exact"
+expected = "NIR"
+comment = "Band 4 must be Near Infrared"
+
+# ==============================================================================
+# Copernicus GLO-30 and GLO-90 DEM Products
+# ==============================================================================
+
+[GLO-30]
+title = "Copernicus GLO-30 Digital Elevation Model"
+description = "Validation rules for 30m global Copernicus DEM products"
+author = "European Space Agency (ESA)"
+updated = "2026-01-16"
+
+[[GLO-30.tag]]
+tag = 258
+description = "BitsPerSample"
+data_type = "integer"
+constraint = "exact"
+expected = 32
+comment = "32-bit float required"
+
+[[GLO-30.geokey]]
+geokey = 1025
+description = "GTRasterTypeGeoKey"
+data_type = "integer"
+constraint = "exact"
+expected = 2
+comment = "2 = RasterPixelIsPoint for elevation"
+
+[[GLO-30.geokey]]
+geokey = 4096
+description = "VerticalGeoKey"
+data_type = "integer"
+constraint = "exact"
+expected = 3855
+comment = "EPSG:3855 = EGM2008 geoid height"
+
+# ------------------------------------------------------------------------------
+# GDAL Metadata with On-Demand Statistics
+# ------------------------------------------------------------------------------
+
+[[GLO-30.gdal]]
+name = "STATISTICS_MINIMUM"
+description = "Minimum Elevation (all bands)"
+data_type = "float"
+constraint = "range"
+expected = { min = -430.0, max = 8850.0 }
+comment = "Minimum elevation must be within valid global dry land range (Dead Sea to Everest)"
+
+[[GLO-30.gdal]]
+name = "STATISTICS_MAXIMUM"
+description = "Maximum Elevation (all bands)"
+data_type = "float"
+constraint = "range"
+expected = { min = -430.0, max = 8850.0 }
+comment = "Maximum elevation must be within valid global dry land range (Dead Sea to Everest)"
+
+# ==============================================================================
+
+[GLO-90]
+title = "Copernicus GLO-90 Digital Elevation Model"
+description = "Validation rules for 90m global Copernicus DEM products"
+author = "European Space Agency (ESA)"
+updated = "2026-01-15"
+
+[[GLO-90.tag]]
+tag = 258
+description = "BitsPerSample"
+data_type = "integer"
+constraint = "exact"
+expected = 32
+comment = "32-bit float required"
+
+[[GLO-90.geokey]]
+geokey = 1025
+description = "GTRasterTypeGeoKey"
+data_type = "integer"
+constraint = "exact"
+expected = 2
+comment = "2 = RasterPixelIsPoint for elevation"
+
+[[GLO-90.geokey]]
+geokey = 4096
+description = "VerticalGeoKey"
+data_type = "integer"
+constraint = "exact"
+expected = 3855
+comment = "EPSG:3855 = EGM2008 geoid height"
+
+# ==============================================================================
+# ISO-METADATA - Example for ISO 19115/19139 Metadata Validation
+# ==============================================================================
+# Demonstrates GEO_METADATA (Tag 50909) and external XML validation using XPath.
+# XPath expressions support namespace-agnostic matching automatically.
+
+[ISO-METADATA]
+title = "ISO 19115/19139 Metadata Example"
+description = "Example validation rules for ISO metadata embedded in GeoTIFF"
+author = "GTTK Example"
+updated = "2026-01-16"
+
+# ------------------------------------------------------------------------------
+# GEO_METADATA (Tag 50909) - ISO 19115/19139 embedded metadata
+# Uses XPath with namespace-agnostic extraction
+# ------------------------------------------------------------------------------
+
+[[ISO-METADATA.geo]]
+xpath = "//gmd:fileIdentifier/gco:CharacterString"
+description = "File Identifier"
+data_type = "string"
+constraint = "exists"
+comment = "UUID or unique identifier required"
+
+[[ISO-METADATA.geo]]
+xpath = "//gmd:language/gco:CharacterString"
+description = "Metadata Language"
+data_type = "string"
+constraint = "enum"
+expected = ["eng", "en", "deu", "de", "fra", "fr", "spa", "es"]
+comment = "Must use ISO 639-2/B language code"
+
+[[ISO-METADATA.geo]]
+xpath = "//gmd:dateStamp/gco:Date"
+description = "Metadata Date"
+data_type = "string"
+constraint = "regex"
+expected = "^\\d{4}-\\d{2}-\\d{2}$"
+comment = "ISO 8601 date format (YYYY-MM-DD)"
+
+[[ISO-METADATA.geo]]
+xpath = "//gmd:identificationInfo//gmd:title/gco:CharacterString"
+description = "Dataset Title"
+data_type = "string"
+constraint = "exists"
+comment = "Dataset title is required"
+
+[[ISO-METADATA.geo]]
+xpath = "//gmd:identificationInfo//gmd:abstract/gco:CharacterString"
+description = "Dataset Abstract"
+data_type = "string"
+constraint = "exists"
+comment = "Abstract describing the dataset is required"
+
+# ------------------------------------------------------------------------------
+# External XML Metadata File (.xml sidecar)
+# Same XPath syntax works for external XML files
+# ------------------------------------------------------------------------------
+
+[[ISO-METADATA.xml]]
+xpath = "//gmd:hierarchyLevel/gmd:MD_ScopeCode/@codeListValue"
+description = "Hierarchy Level"
+data_type = "string"
+constraint = "enum"
+expected = ["dataset", "series", "service"]
+optional = true
+comment = "Scope of the metadata (if hierarchy level is present)"
+
+# ==============================================================================
+# XMP-METADATA - Example for XMP/Dublin Core Metadata Validation
+# ==============================================================================
+# Demonstrates XMP metadata (Tag 700) validation using XPath.
+# XMP uses RDF/XML format with Dublin Core and XMP namespaces.
+
+[XMP-METADATA]
+title = "XMP/Dublin Core Metadata Example"
+description = "Example validation rules for XMP metadata in GeoTIFF"
+author = "GTTK Example"
+updated = "2026-01-16"
+
+# ------------------------------------------------------------------------------
+# XMP Metadata (Tag 700) - Dublin Core elements
+# ------------------------------------------------------------------------------
+
+[[XMP-METADATA.xmp]]
+xpath = "//dc:title/rdf:Alt/rdf:li"
+description = "Dublin Core Title"
+data_type = "string"
+constraint = "exists"
+comment = "Dataset title in Dublin Core format"
+
+[[XMP-METADATA.xmp]]
+xpath = "//dc:description/rdf:Alt/rdf:li"
+description = "Dublin Core Description"
+data_type = "string"
+constraint = "exists"
+optional = true
+comment = "Description is recommended but not required"
+
+[[XMP-METADATA.xmp]]
+xpath = "//dc:creator/rdf:Seq/rdf:li"
+description = "Dublin Core Creator"
+data_type = "string"
+constraint = "exists"
+comment = "Creator/author information required"
+
+[[XMP-METADATA.xmp]]
+xpath = "//xmp:CreateDate"
+description = "XMP Create Date"
+data_type = "string"
+constraint = "regex"
+expected = "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}"
+comment = "ISO 8601 datetime format"
+
+[[XMP-METADATA.xmp]]
+xpath = "//photoshop:Credit"
+description = "Photo Credit"
+data_type = "string"
+constraint = "exists"
+optional = true
+comment = "Credit/attribution line (if using Photoshop namespace)"
+
+# ==============================================================================
+# FGDC-METADATA - Example for FGDC Metadata Validation
+# ==============================================================================
+# Demonstrates validation of non-namespaced FGDC metadata format.
+
+[FGDC-METADATA]
+title = "FGDC Metadata Example"
+description = "Example validation rules for FGDC metadata in external XML"
+author = "GTTK Example"
+updated = "2026-01-16"
+
+# ------------------------------------------------------------------------------
+# External XML Metadata File - FGDC format (no namespaces)
+# ------------------------------------------------------------------------------
+
+[[FGDC-METADATA.xml]]
+xpath = "//idinfo/citation/citeinfo/title"
+description = "Citation Title"
+data_type = "string"
+constraint = "exists"
+comment = "Dataset title is required"
+
+[[FGDC-METADATA.xml]]
+xpath = "//idinfo/citation/citeinfo/origin"
+description = "Citation Origin"
+data_type = "string"
+constraint = "exists"
+comment = "Data originator/creator is required"
+
+[[FGDC-METADATA.xml]]
+xpath = "//idinfo/citation/citeinfo/pubdate"
+description = "Publication Date"
+data_type = "string"
+constraint = "regex"
+expected = "^\\d{8}$"
+comment = "FGDC date format (YYYYMMDD)"
+
+[[FGDC-METADATA.xml]]
+xpath = "//idinfo/descript/abstract"
+description = "Abstract"
+data_type = "string"
+constraint = "exists"
+comment = "Abstract describing the dataset is required"
+
+[[FGDC-METADATA.xml]]
+xpath = "//idinfo/descript/purpose"
+description = "Purpose"
+data_type = "string"
+constraint = "exists"
+comment = "Purpose of the dataset is required"
+
+[[FGDC-METADATA.xml]]
+xpath = "//idinfo/keywords/theme/themekt"
+description = "Theme Keyword Thesaurus"
+data_type = "string"
+constraint = "enum"
+expected = ["ISO 19115 Topic Category", "NGDA Portfolio Themes", "None"]
+optional = true
+comment = "Standard thesaurus name if keywords are present"
+
+# ==============================================================================
+# PROJJSON-VALIDATION - Example for PROJJSON Validation
+# ==============================================================================
+# Demonstrates validation of PROJJSON using full JSONPath expressions.
+#   - Nested paths: $.base_crs.datum.name
+#   - Array indexing: $.coordinate_system.axis[0].name
+#   - Array wildcards: $.coordinate_system.axis[*].direction
+#   - Recursive descent: $..name (finds all 'name' fields)
+#   - Extended data types: date, datetime, url, email
+
+[PROJJSON-VALIDATION]
+title = "PROJJSON Validation Example"
+description = "Example validation rules for PROJJSON coordinate reference system"
+author = "GTTK Example"
+updated = "2026-01-17"
+
+# Basic CRS identification
+[[PROJJSON-VALIDATION.projjson]]
+jsonpath = "$.type"
+description = "CRS Type"
+data_type = "string"
+constraint = "enum"
+expected = ["ProjectedCRS", "GeographicCRS", "CompoundCRS", "VerticalCRS"]
+comment = "Must be a valid CRS type"
+
+[[PROJJSON-VALIDATION.projjson]]
+jsonpath = "$.name"
+description = "CRS Name"
+data_type = "string"
+constraint = "exists"
+comment = "CRS name is required"
+
+[[PROJJSON-VALIDATION.projjson]]
+jsonpath = "$.id.authority"
+description = "CRS Authority"
+data_type = "string"
+constraint = "enum"
+expected = ["EPSG", "OGC", "ESRI"]
+optional = true
+comment = "Standard authority code if ID is present"
+
+[[PROJJSON-VALIDATION.projjson]]
+jsonpath = "$.id.code"
+description = "CRS EPSG Code"
+data_type = "integer"
+constraint = "range"
+expected = { min = 1, max = 100000 }
+optional = true
+comment = "Valid EPSG code range"
+
+# Nested object validation
+[[PROJJSON-VALIDATION.projjson]]
+jsonpath = "$.base_crs.name"
+description = "Base CRS Name"
+data_type = "string"
+constraint = "exists"
+optional = true
+comment = "Required for projected CRS - name of the geographic base CRS"
+
+[[PROJJSON-VALIDATION.projjson]]
+jsonpath = "$.base_crs.datum.ellipsoid.name"
+description = "Ellipsoid Name"
+data_type = "string"
+constraint = "exists"
+optional = true
+comment = "Name of the reference ellipsoid"
+
+[[PROJJSON-VALIDATION.projjson]]
+jsonpath = "$.base_crs.datum.ellipsoid.semi_major_axis"
+description = "Semi-major Axis"
+data_type = "float"
+constraint = "range"
+expected = { min = 6000000, max = 7000000 }
+optional = true
+comment = "Semi-major axis in meters (Earth range)"
+
+# Array indexing validation
+[[PROJJSON-VALIDATION.projjson]]
+jsonpath = "$.coordinate_system.axis[0].name"
+description = "First Axis Name"
+data_type = "string"
+constraint = "exists"
+optional = true
+comment = "Name of the first coordinate axis"
+
+[[PROJJSON-VALIDATION.projjson]]
+jsonpath = "$.coordinate_system.axis[0].unit"
+description = "First Axis Unit"
+data_type = "string"
+constraint = "enum"
+expected = ["metre", "degree", "foot", "US survey foot"]
+optional = true
+comment = "Unit of the first coordinate axis"
+
+[[PROJJSON-VALIDATION.projjson]]
+jsonpath = "$.conversion.method.id.code"
+description = "Projection Method Code"
+data_type = "integer"
+constraint = "exists"
+optional = true
+comment = "EPSG code for the projection method"
+
+# ==============================================================================
+# EXTENDED-TYPES-EXAMPLE - Demonstrates Extended Data Types
+# ==============================================================================
+# Shows validation using extended data types:
+#   - date: ISO 8601 date (YYYY-MM-DD)
+#   - datetime: ISO 8601 datetime (YYYY-MM-DDThh:mm:ss[Z])
+#   - url: Valid URL (http://, https://, ftp://, s3://)
+#   - email: Valid email address
+
+[EXTENDED-TYPES-EXAMPLE]
+title = "Extended Data Types Example"
+description = "Demonstrates validation with date, datetime, url, and email data types"
+author = "GTTK Example"
+updated = "2026-01-17"
+
+# Date type validation
+[[EXTENDED-TYPES-EXAMPLE.gdal]]
+name = "TIFFTAG_DATETIME"
+description = "TIFF Creation Date"
+data_type = "date"
+constraint = "exists"
+optional = true
+comment = "File creation date in ISO 8601 format"
+
+# Datetime type validation
+[[EXTENDED-TYPES-EXAMPLE.xmp]]
+xpath = "//xmp:CreateDate"
+description = "XMP Create Date"
+data_type = "datetime"
+constraint = "exists"
+optional = true
+comment = "XMP creation datetime"
+
+[[EXTENDED-TYPES-EXAMPLE.xmp]]
+xpath = "//xmp:ModifyDate"
+description = "XMP Modify Date"
+data_type = "datetime"
+constraint = "exists"
+optional = true
+comment = "XMP last modification datetime"
+
+# URL type validation
+[[EXTENDED-TYPES-EXAMPLE.xml]]
+xpath = "//gmd:contact/gmd:CI_ResponsibleParty[gmd:role/gmd:CI_RoleCode/@codeListValue='pointOfContact']/gmd:contactInfo/gmd:CI_Contact/gmd:onlineResource/gmd:CI_OnlineResource/gmd:linkage/gmd:URL"
+description = "Point of Contact website"
+data_type = "url"
+constraint = "exists"
+optional = true
+comment = "URL link to the resource or metadata"
+
+[[EXTENDED-TYPES-EXAMPLE.xml]]
+xpath = "/metadata/idinfo/citation/citeinfo/origin"
+description = "Origin"
+data_type = "string"
+constraint = "exact"
+expected = "U.S. Geological Survey"
+comment = "FGDC origin name (main POC)"
+
+[[EXTENDED-TYPES-EXAMPLE.xml]]
+xpath = "//gmd:contact/gmd:CI_ResponsibleParty[gmd:role/gmd:CI_RoleCode/@codeListValue='pointOfContact']/gmd:contactInfo/gmd:CI_Contact/gmd:address/gmd:CI_Address/gmd:electronicMailAddress/gco:CharacterString"
+description = "Point of Contact Email"
+data_type = "email"
+constraint = "exists"
+optional = false
+comment = "Point of Contact email address"

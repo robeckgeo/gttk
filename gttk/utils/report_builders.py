@@ -48,6 +48,13 @@ from gttk.utils.data_models import (
     CogValidationComparison,
     TilingComparison,
 )
+from gttk.utils.validation.models import (
+    ValidationResult,
+    ValidationSummary,
+    ValidationTableData,
+    get_section_display_name,
+    get_section_icon,
+)
 from gttk.utils.geotiff_processor import (
     read_geotiff,
     get_lerc_max_z_error,
@@ -146,8 +153,7 @@ class ReportBuilder(ABC):
         has_mask = any(band.mask_count for band in stats)
         has_alpha = any(band.alpha_0_count for band in stats)
         has_nodata = any(band.nodata_count for band in stats)
-        has_median = any(band.median is not None for band in stats)
-        
+
         present_conditionals = set()
         if has_mask:
             present_conditionals.add('mask_count')
@@ -155,21 +161,19 @@ class ReportBuilder(ABC):
             present_conditionals.add('alpha_0_count')
         if has_nodata:
             present_conditionals.add('nodata_count')
-        if has_median:
-            present_conditionals.add('median')
-        
+
         # Build data rows
         data = []
         for display_name, field_name, always_show in display_fields:
             if not always_show and field_name not in present_conditionals:
                 continue
-            
+
             row = {"Statistic": display_name}
             for band in stats:
                 val = getattr(band, field_name, None)
                 row[band.band_name] = format_value(val) if val is not None else ""
             data.append(row)
-        
+
         return StatisticsData(
             title=title,
             headers=headers,
@@ -230,8 +234,7 @@ class MetadataReportBuilder(ReportBuilder):
         has_nodata = any(band.nodata_count for band in stats)
         has_mask = any(band.mask_count for band in stats)
         has_alpha = any(band.alpha_0_count for band in stats)
-        has_median = any(band.median is not None for band in stats)
-        
+
         present_conditionals = set()
         if has_mask:
             present_conditionals.add('mask_count')
@@ -239,20 +242,18 @@ class MetadataReportBuilder(ReportBuilder):
             present_conditionals.add('alpha_0_count')
         if has_nodata:
             present_conditionals.add('nodata_count')
-        if has_median:
-            present_conditionals.add('median')
-        
+
         data = []
         for display_name, field_name, always_show in display_fields:
             if not always_show and field_name not in present_conditionals:
                 continue
-            
+
             row = {"Statistic": display_name}
             for band in stats:
                 val = getattr(band, field_name, None)
                 row[band.band_name] = format_value(val) if val is not None else ""
             data.append(row)
-        
+
         return StatisticsData(title="Statistics", headers=headers, data=data)
     
     def _build_ifd_data(self, ifds: List[IfdInfo]) -> Optional[IfdInfoData]:
@@ -1017,3 +1018,88 @@ class ComparisonReportBuilder(ReportBuilder):
         )
         
         self.add_section('comparison-cog', grouped_data)
+
+
+class ValidationReportBuilder(ReportBuilder):
+    """
+    Builds sections for validation reports (validate_metadata.py tool).
+
+    Creates sections for validation summary and per-section validation tables.
+    This builder is used for single-file or batch validation against product
+    specifications defined in TOML rules files.
+
+    The builder receives pre-computed validation results from ValidationEngine
+    and transforms them into presentation format for rendering.
+
+    Example:
+        >>> summary = ValidationSummary(
+        ...     product='DGED5',
+        ...     input_file='example.tif',
+        ...     rules_file='dged5_rules.toml',
+        ...     report_date='2026-01-15',
+        ...     total_rules=10,
+        ...     passed=8,
+        ...     failed=2,
+        ...     skipped=0,
+        ...     results_by_section={'tag': [result1, result2], 'geokey': [result3]}
+        ... )
+        >>> builder = ValidationReportBuilder(summary)
+        >>> builder.build()
+        >>> print(len(builder.sections))  # Summary + section tables
+    """
+
+    def __init__(self, summary: ValidationSummary):
+        """
+        Initialize validation report builder.
+
+        Args:
+            summary: ValidationSummary containing all validation results
+        """
+        super().__init__()
+        self.summary = summary
+
+    def build(self) -> None:
+        """
+        Build all validation report sections.
+
+        Creates the summary section first, followed by individual
+        section tables for each validated metadata section.
+        """
+        # Add validation summary section
+        self._add_summary_section()
+
+        # Add individual section tables
+        self._add_section_tables()
+
+    def _add_summary_section(self) -> None:
+        """Add the validation summary section."""
+        self.add_section('validation-summary', self.summary)
+
+    def _add_section_tables(self) -> None:
+        """Add validation table sections for each metadata section."""
+        # Map section types to section config IDs
+        section_config_map = {
+            'tag': 'validation-tag',
+            'geokey': 'validation-geokey',
+            'gdal': 'validation-gdal',
+            'geo': 'validation-geo',
+            'xmp': 'validation-xmp',
+            'xml': 'validation-xml',
+            'projjson': 'validation-projjson',
+        }
+
+        # Process sections in consistent order
+        section_order = ['tag', 'geokey', 'gdal', 'geo', 'xmp', 'xml', 'projjson']
+
+        for section_type in section_order:
+            if section_type in self.summary.results_by_section:
+                results = self.summary.results_by_section[section_type]
+                if results:
+                    table_data = ValidationTableData(
+                        section_name=get_section_display_name(section_type),
+                        section_type=section_type,
+                        results=results,
+                        icon=get_section_icon(section_type)
+                    )
+                    config_id = section_config_map.get(section_type, 'validation-tag')
+                    self.add_section(config_id, table_data)

@@ -361,18 +361,21 @@ class HtmlReportFormatter(ReportFormatter):
             return f"## {section.title}\n\n*Renderer not implemented*"
 
         # Add to menu items for HTML navigation
-        try:
-            icon = get_icon(section.id)
-        except KeyError:
-            logger.warning(f"No icon found for section '{section.id}', using 'unknown'")
-            icon = 'unknown'
-        
-        self.menu_items.append(MenuItem(
-            anchor=section.id,
-            name=section.menu_name,
-            title=section.title,
-            icon=icon
-        ))
+        # Skip summary sections (they don't get menu items, following metadata report pattern)
+        sections_without_menu = {'validation-summary'}
+        if section.id not in sections_without_menu:
+            try:
+                icon = get_icon(section.id)
+            except KeyError:
+                logger.warning(f"No icon found for section '{section.id}', using 'unknown'")
+                icon = 'unknown'
+
+            self.menu_items.append(MenuItem(
+                anchor=section.id,
+                name=section.menu_name,
+                title=section.title,
+                icon=icon
+            ))
         
         # Store title-to-anchor mapping
         self.anchor_map[section.title] = section.id

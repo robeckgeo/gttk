@@ -102,11 +102,14 @@ try:
     import gttk.tools.optimize_compression_arc as oc
     import gttk.tools.read_metadata as rm
     import gttk.tools.test_compression as tc
+    import gttk.tools.validate_metadata as vm
     from gttk.utils.srs_logic import VERTICAL_SRS_NAME_MAP
     from gttk.utils.section_registry import ALL_SECTIONS, PRODUCER_SECTIONS, ANALYST_SECTIONS, get_config
     import gttk.utils.optimize_constants as C
     from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
-    from gttk.utils.script_arguments import OptimizeArguments, CompareArguments, TestArguments, ReadArguments
+    from gttk.utils.script_arguments import OptimizeArguments, CompareArguments, TestArguments, ReadArguments, ValidateArguments
+    from gttk.utils.validation import get_available_products
+    from gttk.utils.validation.loader import VALID_SECTIONS as VALIDATION_SECTIONS
 except ImportError as e:
     arcpy.AddError(f"Failed to import a required module. Ensure the tool scripts are in the correct directory: {gttk_path}")
     arcpy.AddError(f"System Path: {sys.path}")
@@ -137,7 +140,7 @@ class Toolbox:
         self.alias = "gttk"
         self.icon = "icons/GTTK_Toolbox.pyt.32px.png"
         # List of tool classes associated with this toolbox
-        self.tools = [OptimizeCompression, ReadMetadata, CompareCompression, TestCompression]
+        self.tools = [OptimizeCompression, ReadMetadata, CompareCompression, TestCompression, ValidateMetadata]
 
 class CompareCompression:
     def __init__(self):
@@ -1408,3 +1411,292 @@ class ReadMetadata:
             import traceback
             messages.addErrorMessage(traceback.format_exc())
         messages.addMessage("--- ReadMetadata: execute method finished ---")
+
+
+class ValidateMetadata:
+    """
+    ArcGIS Python Toolbox tool for validating GeoTIFF files against
+    product-specific requirements defined in TOML rule files.
+    """
+    # --- Class-level state for dynamic updates ---
+    _previous_rules_dir = None
+    _available_products = []
+
+    def __init__(self):
+        """Define the tool class."""
+        self.label = "Validate Metadata"
+        self.description = "Validates GeoTIFF files against product-specific requirements defined in TOML rule files."
+        self.icon = "icons/validate.png"
+        self.canRunInBackground = False
+        self.category = "Metadata Tools"
+
+    def getParameterInfo(self):
+        """Define parameter definitions."""
+        # --- Parameter 0: Input GeoTIFF(s) ---
+        param_input = arcpy.Parameter(
+            displayName="Input GeoTIFF(s)",
+            name="input_path",
+            datatype=["DEFile", "DEFolder", "GPRasterLayer"],
+            parameterType="Required",
+            direction="Input")
+
+        # --- Parameter 1: Product ---
+        param_product = arcpy.Parameter(
+            displayName="Product",
+            name="product",
+            datatype="GPString",
+            parameterType="Required",
+            direction="Input")
+        param_product.filter.type = "ValueList"
+        # Will be populated dynamically in updateParameters
+        param_product.filter.list = []
+
+        # --- Parameter 2: Rules Directory ---
+        param_rules_dir = arcpy.Parameter(
+            displayName="Rules Directory",
+            name="rules_dir",
+            datatype="DEFolder",
+            parameterType="Optional",
+            direction="Input")
+        # Set default to gttk/resources/rules relative to toolbox
+        project_root = Path(__file__).parent.parent
+        default_rules_path = project_root / "gttk" / "resources" / "rules"
+        if default_rules_path.exists():
+            param_rules_dir.value = str(default_rules_path)
+
+        # --- Parameter 3: Sections (multivalue) ---
+        param_sections = arcpy.Parameter(
+            displayName="Sections to Validate",
+            name="sections",
+            datatype="GPString",
+            parameterType="Optional",
+            direction="Input",
+            multiValue=True)
+        param_sections.filter.type = "ValueList"
+        param_sections.filter.list = VALIDATION_SECTIONS
+        # Default to all sections
+        param_sections.value = VALIDATION_SECTIONS
+
+        # --- Parameter 4: Name Filter ---
+        param_name_string = arcpy.Parameter(
+            displayName="Name Filter",
+            name="name_string",
+            datatype="GPString",
+            parameterType="Optional",
+            direction="Input")
+        param_name_string.value = ""
+
+        # --- Parameter 5: Output Directory ---
+        param_output_dir = arcpy.Parameter(
+            displayName="Output Directory",
+            name="output_dir",
+            datatype="DEFolder",
+            parameterType="Optional",
+            direction="Input")
+
+        # --- Parameter 6: Write Individual Reports ---
+        param_write_reports = arcpy.Parameter(
+            displayName="Write Individual Reports",
+            name="write_reports",
+            datatype="GPBoolean",
+            parameterType="Optional",
+            direction="Input")
+        param_write_reports.value = True
+
+        # --- Parameter 7: Report Format ---
+        param_report_format = arcpy.Parameter(
+            displayName="Report Format",
+            name="report_format",
+            datatype="GPString",
+            parameterType="Optional",
+            direction="Input")
+        param_report_format.filter.type = "ValueList"
+        param_report_format.filter.list = ["HTML", "Markdown"]
+        param_report_format.value = "HTML"
+
+        # --- Parameter 8: Open Report on Completion ---
+        param_open_report = arcpy.Parameter(
+            displayName="Open Report on Completion",
+            name="open_report",
+            datatype="GPBoolean",
+            parameterType="Optional",
+            direction="Input")
+        param_open_report.value = True
+
+        # --- Parameter 9: Output Folder (Derived) ---
+        param_output_folder = arcpy.Parameter(
+            displayName="Output Folder",
+            name="output_folder",
+            datatype="DEFolder",
+            parameterType="Derived",
+            direction="Output")
+
+        # --- Parameter 10: JSON Summary Path (Derived) ---
+        param_json_path = arcpy.Parameter(
+            displayName="JSON Summary Path",
+            name="json_output_path",
+            datatype="DEFile",
+            parameterType="Derived",
+            direction="Output")
+
+        return [
+            param_input,        # 0
+            param_product,      # 1
+            param_rules_dir,    # 2
+            param_sections,     # 3
+            param_name_string,  # 4
+            param_output_dir,   # 5
+            param_write_reports,  # 6
+            param_report_format,  # 7
+            param_open_report,    # 8
+            param_output_folder,  # 9
+            param_json_path       # 10
+        ]
+
+    def isLicensed(self):
+        """Set whether tool is licensed to run."""
+        return True
+
+    def updateParameters(self, parameters):
+        """Modify the values and properties of parameters before internal validation."""
+        rules_dir_param = parameters[2].valueAsText
+
+        # Only refresh products if rules directory has changed
+        if rules_dir_param != ValidateMetadata._previous_rules_dir:
+            ValidateMetadata._previous_rules_dir = rules_dir_param
+
+            if rules_dir_param and Path(rules_dir_param).exists():
+                try:
+                    products = get_available_products(Path(rules_dir_param))
+                    ValidateMetadata._available_products = sorted(products.keys())
+                    parameters[1].filter.list = ValidateMetadata._available_products
+                except Exception as e:
+                    arcpy.AddWarning(f"Could not load products: {e}")
+                    parameters[1].filter.list = []
+                    ValidateMetadata._available_products = []
+            else:
+                parameters[1].filter.list = []
+                ValidateMetadata._available_products = []
+
+        # Enable/disable name filter based on input type
+        input_param = parameters[0].value
+        if input_param:
+            if hasattr(input_param, 'dataSource'):
+                input_path_str = input_param.dataSource
+            else:
+                input_path_str = parameters[0].valueAsText
+
+            if input_path_str:
+                input_path = Path(input_path_str)
+                # Only enable name filter for directories
+                parameters[4].enabled = input_path.is_dir() if input_path.exists() else True
+
+    def updateMessages(self, parameters):
+        """Modify the messages created by internal validation for each tool parameter."""
+        # Validate input path
+        input_param = parameters[0].value
+        if input_param:
+            if hasattr(input_param, 'dataSource'):
+                input_path_str = input_param.dataSource
+            else:
+                input_path_str = parameters[0].valueAsText
+
+            if input_path_str:
+                input_path = Path(input_path_str)
+                if not input_path.exists():
+                    parameters[0].setErrorMessage(f"Input path does not exist: {input_path}")
+                elif input_path.is_file() and input_path.suffix.lower() not in ['.tif', '.tiff']:
+                    parameters[0].setErrorMessage("Input file must be a GeoTIFF (.tif or .tiff)")
+                else:
+                    parameters[0].clearMessage()
+
+        # Validate product selection
+        if parameters[2].value and not parameters[1].value:
+            parameters[1].setWarningMessage("Select a product from the dropdown after loading the rules directory")
+
+        # Validate rules directory
+        rules_dir = parameters[2].valueAsText
+        if rules_dir:
+            rules_path = Path(rules_dir)
+            if not rules_path.exists():
+                parameters[2].setErrorMessage(f"Rules directory does not exist: {rules_dir}")
+            elif not rules_path.is_dir():
+                parameters[2].setErrorMessage("Path must be a directory")
+            elif not list(rules_path.glob('*.toml')):
+                parameters[2].setErrorMessage("No TOML rule files found in directory")
+            else:
+                parameters[2].clearMessage()
+
+    def execute(self, parameters, messages):
+        """Execute the validation tool."""
+        messages.addMessage("--- ValidateMetadata: execute method started ---")
+
+        try:
+            # --- Extract Parameters ---
+            input_param = parameters[0].value
+            if hasattr(input_param, 'dataSource'):
+                input_path = input_param.dataSource
+            else:
+                input_path = parameters[0].valueAsText
+
+            product = parameters[1].valueAsText
+            rules_dir = parameters[2].valueAsText
+            sections = parameters[3].valueAsText
+            name_string = parameters[4].valueAsText or ""
+            output_dir = parameters[5].valueAsText
+            write_reports = parameters[6].value
+            report_format_display = parameters[7].valueAsText
+            open_report = parameters[8].value
+
+            # Convert sections string to list
+            if sections:
+                sections_list = [s.strip() for s in sections.split(';') if s.strip()]
+            else:
+                sections_list = None
+
+            # Map report format
+            report_format = "html" if report_format_display == "HTML" else "md"
+
+            # Build arguments
+            args = ValidateArguments(
+                input_path=Path(input_path),
+                product=product,
+                rules_dir=Path(rules_dir) if rules_dir else Path('gttk/resources/rules'),
+                sections=sections_list,
+                name_string=name_string,
+                output_dir=Path(output_dir) if output_dir else None,
+                write_reports=write_reports,
+                report_format=report_format,
+                open_report=open_report,
+                arc_mode=True
+            )
+
+            messages.addMessage(f"Input: {args.input_path}")
+            messages.addMessage(f"Product: {args.product}")
+            messages.addMessage(f"Rules Directory: {args.rules_dir}")
+            messages.addMessage(f"Sections: {args.sections or 'All'}")
+            messages.addMessage(f"Output Folder: {args.output_folder}")
+
+            # --- Run Validation ---
+            try:
+                vm.validate_metadata(args)
+
+                # Set derived output parameters
+                parameters[9].value = str(args.output_folder)
+                parameters[10].value = str(args.json_output_path)
+
+                messages.addMessage(f"Validation complete. Results saved to: {args.json_output_path}")
+
+            except Exception as e:
+                messages.addErrorMessage(f"Validation failed: {e}")
+                import traceback
+                messages.addErrorMessage("Traceback:")
+                messages.addErrorMessage(traceback.format_exc())
+
+        except Exception as e:
+            messages.addErrorMessage(f"A critical error occurred: {e}")
+            import traceback
+            messages.addErrorMessage("Traceback:")
+            messages.addErrorMessage(traceback.format_exc())
+
+        messages.addMessage("--- ValidateMetadata: execute method finished ---")

@@ -765,7 +765,6 @@ class StatisticsBand:
         maximum: Maximum pixel value in the band
         mean: Mean (average) pixel value
         std_dev: Standard deviation of pixel values
-        median: Median pixel value
         histogram_counts: Pre-computed histogram bin counts for visualization
         histogram_bins: Histogram bin edges corresponding to counts
         histogram: Raw valid pixel data as numpy array (kept for PAM XML export)
@@ -792,7 +791,6 @@ class StatisticsBand:
     maximum: Optional[float] = None
     mean: Optional[float] = None
     std_dev: Optional[float] = None
-    median: Optional[float] = None
     histogram_counts: Optional[List[int]] = None
     histogram_bins: Optional[List[float]] = None
     histogram: Optional[Any] = None
@@ -815,7 +813,6 @@ class StatisticsBand:
             ("Maximum", "maximum", True),
             ("Mean", "mean", True),
             ("Std Dev", "std_dev", True),
-            ("Median", "median", False),
         ]
     
     def range(self) -> Optional[float]:
