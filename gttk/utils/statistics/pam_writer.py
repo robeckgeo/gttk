@@ -163,7 +163,7 @@ def build_pam_data_from_stats(bands: List[StatisticsBand], ds_or_band: Union[gda
         if not band_obj:
             continue
             
-        # Build stats dict, only including median if it exists
+        # Build stats dict
         stats_dict = {
             "Valid Count": band_stats.valid_count,
             "Minimum": band_stats.minimum,
@@ -171,10 +171,6 @@ def build_pam_data_from_stats(bands: List[StatisticsBand], ds_or_band: Union[gda
             "Mean": band_stats.mean,
             "Std Dev": band_stats.std_dev,
         }
-        
-        # Only include median if it's not None
-        if band_stats.median is not None:
-            stats_dict["Median"] = band_stats.median
         
         pam_entry = {
             "stats": stats_dict,

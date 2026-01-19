@@ -359,15 +359,19 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileM
             resample_alg = 'NEAREST' if args.product_type in [PT.IMAGE.value, PT.THEMATIC.value] else 'BILINEAR'
             overview_list = _calculate_overview_levels(input_info.x_size, input_info.y_size, tile_size=args.tile_size)
             logger.info(f"Using overview levels: {', '.join(map(str, overview_list))}")
-                
+
             overview_options = [
-                'TILED=YES',
                 'COMPRESS=NONE',  # Always uncompressed on intermediate file for rounding
-                f'BLOCKXSIZE={args.tile_size}',
-                f'BLOCKYSIZE={args.tile_size}'
             ]
-            
+
+            # Set overview block size using GDAL config option (TILED/BLOCKXSIZE/BLOCKYSIZE not supported for overviews)
+            old_ovr_blocksize = gdal.GetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE')
+            gdal.SetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE', str(args.tile_size))
+
             temp_ds.BuildOverviews(resampling=resample_alg, overviewlist=overview_list, options=overview_options)
+
+            # Restore original config option
+            gdal.SetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE', old_ovr_blocksize)
             
             logger.info(f"Rounding overviews to {args.decimals} decimal places...")
             temp_ds = round_overviews(temp_ds, args.decimals)
@@ -458,20 +462,25 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileM
             if final_ds_for_overviews:
                 overview_options_external = [
                     f'COMPRESS={args.algorithm}',
-                    'TILED=YES',
-                    f'BLOCKXSIZE={args.tile_size}',
-                    f'BLOCKYSIZE={args.tile_size}'
                 ]
-                
+
                 # Add predictor if applicable
                 if args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and args.predictor:
                     overview_options_external.append(f'PREDICTOR={args.predictor}')
-                
+
+                # Set overview block size using GDAL config option (TILED/BLOCKXSIZE/BLOCKYSIZE not supported for overviews)
+                old_ovr_blocksize = gdal.GetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE')
+                gdal.SetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE', str(args.tile_size))
+
                 final_ds_for_overviews.BuildOverviews(
                     resampling=resample_alg.upper(),
                     overviewlist=overview_list,
                     options=overview_options_external
                 )
+
+                # Restore original config option
+                gdal.SetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE', old_ovr_blocksize)
+
                 final_ds_for_overviews = None
                 logger.info(f"External overviews built successfully with {args.algorithm} compression.")
             else:

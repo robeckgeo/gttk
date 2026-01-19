@@ -351,10 +351,9 @@ class TestStatisticsBand:
             minimum=0.0,
             maximum=255.0,
             mean=127.5,
-            std_dev=45.3,
-            median=128.0
+            std_dev=45.3
         )
-        
+
         assert stats.band_name == "Band 1"
         assert stats.valid_percent == 99.5
         assert stats.minimum == 0.0

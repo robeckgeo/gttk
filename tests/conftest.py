@@ -395,8 +395,7 @@ def sample_statistics():
             minimum=0.0,
             maximum=255.0,
             mean=127.5,
-            std_dev=45.3,
-            median=128.0
+            std_dev=45.3
         ),
         StatisticsBand(
             band_name="Band 2",
@@ -408,8 +407,7 @@ def sample_statistics():
             minimum=0.0,
             maximum=255.0,
             mean=130.2,
-            std_dev=42.1,
-            median=131.0
+            std_dev=42.1
         ),
         StatisticsBand(
             band_name="Band 3",
@@ -421,8 +419,7 @@ def sample_statistics():
             minimum=0.0,
             maximum=255.0,
             mean=125.8,
-            std_dev=47.5,
-            median=126.0
+            std_dev=47.5
         ),
     ]
 

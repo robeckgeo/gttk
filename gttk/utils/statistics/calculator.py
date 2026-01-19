@@ -423,7 +423,6 @@ def _calculate_statistics_blocked(
                 maximum=final_stats['maximum'],
                 mean=final_stats['mean'],
                 std_dev=final_stats['std_dev'],
-                median=None,  # Median not calculated in blocked mode
                 histogram_counts=hist_counts,
                 histogram_bins=hist_bins,
                 histogram=pam_histogram_dict
@@ -446,13 +445,11 @@ def _calculate_statistics_blocked(
 def _calculate_statistics_full(ds_or_band: Union[gdal.Dataset, gdal.Band]) -> Optional[List[StatisticsBand]]:
     """
     Fast single-pass statistics calculation using native data types.
-    
+
     This function loads the entire raster into memory for processing, making it
     very fast for files that fit comfortably in RAM. Uses native data types
     (Byte, UInt16, Float32) for 50-87% memory reduction compared to always
     using float64.
-    
-    Calculates all statistics including median, which requires full data access.
     
     Args:
         ds_or_band: GDAL Dataset or Band to calculate statistics for
@@ -610,7 +607,6 @@ def _calculate_statistics_full(ds_or_band: Union[gdal.Dataset, gdal.Band]) -> Op
                 maximum=float(np.max(valid_data_f64)) if valid_data.size > 0 else None,
                 mean=float(np.mean(valid_data_f64)) if valid_data.size > 0 else None,
                 std_dev=float(np.std(valid_data_f64)) if valid_data.size > 0 else None,
-                median=float(np.median(valid_data_f64)) if valid_data.size > 0 else None,
                 histogram_counts=hist_counts,
                 histogram_bins=hist_bins,
                 histogram=pam_histogram_dict  # Store PAM histogram dict instead of raw pixels

@@ -10,7 +10,7 @@ The toolkit uses a Builder pattern to separate report content (what to include) 
 
 1. **Data Models** ([`utils/data_models.py`](utils/data_models.py))
     * Strongly-typed dataclasses for all report data
-    * Examples: `DifferencesComparison`, `IfdTableData`, `StatisticsData`
+    * Examples: `FileComparison`, `IfdTableData`, `StatisticsData`
     * Ensures type safety and clear contracts between components
 
 2. **Data Fetchers** ([`utils/data_fetchers.py`](utils/data_fetchers.py))

@@ -20,7 +20,8 @@ import os
 from datetime import datetime
 from osgeo import gdal
 from pathlib import Path
-from typing import Union
+from typing import Optional, Union
+from gttk.utils.data_models import FileComparison
 from gttk.utils.metadata_extractor import MetadataExtractor
 from gttk.utils.path_helpers import open_file
 from gttk.utils.report_builders import ComparisonReportBuilder
@@ -140,7 +141,7 @@ def generate_report_for_datasets(
         should_open = getattr(args, 'open_report', False)
         if should_open:
             try:
-                open_file(report_path)
+                open_file(report_path.name)
                 logger.info(f"Opened report: {report_path}")
             except Exception as e:
                 logger.warning(f"Could not open report: {e}")
@@ -152,7 +153,7 @@ def generate_report_for_datasets(
         return None
 
 def _generate_report_summary(base_file: str, comp_file: str, base_name: str, comp_name: str,
-                            file_comparison: Optional['FileComparison'] = None) -> str:
+                            file_comparison: Optional[FileComparison] = None) -> str:
     """
     Generate report summary section for comparison reports with FileComparison table.
 

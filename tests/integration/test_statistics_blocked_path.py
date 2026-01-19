@@ -66,10 +66,7 @@ class TestBlockedStatisticsPath:
         assert np.isclose(fast.mean, blocked.mean, rtol=1e-6)
         assert fast.std_dev is not None and blocked.std_dev is not None
         assert np.isclose(fast.std_dev, blocked.std_dev, rtol=1e-6)
-        
-        # Note: Median is None in blocked mode
-        assert blocked.median is None
-        
+
         dataset = None
     
     def test_blocked_with_nodata(self, tmp_path):

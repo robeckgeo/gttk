@@ -95,8 +95,7 @@ class TestNativeDtypeIntegration:
                 assert band_stats.maximum is not None
                 assert band_stats.mean is not None
                 assert band_stats.std_dev is not None
-                assert band_stats.median is not None
-                
+
                 # Verify nodata pixels were excluded
                 assert band_stats.nodata_count == 100  # 10x10 nodata region
                 assert band_stats.valid_count == (200 * 200) - 100

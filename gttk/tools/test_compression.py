@@ -28,6 +28,7 @@ import os
 import sys
 import time
 import traceback
+import warnings
 from copy import copy
 from dataclasses import dataclass
 from importlib import resources
@@ -610,7 +611,10 @@ class ExcelWriter:
         try:
             template_path = resources.files('gttk.resources.templates').joinpath('test_compression_template.xlsx')
             with resources.as_file(template_path) as template_file:
-                self.workbook = load_workbook(template_file)
+                # Suppress openpyxl warnings about unsupported Excel extensions
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
+                    self.workbook = load_workbook(template_file)
 
             self.worksheet = self.workbook.active
 

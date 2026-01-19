@@ -333,20 +333,6 @@ class Renderer(ABC):
             Formatted string representation
         """
         pass
-
-    @abstractmethod
-    def render_differences(self, data: FileComparison, title: str = "Differences") -> str:
-        """
-        Render differences comparison table.
-        
-        Args:
-            data: DifferencesComparison dataclass
-            title: Section title
-            
-        Returns:
-            Formatted string representation
-        """
-        pass
     
     @abstractmethod
     def render_ifd_table(self, data: IfdInfoData, title: Optional[str] = None) -> str:
@@ -1140,23 +1126,6 @@ class MarkdownRenderer(Renderer):
             )
             lines.extend(status_lines)
 
-        return "\n".join(lines)
-
-    def render_differences(self, data: FileComparison, title: str = "Differences") -> str:
-        """
-        Render differences comparison table (legacy method for backwards compatibility).
-
-        This method is deprecated and wraps render_file_comparison() with a section header.
-
-        Args:
-            data: FileComparison dataclass with comparison metrics
-            title: Section title
-
-        Returns:
-            Markdown formatted table with section header, result summary, and footer
-        """
-        lines = [f"## {title}", ""]
-        lines.append(self.render_file_comparison(data))
         return "\n".join(lines)
     
     def render_ifd_table(self, data: IfdInfoData, title: Optional[str] = None) -> str:
