@@ -149,6 +149,7 @@ class CompareCompression:
         self.description = "Compares two GeoTIFFs and generates a detailed compression report."
         self.icon = "icons/compare.png"
         self.canRunInBackground = True
+        self.category = "Compression Tools"
 
     def getParameterInfo(self):
         """Define parameter definitions"""
@@ -289,6 +290,7 @@ class OptimizeCompression:
         self.description = "Optimizes and compresses a GeoTIFF into a Cloud Optimized GeoTIFF (COG) with advanced options."
         self.icon = "icons/optimize.png"
         self.canRunInBackground = False
+        self.category = "Compression Tools"
         
         self.PRODUCT_TYPE_MAP = {
             "Digital Elevation Model": PT.DEM.value,
@@ -857,6 +859,7 @@ class TestCompression:
         self.description = "Tests multiple compression settings from CSV configurations and generates detailed Excel reports comparing performance and efficiency."
         self.icon = "icons/test.png"
         self.canRunInBackground = True
+        self.category = "Compression Tools"
         
         self.PRODUCT_TYPE_MAP = {
             "Digital Elevation Model": PT.DEM.value,
@@ -1111,6 +1114,7 @@ class ReadMetadata:
         self.description = "Reads the metadata in a GeoTIFF header and generates a report in Markdown or HTML format."
         self.icon = "icons/read.png"
         self.canRunInBackground = True
+        self.category = "Metadata Tools"
         
         # --- Define Reader Type Presets ---
         self.READER_TYPE_PRESETS = {
