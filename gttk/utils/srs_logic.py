@@ -89,9 +89,19 @@ def get_srs_from_user_input(srs_input: str) -> Optional[osr.SpatialReference]:
     Returns:
         Optional[osr.SpatialReference]: A spatial reference object, or None if parsing fails.
     """
+    import os
     srs = osr.SpatialReference()
     srs_upper = srs_input.upper()
     logger.info(f"Parsing user input SRS: {srs_input}")
+
+    # Check if PROJ_LIB is set - log warning if not
+    if 'PROJ_LIB' not in os.environ:
+        logger.warning(
+            "PROJ_LIB environment variable is not set. "
+            "EPSG code lookups may fail if GDAL cannot find the proj.db database. "
+            "Activate your conda environment or set PROJ_LIB to your PROJ share directory."
+        )
+
     try:
         # Check for Custom WKT Registry matches first
         # Extract abbreviation if input matches Name Map or Abbrev Map keys
@@ -120,26 +130,47 @@ def get_srs_from_user_input(srs_input: str) -> Optional[osr.SpatialReference]:
 
         # Standard EPSG Lookups
         if srs_input in VERTICAL_SRS_NAME_MAP:  # Direct match for full names (in GUI dropdown)
-            srs.ImportFromEPSG(VERTICAL_SRS_NAME_MAP[srs_input])
+            epsg_code = VERTICAL_SRS_NAME_MAP[srs_input]
+            logger.debug(f"Importing from EPSG:{epsg_code} for '{srs_input}'")
+            srs.ImportFromEPSG(epsg_code)
         elif srs_upper in VERTICAL_SRS_ABBREV_MAP:  # Shortcut abbreviation match
-            srs.ImportFromEPSG(VERTICAL_SRS_ABBREV_MAP[srs_upper])
+            epsg_code = VERTICAL_SRS_ABBREV_MAP[srs_upper]
+            logger.debug(f"Importing from EPSG:{epsg_code} for '{srs_input}'")
+            srs.ImportFromEPSG(epsg_code)
         elif srs_upper.startswith('EPSG:'):  # EPSG code with prefix
             epsg_part = srs_upper.split(':')[1]
             # Check for compound CRS (e.g., "EPSG:32610+5703")
             if '+' in epsg_part:
                 # Use SetFromUserInput for compound CRS
                 if srs.SetFromUserInput(srs_input) != 0:
+                    logger.error(f"Failed to parse compound EPSG: {srs_input}")
                     return None
             else:
                 # Simple EPSG code
-                srs.ImportFromEPSG(int(epsg_part))
+                epsg_code = int(epsg_part)
+                logger.debug(f"Importing from EPSG:{epsg_code}")
+                srs.ImportFromEPSG(epsg_code)
         elif srs_input.isdigit():  # EPSG code as integer string
-            srs.ImportFromEPSG(int(srs_input))
+            epsg_code = int(srs_input)
+            logger.debug(f"Importing from EPSG:{epsg_code}")
+            srs.ImportFromEPSG(epsg_code)
         else:
             if srs.SetFromUserInput(srs_input) != 0:
+                logger.error(f"SetFromUserInput failed for: {srs_input}")
                 return None
         return srs
-    except (RuntimeError, ValueError, KeyError):
+    except RuntimeError as e:
+        logger.error(
+            f"Failed to parse SRS '{srs_input}': {e}\n"
+            f"This may be caused by:\n"
+            f"  1. PROJ database not accessible (check PROJ_LIB environment variable)\n"
+            f"  2. EPSG code not found in PROJ database\n"
+            f"  3. Conda environment not activated\n"
+            f"If using a conda environment, ensure it's activated before running GTTK."
+        )
+        return None
+    except (ValueError, KeyError) as e:
+        logger.error(f"Invalid SRS input '{srs_input}': {e}")
         return None
 
 def standardize_srs(wkt: str) -> osr.SpatialReference:
@@ -363,7 +394,13 @@ def handle_srs_logic(args: OptimizeArguments, input_info: GeoTiffInfo) -> Option
     # Parse the user-provided vertical SRS.
     parsed_vertical_srs = get_srs_from_user_input(args.vertical_srs)
     if not parsed_vertical_srs:
-        raise ProcessingStepFailedError(f"Failed to parse vertical SRS: {args.vertical_srs}")
+        raise ProcessingStepFailedError(
+            f"Failed to parse vertical SRS: {args.vertical_srs}\n"
+            f"See error details above. Common solutions:\n"
+            f"  1. Activate your conda environment: 'conda activate gttk'\n"
+            f"  2. Ensure GDAL/PROJ are properly installed in your environment\n"
+            f"  3. Verify PROJ_LIB environment variable points to a valid PROJ database"
+        )
 
     # If the parsed SRS is a 3D geographic CRS (has 3 axes), it is the complete target SRS.
     is_3d_geographic = parsed_vertical_srs.IsGeographic() and parsed_vertical_srs.GetAxesCount() == 3
