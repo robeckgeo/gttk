@@ -19,18 +19,18 @@
 		</usage>
 		<parameters>
 			<param name="input_path" displayname="Input GeoTIFF(s)" type="Required" direction="Input" datatype="Raster Layer; Raster Dataset; File; Folder" expression="input_path">
-				<dialogReference>Select a GeoTIFF file, raster layer, or folder containing GeoTIFF files to validate. When a folder is selected, all .tif and .tiff files in the folder will be validated.</dialogReference>
-			</param>
-			<param name="product" displayname="Product" type="Required" direction="Input" datatype="String" expression="product">
-				<dialogReference>The product type to validate against (e.g., DGED5, GLO-30, NAIP). Product definitions are loaded from TOML files in the Rules Directory. Each product defines specific validation rules for TIFF tags, GeoKeys, GDAL metadata, and embedded XML.</dialogReference>
+				<dialogReference>Select a GeoTIFF file, raster layer, or folder containing GeoTIFF files to validate. When a folder is selected, all .tif and .tiff files in the folder will be validated that contain the name filter (if used).</dialogReference>
 			</param>
 			<param name="rules_dir" displayname="Rules Directory" type="Optional" direction="Input" datatype="Folder" expression="{rules_dir}">
 				<dialogReference>Directory containing TOML validation rule files. Defaults to gttk/resources/rules within the toolbox installation. Custom rules can be created following the format in example_rules.toml.</dialogReference>
 			</param>
+			<param name="product" displayname="Product" type="Required" direction="Input" datatype="String" expression="product">
+				<dialogReference>The product type to validate against (e.g., DGED5, GLO-30, NAIP). Product definitions are loaded from TOML files in the Rules Directory. Each product defines specific validation rules for TIFF tags, GeoKeys, GDAL metadata, and embedded XML.</dialogReference>
+			</param>
 			<param name="sections" displayname="Sections to Validate" type="Optional" direction="Input" datatype="String" expression="{sections}">
 				<dialogReference>Select which metadata sections to validate. Available sections: tag (TIFF tags), geokey (GeoKeys), gdal (GDAL_METADATA items and statistics), geo (GEO_METADATA embedded XML), xmp (XMP metadata), xml (external XML sidecar file), projjson (PROJJSON CRS). By default, all sections are validated.</dialogReference>
 			</param>
-			<param name="name_string" displayname="Name Filter" type="Optional" direction="Input" datatype="String" expression="{name_string}">
+			<param name="name_filter" displayname="Name Filter" type="Optional" direction="Input" datatype="String" expression="{name_filter}">
 				<dialogReference>Filter files by name when validating a directory. Only files containing this substring in their filename will be validated. Useful for mixed-product directories where files can be identified by naming convention.</dialogReference>
 			</param>
 			<param name="output_dir" displayname="Output Directory" type="Optional" direction="Input" datatype="Folder" expression="{output_dir}">

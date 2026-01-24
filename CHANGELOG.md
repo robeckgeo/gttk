@@ -19,7 +19,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 
 - Updated documentation to reflect 5 tools (added Validate Metadata alongside existing Compare, Optimize, Test, Read)
-- Corrected CLI argument names in documentation: `--rules-dir`, `--output-dir`, `--name-string` (previously documented as `--rules`, `--output`, `--name-filter`)
+- Corrected CLI argument names in documentation: `--rules-dir`, `--output-dir`, `--name-filter` (previously documented as `--rules`, `--output`, `--name-filter`)
 - Enhanced GDAL Metadata documentation with clear band suffix syntax and examples
 - Reorganized validation output structure to use folders with JSON summary, GeoPackage map, and optional individual reports
 

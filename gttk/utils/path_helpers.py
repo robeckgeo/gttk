@@ -66,7 +66,8 @@ def _convert_wsl_path_to_windows(wsl_path: str) -> str:
         # Fallback: manually construct path
         # Modern WSL uses wsl.localhost, older versions use wsl$
         wsl_path = os.path.abspath(wsl_path)
-        windows_path = f"\\\\wsl.localhost\\Ubuntu{wsl_path.replace('/', '\\')}"
+        wsl_path_string = wsl_path.replace('/', '\\')
+        windows_path = f"\\\\wsl.localhost\\Ubuntu{wsl_path_string}"
         return windows_path
 
 def open_file(filename: str) -> None:

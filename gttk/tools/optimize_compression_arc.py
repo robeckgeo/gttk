@@ -323,13 +323,19 @@ def _write_nodata_remap_script(
     # Escape backslashes for the python string
     input_file_esc = str(input_file).replace('\\', '\\\\')
     output_file_esc = str(output_file).replace('\\', '\\\\')
-    
+
+    # Normalize string "nan"/"NaN" to numpy.nan
+    if isinstance(source_nodata, str) and source_nodata.lower() == 'nan':
+        source_nodata = np.nan
+    if isinstance(target_nodata, str) and target_nodata.lower() == 'nan':
+        target_nodata = np.nan
+
     # Check if this is float data
     is_float_type = 'Float' in data_type
-    
-    # Normalize string "nan" to numpy.nan for comparisons
+
+    # Check for NaN values after normalization
     source_is_nan = (isinstance(source_nodata, float) and np.isnan(source_nodata))
-    target_is_nan = (isinstance(target_nodata, float) and np.isnan(target_nodata)) or (isinstance(target_nodata, str) and target_nodata.lower() == 'nan')
+    target_is_nan = (isinstance(target_nodata, float) and np.isnan(target_nodata))
     
     # For non-float types, NaN cannot be used
     if not is_float_type and (source_is_nan or target_is_nan):

@@ -170,7 +170,7 @@ def main():
         type=Path,
         dest='input_path',
         help='Path to GeoTIFF file or directory to validate. '
-             'If directory, all .tif/.tiff files will be processed (optionally filtered by --name-string).'
+             'If directory, all .tif/.tiff files will be processed (optionally filtered by --name-filter).'
     )
     validate_parser.add_argument(
         '-p', '--product',
@@ -196,13 +196,13 @@ def main():
              'If not provided, all sections with rules will be validated.'
     )
     validate_parser.add_argument(
-        '-n', '--name-string',
+        '-n', '--name-filter',
         type=str,
         default='',
-        dest='name_string',
+        dest='name_filter',
         help='Filter files by name substring when processing directories. '
              'Only files containing this string will be validated. '
-             'Example: --name-string DSM processes only files with "DSM" in the name. '
+             'Example: --name-filter DSM processes only files with "DSM" in the name. '
              'Only applicable when --input is a directory.'
     )
     validate_parser.add_argument(

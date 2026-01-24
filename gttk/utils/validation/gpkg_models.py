@@ -140,7 +140,7 @@ class GeoPackageFeature:
         return 'SKIPPED'
 
     @classmethod
-    def from_json_result(cls, file_result: Dict[str, Any]) -> GeoPackageFeature:
+    def from_json_result(cls, file_result: Dict[str, Any]) -> "GeoPackageFeature":
         """
         Factory method to create a GeoPackageFeature from validation JSON result.
 

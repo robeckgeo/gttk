@@ -126,13 +126,13 @@ def generate_report_path(
     return reports_folder / filename
 
 
-def get_input_files(input_path: Path, name_string: str = '') -> list:
+def get_input_files(input_path: Path, name_filter: str = '') -> list:
     """
     Get list of GeoTIFF files to process, applying name filter if provided.
 
     Args:
         input_path: File or directory path
-        name_string: Optional substring to filter filenames (directory mode only)
+        name_filter: Optional substring to filter filenames (directory mode only)
 
     Returns:
         List of Path objects for files to validate
@@ -141,7 +141,7 @@ def get_input_files(input_path: Path, name_string: str = '') -> list:
         >>> get_input_files(Path('data/example.tif'))
         [Path('data/example.tif')]
 
-        >>> get_input_files(Path('data/'), name_string='DSM')
+        >>> get_input_files(Path('data/'), name_filter='DSM')
         [Path('data/tile_001_DSM.tif'), Path('data/tile_002_DSM.tif')]
     """
     if input_path.is_file():
@@ -153,8 +153,8 @@ def get_input_files(input_path: Path, name_string: str = '') -> list:
     geotiffs = tif_files + tiff_files
 
     # Apply name filter if provided
-    if name_string:
-        filtered = [f for f in geotiffs if name_string in f.name]
+    if name_filter:
+        filtered = [f for f in geotiffs if name_filter in f.name]
         return filtered
 
     return geotiffs

@@ -237,7 +237,7 @@ class ValidateArguments(BaseArguments):
         product: Validation product name (e.g., 'DGED5', 'GLO-30')
         rules_dir: Directory containing TOML validation rule files
         sections: Optional list of sections to validate
-        name_string: Filter files by name substring (directory mode only)
+        name_filter: Filter files by name substring (directory mode only)
         output_dir: Optional parent directory for output folder
         write_reports: Whether to write individual HTML/MD reports
         report_format: Report format ('html' or 'md')
@@ -248,7 +248,7 @@ class ValidateArguments(BaseArguments):
     product: Optional[str] = None
     rules_dir: Path = field(default_factory=lambda: Path('gttk/resources/rules'))
     sections: Optional[List[str]] = None
-    name_string: str = ''
+    name_filter: str = ''
     output_dir: Optional[Path] = None
     write_reports: bool = True
     report_format: str = 'html'
@@ -281,10 +281,10 @@ class ValidateArguments(BaseArguments):
             if self.input_path.suffix.lower() not in ['.tif', '.tiff']:
                 raise ValueError("Input file must be a GeoTIFF (.tif or .tiff)")
 
-            # Warn if name_string provided for single file (ignored)
-            if self.name_string:
+            # Warn if name_filter provided for single file (ignored)
+            if self.name_filter:
                 logger.warning(
-                    f"--name-string '{self.name_string}' is only applicable when "
+                    f"--name-filter '{self.name_filter}' is only applicable when "
                     f"--input is a directory. Ignoring for single file validation."
                 )
 
@@ -296,15 +296,15 @@ class ValidateArguments(BaseArguments):
                 raise ValueError(f"No GeoTIFF files found in directory: {self.input_path}")
 
             # Apply name filter if provided
-            if self.name_string:
-                filtered = [f for f in geotiffs if self.name_string in f.name]
+            if self.name_filter:
+                filtered = [f for f in geotiffs if self.name_filter in f.name]
                 if not filtered:
                     raise ValueError(
-                        f"No GeoTIFF files matching name string '{self.name_string}' "
+                        f"No GeoTIFF files matching name substring '{self.name_filter}' "
                         f"found in directory: {self.input_path}"
                     )
                 logger.info(
-                    f"Name filter '{self.name_string}': {len(filtered)} of {len(geotiffs)} files match"
+                    f"Name filter '{self.name_filter}': {len(filtered)} of {len(geotiffs)} files match"
                 )
         else:
             raise ValueError(f"Input path must be a file or directory: {self.input_path}")

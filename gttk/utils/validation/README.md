@@ -92,7 +92,7 @@ gttk validate -i input.tif -p MY-PRODUCT
 gttk validate -i input_directory/ -p MY-PRODUCT
 
 # Filter files by name substring (directory mode only)
-gttk validate -i input_directory/ -p MY-PRODUCT --name-string "DEM"
+gttk validate -i input_directory/ -p MY-PRODUCT --name-filter "DEM"
 
 # Use custom rules directory
 gttk validate -i input.tif -r /path/to/rules/ -p MY-PRODUCT
@@ -706,19 +706,19 @@ Validate all GeoTIFF files in a directory:
 gttk validate -i /path/to/directory/ -p PRODUCT-NAME
 ```
 
-### Name String Filtering
+### Name Substring Filtering
 
 Filter files by substring match in the filename:
 
 ```bash
 # Validate only files containing "DEM" in the name
-gttk validate -i /data/ -p DGED5 --name-string "DEM"
+gttk validate -i /data/ -p DGED5 --name-filter "DEM"
 
 # Validate files from specific year
-gttk validate -i /data/ -p 3DEP --name-string "2024"
+gttk validate -i /data/ -p 3DEP --name-filter "2024"
 
 # Validate specific tile naming pattern
-gttk validate -i /data/ -p GLO-30 --name-string "N45_E010"
+gttk validate -i /data/ -p GLO-30 --name-filter "N45_E010"
 ```
 
 ### Output Options

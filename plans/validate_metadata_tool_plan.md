@@ -250,7 +250,7 @@ gttk/utils/validation/
 ### 3.1 Command Signature
 
 ```bash
-gttk validate -i INPUT -p PRODUCT [-n NAME_STRING] [-r RULES_DIR] [-s SECTIONS...]
+gttk validate -i INPUT -p PRODUCT [-n name_filter] [-r RULES_DIR] [-s SECTIONS...]
               [-o OUTPUT_DIR] [-w WRITE_REPORTS] [-f FORMAT] [--open-report] [-v]
 ```
 
@@ -271,7 +271,7 @@ validate_parser.add_argument(
     type=Path, 
     dest='input_path', 
     help='Path to GeoTIFF file or directory to validate. '
-         'If directory, all .tif/.tiff files will be processed (optionally filtered by --name-string).'
+         'If directory, all .tif/.tiff files will be processed (optionally filtered by --name-filter).'
 )
 validate_parser.add_argument(
     '-p', '--product', 
@@ -298,13 +298,13 @@ validate_parser.add_argument(
          'If not provided, all sections with rules will be validated.'
 )
 validate_parser.add_argument(
-    '-n', '--name-string', 
+    '-n', '--name-filter', 
     type=str, 
     default='',
-    dest='name_string',
+    dest='name_filter',
     help='Filter files by name substring when processing directories. '
          'Only files containing this string will be validated. '
-         'Example: --name-string DSM processes only files with "DSM" in the name. '
+         'Example: --name-filter DSM processes only files with "DSM" in the name. '
          'Only applicable when --input is a directory.'
 )
 validate_parser.add_argument(
@@ -358,7 +358,7 @@ class ValidateArguments(BaseArguments):
     product: str = None
     rules_dir: Path = Path('gttk/resources/rules')
     sections: Optional[List[str]] = None
-    name_string: str = ''
+    name_filter: str = ''
     output_dir: Optional[Path] = None  # None = create alongside input
     write_reports: bool = True         # Write individual HTML/MD reports
     report_format: str = 'html'
@@ -387,10 +387,10 @@ class ValidateArguments(BaseArguments):
             if self.input_path.suffix.lower() not in ['.tif', '.tiff']:
                 raise ValueError(f"Input file must be a GeoTIFF (.tif or .tiff)")
             
-            # Warn if name_string provided for single file (ignored)
-            if self.name_string:
+            # Warn if name_filter provided for single file (ignored)
+            if self.name_filter:
                 logger.warning(
-                    f"--name-string '{self.name_string}' is only applicable when "
+                    f"--name-filter '{self.name_filter}' is only applicable when "
                     f"--input is a directory. Ignoring for single file validation."
                 )
                 
@@ -402,15 +402,15 @@ class ValidateArguments(BaseArguments):
                 raise ValueError(f"No GeoTIFF files found in directory: {self.input_path}")
             
             # Apply name filter if provided
-            if self.name_string:
-                filtered = [f for f in geotiffs if self.name_string in f.name]
+            if self.name_filter:
+                filtered = [f for f in geotiffs if self.name_filter in f.name]
                 if not filtered:
                     raise ValueError(
-                        f"No GeoTIFF files matching name string '{self.name_string}' "
+                        f"No GeoTIFF files matching name filter '{self.name_filter}' "
                         f"found in directory: {self.input_path}"
                     )
                 logger.info(
-                    f"Name filter '{self.name_string}': {len(filtered)} of {len(geotiffs)} files match"
+                    f"Name filter '{self.name_filter}': {len(filtered)} of {len(geotiffs)} files match"
                 )
         else:
             raise ValueError(f"Input path must be a file or directory: {self.input_path}")
@@ -450,7 +450,7 @@ class ValidateArguments(BaseArguments):
 | `--product` | Yes | str | Must match a product in TOML rules | - |
 | `--rules-dir` | No | Path | Must be valid directory with .toml files | `gttk/resources/rules` |
 | `--sections` | No | List[str] | Section names: tag, geokey, gdal, geo, xmp, xml, projjson | All sections |
-| `--name-string` | No | str | Used only if input is directory | `''` (no filter) |
+| `--name-filter` | No | str | Used only if input is directory | `''` (no filter) |
 | `--output-dir` | No | Path | Parent directory for output folder | Alongside input |
 | `--write-reports` | No | bool | Write individual HTML/MD reports | `True` |
 | `--report-format` | No | str | `html` or `md` | `html` |
@@ -1069,7 +1069,7 @@ def get_section_missing_message(section_type: str) -> str:
 - 30m and 90m resolution DEMs from Copernicus GLO-30/GLO-90
 - Multispectral and panchromatic satellite imagery
 
-**Solution:** The `--name-string` argument enables selective validation by filename substring matching.
+**Solution:** The `--name-filter` argument enables selective validation by filename substring matching.
 
 ### 6.2 Use Cases
 
@@ -1118,13 +1118,13 @@ gttk validate -i dems/ -p GLO-90 -n _30_  # '_30_' = 3.0 arc seconds (~90m)
 ### 6.3 Implementation
 
 ```python
-def get_input_files(input_path: Path, name_string: str = '') -> List[Path]:
+def get_input_files(input_path: Path, name_filter: str = '') -> List[Path]:
     """
     Get list of GeoTIFF files to process, applying name filter if provided.
     
     Args:
         input_path: File or directory path
-        name_string: Optional substring to filter filenames (directory mode only)
+        name_filter: Optional substring to filter filenames (directory mode only)
     
     Returns:
         List of Path objects for files to validate
@@ -1133,7 +1133,7 @@ def get_input_files(input_path: Path, name_string: str = '') -> List[Path]:
         >>> get_input_files(Path('data/example.tif'))
         [Path('data/example.tif')]
         
-        >>> get_input_files(Path('data/'), name_string='DSM')
+        >>> get_input_files(Path('data/'), name_filter='DSM')
         [Path('data/tile_001_DSM.tif'), Path('data/tile_002_DSM.tif')]
     """
     if input_path.is_file():
@@ -1143,8 +1143,8 @@ def get_input_files(input_path: Path, name_string: str = '') -> List[Path]:
     geotiffs = sorted(input_path.glob('*.tif')) + sorted(input_path.glob('*.tiff'))
     
     # Apply name filter if provided
-    if name_string:
-        filtered = [f for f in geotiffs if name_string in f.name]
+    if name_filter:
+        filtered = [f for f in geotiffs if name_filter in f.name]
         return filtered
     
     return geotiffs
@@ -1160,7 +1160,7 @@ def validate_metadata(args: ValidateArguments):
     logger = logging.getLogger(__name__)
     
     # Get list of files to process
-    input_files = get_input_files(args.input_path, args.name_string)
+    input_files = get_input_files(args.input_path, args.name_filter)
     
     # Log processing mode
     if args.input_path.is_file():
@@ -1169,9 +1169,9 @@ def validate_metadata(args: ValidateArguments):
         total_in_dir = len(list(args.input_path.glob('*.tif')) + 
                            list(args.input_path.glob('*.tiff')))
         
-        if args.name_string:
+        if args.name_filter:
             logger.info(
-                f"Batch validation with name filter '{args.name_string}': "
+                f"Batch validation with name filter '{args.name_filter}': "
                 f"{len(input_files)} of {total_in_dir} files in {args.input_path}"
             )
         else:
@@ -2577,7 +2577,7 @@ tests/fixtures/validation/
 1. **Valid Batch** - Directory with 10 valid GeoTIFFs → 10 `_PASS.html` files
 2. **Mixed Results Batch** - Directory with 5 valid, 3 invalid, 2 incomplete → 5 `_PASS.html`, 5 `_FAIL.html`
 3. **Empty Directory** - Directory with no `.tif` files → Error message
-4. **Name Filtering** - Mixed products with `--name-string DSM` → Only DSM files processed
+4. **Name Filtering** - Mixed products with `--name-filter DSM` → Only DSM files processed
 5. **Custom Output Directory** - Batch with custom output path → Reports in custom directory
 
 #### B. Missing Section Tests
@@ -2642,7 +2642,7 @@ gttk validate -i data/mixed/ -p 3DEP -n dem
 
 #### Multi-Product Workflows
 
-When a directory contains multiple product types, use `--name-string` to process each product separately:
+When a directory contains multiple product types, use `--name-filter` to process each product separately:
 
 ```bash
 # Validate DEM products
@@ -2800,7 +2800,7 @@ The tool leverages existing infrastructure:
 ### 16.1 Functional Requirements
 
 - ✅ Support both single-file and batch (directory) processing
-- ✅ Filter batch processing by filename substring (--name-string)
+- ✅ Filter batch processing by filename substring (--name-filter)
 - ✅ Use product-level terminology for validation operations
 - ✅ List all rules in report, even when sections are missing
 - ✅ Differentiate between wrong values, missing keys, and missing sections in messages

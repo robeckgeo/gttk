@@ -79,7 +79,7 @@ def validate_metadata(args: ValidateArguments) -> None:
     logger.info(f"Product: {args.product}")
 
     # Get list of files to process
-    input_files = get_input_files(args.input_path, args.name_string)
+    input_files = get_input_files(args.input_path, args.name_filter)
 
     # Log processing mode
     if args.input_path.is_file():
@@ -87,9 +87,9 @@ def validate_metadata(args: ValidateArguments) -> None:
     else:
         total_in_dir = len(list(args.input_path.glob('*.tif')) +
                           list(args.input_path.glob('*.tiff')))
-        if args.name_string:
+        if args.name_filter:
             logger.info(
-                f"Batch validation with name filter '{args.name_string}': "
+                f"Batch validation with name filter '{args.name_filter}': "
                 f"{len(input_files)} of {total_in_dir} files"
             )
         else:

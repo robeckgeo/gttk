@@ -1444,18 +1444,7 @@ class ValidateMetadata:
             parameterType="Required",
             direction="Input")
 
-        # --- Parameter 1: Product ---
-        param_product = arcpy.Parameter(
-            displayName="Product",
-            name="product",
-            datatype="GPString",
-            parameterType="Required",
-            direction="Input")
-        param_product.filter.type = "ValueList"
-        # Will be populated dynamically in updateParameters
-        param_product.filter.list = []
-
-        # --- Parameter 2: Rules Directory ---
+        # --- Parameter 1: Rules Directory ---
         param_rules_dir = arcpy.Parameter(
             displayName="Rules Directory",
             name="rules_dir",
@@ -1467,6 +1456,17 @@ class ValidateMetadata:
         default_rules_path = project_root / "gttk" / "resources" / "rules"
         if default_rules_path.exists():
             param_rules_dir.value = str(default_rules_path)
+
+        # --- Parameter 2: Product ---
+        param_product = arcpy.Parameter(
+            displayName="Product",
+            name="product",
+            datatype="GPString",
+            parameterType="Required",
+            direction="Input")
+        param_product.filter.type = "ValueList"
+        # Will be populated dynamically in updateParameters
+        param_product.filter.list = []
 
         # --- Parameter 3: Sections (multivalue) ---
         param_sections = arcpy.Parameter(
@@ -1482,13 +1482,13 @@ class ValidateMetadata:
         param_sections.value = VALIDATION_SECTIONS
 
         # --- Parameter 4: Name Filter ---
-        param_name_string = arcpy.Parameter(
+        param_name_filter = arcpy.Parameter(
             displayName="Name Filter",
-            name="name_string",
+            name="name_filter",
             datatype="GPString",
             parameterType="Optional",
             direction="Input")
-        param_name_string.value = ""
+        param_name_filter.value = ""
 
         # --- Parameter 5: Output Directory ---
         param_output_dir = arcpy.Parameter(
@@ -1545,10 +1545,10 @@ class ValidateMetadata:
 
         return [
             param_input,        # 0
-            param_product,      # 1
-            param_rules_dir,    # 2
+            param_rules_dir,    # 1
+            param_product,      # 2
             param_sections,     # 3
-            param_name_string,  # 4
+            param_name_filter,  # 4
             param_output_dir,   # 5
             param_write_reports,  # 6
             param_report_format,  # 7
@@ -1563,7 +1563,7 @@ class ValidateMetadata:
 
     def updateParameters(self, parameters):
         """Modify the values and properties of parameters before internal validation."""
-        rules_dir_param = parameters[2].valueAsText
+        rules_dir_param = parameters[1].valueAsText
 
         # Only refresh products if rules directory has changed
         if rules_dir_param != ValidateMetadata._previous_rules_dir:
@@ -1573,13 +1573,13 @@ class ValidateMetadata:
                 try:
                     products = get_available_products(Path(rules_dir_param))
                     ValidateMetadata._available_products = sorted(products.keys())
-                    parameters[1].filter.list = ValidateMetadata._available_products
+                    parameters[2].filter.list = ValidateMetadata._available_products
                 except Exception as e:
                     arcpy.AddWarning(f"Could not load products: {e}")
-                    parameters[1].filter.list = []
+                    parameters[2].filter.list = []
                     ValidateMetadata._available_products = []
             else:
-                parameters[1].filter.list = []
+                parameters[2].filter.list = []
                 ValidateMetadata._available_products = []
 
         # Enable/disable name filter based on input type
@@ -1615,21 +1615,21 @@ class ValidateMetadata:
                     parameters[0].clearMessage()
 
         # Validate product selection
-        if parameters[2].value and not parameters[1].value:
+        if parameters[1].value and not parameters[2].value:
             parameters[1].setWarningMessage("Select a product from the dropdown after loading the rules directory")
 
         # Validate rules directory
-        rules_dir = parameters[2].valueAsText
+        rules_dir = parameters[1].valueAsText
         if rules_dir:
             rules_path = Path(rules_dir)
             if not rules_path.exists():
-                parameters[2].setErrorMessage(f"Rules directory does not exist: {rules_dir}")
+                parameters[1].setErrorMessage(f"Rules directory does not exist: {rules_dir}")
             elif not rules_path.is_dir():
-                parameters[2].setErrorMessage("Path must be a directory")
+                parameters[1].setErrorMessage("Path must be a directory")
             elif not list(rules_path.glob('*.toml')):
-                parameters[2].setErrorMessage("No TOML rule files found in directory")
+                parameters[1].setErrorMessage("No TOML rule files found in directory")
             else:
-                parameters[2].clearMessage()
+                parameters[1].clearMessage()
 
     def execute(self, parameters, messages):
         """Execute the validation tool."""
@@ -1643,10 +1643,10 @@ class ValidateMetadata:
             else:
                 input_path = parameters[0].valueAsText
 
-            product = parameters[1].valueAsText
-            rules_dir = parameters[2].valueAsText
+            rules_dir = parameters[1].valueAsText
+            product = parameters[2].valueAsText
             sections = parameters[3].valueAsText
-            name_string = parameters[4].valueAsText or ""
+            name_filter = parameters[4].valueAsText or ""
             output_dir = parameters[5].valueAsText
             write_reports = parameters[6].value
             report_format_display = parameters[7].valueAsText
@@ -1664,10 +1664,10 @@ class ValidateMetadata:
             # Build arguments
             args = ValidateArguments(
                 input_path=Path(input_path),
-                product=product,
                 rules_dir=Path(rules_dir) if rules_dir else Path('gttk/resources/rules'),
+                product=product,
                 sections=sections_list,
-                name_string=name_string,
+                name_filter=name_filter,
                 output_dir=Path(output_dir) if output_dir else None,
                 write_reports=write_reports,
                 report_format=report_format,
@@ -1676,8 +1676,8 @@ class ValidateMetadata:
             )
 
             messages.addMessage(f"Input: {args.input_path}")
-            messages.addMessage(f"Product: {args.product}")
             messages.addMessage(f"Rules Directory: {args.rules_dir}")
+            messages.addMessage(f"Product: {args.product}")
             messages.addMessage(f"Sections: {args.sections or 'All'}")
             messages.addMessage(f"Output Folder: {args.output_folder}")
 
