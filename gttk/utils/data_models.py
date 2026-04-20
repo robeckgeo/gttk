@@ -626,8 +626,8 @@ class GeoExtents:
         ...     center=(0.0, 0.0)
         ... )
         >>> lon, lat = extents.center
-        >>> print(f"Center: {lon}°, {lat}°")
-        Center: 0.0°, 0.0°
+        >>> print(f"Center: {lon} deg, {lat} deg")
+        Center: 0.0 deg, 0.0 deg
     """
     upper_left: Tuple[float, float]
     lower_left: Tuple[float, float]

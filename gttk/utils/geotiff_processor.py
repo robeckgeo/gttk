@@ -1654,11 +1654,11 @@ def read_geotiff(ds: gdal.Dataset) -> GeoTiffInfo:
             # If we know it's a geographic/projected/compound CS but missing unit names, it's incomplete
             if projection_info.get('is_projected') and not projection_info.get('linear_unit_name'):
                 is_incomplete = True
-                logger.info("Projected CRS detected but linear_unit_name missing - PROJ environment may be broken")
+                logger.debug("Projected CRS missing linear_unit_name; trying OSGeo4W fallback")
             elif projection_info.get('is_geographic'):
                 if not projection_info.get('angular_unit_name'):
                     is_incomplete = True
-                    logger.info("Geographic CRS detected but angular_unit_name missing - PROJ environment may be broken")
+                    logger.debug("Geographic CRS missing angular_unit_name; trying OSGeo4W fallback")
                 
                 # Check for 3D Geographic CRS (e.g. EPSG:4979) which should have a vertical unit
                 if srs and srs.GetAxesCount() == 3:
@@ -1668,7 +1668,7 @@ def read_geotiff(ds: gdal.Dataset) -> GeoTiffInfo:
                          if axis_name and ('height' in axis_name.lower() or 'ellipsoid' in axis_name.lower()):
                              if not projection_info.get('vertical_unit_name'):
                                  is_incomplete = True
-                                 logger.info("3D Geographic CRS detected (3 axes) but missing vertical unit - PROJ environment may be broken")
+                                 logger.debug("3D Geographic CRS missing vertical unit; trying OSGeo4W fallback")
                      except Exception:
                          pass
 
@@ -1679,18 +1679,18 @@ def read_geotiff(ds: gdal.Dataset) -> GeoTiffInfo:
                 
                 if not has_horiz_unit:
                     is_incomplete = True
-                    logger.info("Compound CRS detected but missing horizontal unit names - PROJ environment may be broken")
+                    logger.debug("Compound CRS missing horizontal unit names; trying OSGeo4W fallback")
                 elif not has_vert_unit:
                     # Only consider it incomplete if we expected a vertical unit (i.e. it's compound)
                     is_incomplete = True
-                    logger.info("Compound CRS detected but missing vertical unit names - PROJ environment may be broken")
+                    logger.debug("Compound CRS missing vertical unit names; trying OSGeo4W fallback")
         else:
-            # If we have an SRS but couldn't determine CS type, definitely broken
-            logger.info("SRS exists but CS type couldn't be determined - PROJ environment likely broken")
+            # SRS exists but CS type couldn't be determined — fall back to OSGeo4W for a full parse.
+            logger.debug("SRS CS type not determined from initial parse; trying OSGeo4W fallback")
             is_incomplete = True
-        
+
         if is_incomplete:
-            logger.info("projection_info incomplete, attempting OSGeo4W Python bindings fallback...")
+            logger.debug("projection_info incomplete, attempting OSGeo4W Python bindings fallback")
             try:
                 # Use the new direct Python bindings approach to get complete info, WKT, and PROJJSON
                 projection_info_result, wkt_result, projjson_result = get_projection_info_from_osgeo4w(str(filepath))

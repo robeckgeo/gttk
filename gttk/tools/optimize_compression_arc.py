@@ -462,9 +462,9 @@ def _calculate_overview_levels(x_size: int, y_size: int, tile_size: int = 512) -
     
     Example:
         For a 6000x4000 (width x height) image with 512 tile size:
-        - Level 2: 3000x2000 (both > 512) ✓
-        - Level 4: 1500x1000 (both > 512) ✓
-        - Level 8: 750x500 (height ≤ 512) ✓ STOP
+        - Level 2: 3000x2000 (both > 512)
+        - Level 4: 1500x1000 (both > 512)
+        - Level 8: 750x500 (height <= 512) STOP
         Returns: [2, 4, 8]
     """
     levels = []

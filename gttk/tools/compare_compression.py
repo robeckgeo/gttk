@@ -141,7 +141,7 @@ def generate_report_for_datasets(
         should_open = getattr(args, 'open_report', False)
         if should_open:
             try:
-                open_file(report_path.name)
+                open_file(report_path)
                 logger.info(f"Opened report: {report_path}")
             except Exception as e:
                 logger.warning(f"Could not open report: {e}")

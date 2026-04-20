@@ -89,18 +89,9 @@ def get_srs_from_user_input(srs_input: str) -> Optional[osr.SpatialReference]:
     Returns:
         Optional[osr.SpatialReference]: A spatial reference object, or None if parsing fails.
     """
-    import os
     srs = osr.SpatialReference()
     srs_upper = srs_input.upper()
     logger.info(f"Parsing user input SRS: {srs_input}")
-
-    # Check if PROJ_LIB is set - log warning if not
-    if 'PROJ_LIB' not in os.environ:
-        logger.warning(
-            "PROJ_LIB environment variable is not set. "
-            "EPSG code lookups may fail if GDAL cannot find the proj.db database. "
-            "Activate your conda environment or set PROJ_LIB to your PROJ share directory."
-        )
 
     try:
         # Check for Custom WKT Registry matches first

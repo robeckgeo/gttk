@@ -118,24 +118,15 @@ def open_file(filename: str) -> None:
                     )
                     if result.returncode == 0:
                         opened_successfully = True
-                        try:
-                            logger.debug(f"Opened {filename} in VS Code")
-                        except:
-                            pass  # Ignore logging errors
+                        logger.debug(f"Opened {filename} in VS Code")
                 except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-                    try:
-                        logger.debug(f"Failed to open in VS Code: {e}")
-                    except:
-                        pass  # Ignore logging errors
+                    logger.debug(f"Failed to open in VS Code: {e}")
 
         # If not opened in VS Code, use Windows default application
         if not opened_successfully:
             try:
                 windows_path = _convert_wsl_path_to_windows(filename)
-                try:
-                    logger.debug(f"Opening {windows_path} with Windows default application")
-                except:
-                    pass  # Ignore logging errors
+                logger.debug(f"Opening {windows_path} with Windows default application")
                 # Use Popen to avoid waiting for the app to close
                 subprocess.Popen(
                     ['powershell.exe', '-Command', f'Start-Process "{windows_path}"'],
@@ -143,10 +134,7 @@ def open_file(filename: str) -> None:
                     stderr=subprocess.DEVNULL
                 )
             except Exception as e:
-                try:
-                    logger.error(f"Failed to open file with Windows application: {e}")
-                except:
-                    pass  # Ignore logging errors
+                logger.error(f"Failed to open file with Windows application: {e}")
                 raise
     else:
         # macOS or native Linux

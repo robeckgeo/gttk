@@ -16,11 +16,28 @@ parsing user arguments and dispatching them to the appropriate tool.
 """
 import argparse
 import logging
+import os
 import sys
 import numpy as np
 from pathlib import Path
 from gttk.utils.log_helpers import setup_logger
 from gttk.utils.script_arguments import CompareArguments, ReadArguments, OptimizeArguments, TestArguments, ValidateArguments
+
+
+def _check_proj_env() -> None:
+    """Warn once at startup if neither PROJ_DATA nor PROJ_LIB is set.
+
+    PROJ 8+ uses PROJ_DATA; PROJ_LIB is the pre-8 name, deprecated but still
+    honored. A healthy conda-forge install sets PROJ_DATA on activation, so
+    this warning only fires when the env is genuinely unconfigured.
+    """
+    if 'PROJ_DATA' in os.environ or 'PROJ_LIB' in os.environ:
+        return
+    logging.getLogger(__name__).warning(
+        "Neither PROJ_DATA nor PROJ_LIB is set. EPSG code lookups may fail "
+        "if GDAL cannot find the proj.db database. Activate your conda env "
+        "or set PROJ_DATA to your PROJ share directory."
+    )
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -251,7 +268,13 @@ def main():
 
     # --- Logger Setup ---
     log_level = logging.DEBUG if args.verbose else logging.INFO
-    logger = setup_logger(level=log_level, is_arc_mode=getattr(args, 'arc_mode', False))
+    is_arc = getattr(args, 'arc_mode', False)
+    logger = setup_logger(level=log_level, is_arc_mode=is_arc)
+
+    # Skip in ArcGIS mode — ArcGIS brings its own GDAL/PROJ and legitimately
+    # has neither variable set.
+    if not is_arc:
+        _check_proj_env()
 
     try:
         if tool == 'compare':

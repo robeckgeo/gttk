@@ -66,6 +66,14 @@ def setup_logger(log_file: Optional[str] = None, is_arc_mode: bool = False, leve
         handler.setFormatter(formatter)
         logger.addHandler(handler)
     else:
+        # Force UTF-8 so mathematical symbols and emoji in log messages don't
+        # raise UnicodeEncodeError on Windows cp1252 consoles. errors='replace'
+        # is a safety net for terminals that still can't render a given glyph.
+        if hasattr(sys.stdout, 'reconfigure'):
+            try:
+                sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+            except Exception:
+                pass
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(formatter)
         logger.addHandler(handler)
