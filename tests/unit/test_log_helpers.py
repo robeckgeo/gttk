@@ -57,19 +57,19 @@ class TestSetupLoggerCp1252Tolerance:
         monkeypatch.setattr(sys, 'stdout', fake_stdout)
 
         logger = setup_logger()
-        try:
-            for sample in UNICODE_LOG_SAMPLES:
-                logger.info(sample)  # Would raise UnicodeEncodeError without fix
-        finally:
-            shutdown_logger(logger)
+        for sample in UNICODE_LOG_SAMPLES:
+            logger.info(sample)  # Would raise UnicodeEncodeError without fix
 
-        fake_stdout.flush()
-        # Buffer should be non-empty — the fix either re-encoded as UTF-8 or
-        # substituted replacement chars; either way, no exception was raised.
-        assert buf.getvalue(), "Logger produced no output on cp1252 stdout"
+        # Read output before shutdown — Utf8StreamHandler wraps our buffer, so
+        # tearing it down cascade-closes the BytesIO.
+        output = buf.getvalue()
+        shutdown_logger(logger)
 
-    def test_setup_logger_on_utf8_stdout_is_unchanged(self, monkeypatch):
-        """The reconfigure should be a no-op on streams that are already UTF-8."""
+        assert output, "Logger produced no output on cp1252 stdout"
+
+    def test_setup_logger_emits_utf8_bytes(self, monkeypatch):
+        """Utf8StreamHandler should write UTF-8 encoded bytes regardless of
+        the wrapping TextIOWrapper's declared encoding."""
         buf = io.BytesIO()
         fake_stdout = io.TextIOWrapper(
             buf, encoding='utf-8', errors='strict',
@@ -78,38 +78,36 @@ class TestSetupLoggerCp1252Tolerance:
         monkeypatch.setattr(sys, 'stdout', fake_stdout)
 
         logger = setup_logger()
-        try:
-            logger.info("pixels \u2264 threshold")
-        finally:
-            shutdown_logger(logger)
+        logger.info("pixels \u2264 threshold")
 
-        fake_stdout.flush()
+        output = buf.getvalue()
+        shutdown_logger(logger)
+
         # ≤ encoded as UTF-8 is 0xE2 0x89 0xA4
-        assert b'\xe2\x89\xa4' in buf.getvalue()
+        assert b'\xe2\x89\xa4' in output
 
-    def test_setup_logger_tolerates_stream_without_reconfigure(self, monkeypatch):
-        """Some IDE consoles wrap stdout in objects that lack reconfigure();
-        setup_logger() must degrade gracefully."""
-        class StreamWithoutReconfigure:
+    def test_setup_logger_tolerates_stream_without_buffer(self, monkeypatch):
+        """Some IDE consoles wrap stdout in objects that lack a .buffer
+        attribute; Utf8StreamHandler must fall back to using the stream
+        directly rather than raising."""
+        class StreamWithoutBuffer:
             def __init__(self):
-                self.buf = []
+                self.chunks = []
             def write(self, s):
-                self.buf.append(s)
+                self.chunks.append(s)
                 return len(s)
             def flush(self):
                 pass
-            # Deliberately no reconfigure() attribute
+            # Deliberately no .buffer attribute
 
-        fake_stdout = StreamWithoutReconfigure()
+        fake_stdout = StreamWithoutBuffer()
         monkeypatch.setattr(sys, 'stdout', fake_stdout)
 
         logger = setup_logger()
-        try:
-            logger.info("hello world")  # ASCII only — stream can't reconfigure
-        finally:
-            shutdown_logger(logger)
+        logger.info("hello world")  # ASCII only — no wrapping possible
 
-        assert any("hello world" in chunk for chunk in fake_stdout.buf)
+        assert any("hello world" in chunk for chunk in fake_stdout.chunks)
+        shutdown_logger(logger)
 
 
 @pytest.mark.unit

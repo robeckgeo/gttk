@@ -715,14 +715,14 @@ def calculate_statistics(
         max_pixels = _calculate_max_pixels_threshold()
     
     # Log strategy decision
-    logger.info(f"Image dimensions: {width:,} × {height:,} = {total_pixels:,} pixels")
-    
+    logger.info(f"Image dimensions: {width:,} x {height:,} = {total_pixels:,} pixels")
+
     if total_pixels <= max_pixels:
-        logger.info(f"Using fast path: {total_pixels:,} pixels ≤ {max_pixels:,} threshold")
+        logger.info(f"Using fast path: {total_pixels:,} pixels <= {max_pixels:,} threshold")
         logger.debug("Strategy: Single-pass with native dtype optimization")
         return _calculate_statistics_full(ds_or_band)
     else:
         logger.info(f"Using blocked path: {total_pixels:,} pixels > {max_pixels:,} threshold")
         block_pixels = block_size[0] * block_size[1]
-        logger.debug(f"Strategy: Two-pass block processing with {block_size[0]}×{block_size[1]} blocks ({block_pixels:,} pixels per block)")
+        logger.debug(f"Strategy: Two-pass block processing with {block_size[0]}x{block_size[1]} blocks ({block_pixels:,} pixels per block)")
         return _calculate_statistics_blocked(ds_or_band, block_size)

@@ -377,7 +377,7 @@ def _call_optimize_geotiff_multiple(
         if len(durations) > 1:
             # Sample standard deviation
             std_dev = (sum((d - avg_duration) ** 2 for d in durations) / (len(durations) - 1)) ** 0.5
-            logger.info(f"    Average compression time: {avg_duration:.3f}s (±{std_dev:.3f}s)")
+            logger.info(f"    Average compression time: {avg_duration:.3f}s (+/-{std_dev:.3f}s)")
         else: # Only one successful run
             logger.info(f"    Compression time (1 run): {avg_duration:.3f}s")
         return avg_duration, True, ""

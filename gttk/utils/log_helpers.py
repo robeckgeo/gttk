@@ -21,6 +21,40 @@ from typing import Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     import arcpy # type: ignore
 
+
+class Utf8StreamHandler(logging.StreamHandler):
+    """A StreamHandler that writes UTF-8 bytes directly to the stream's
+    binary buffer, with errors='replace'.
+
+    Bypasses Windows cp1252 console limitations without mutating sys.stdout
+    or wrapping it in a new TextIOWrapper (which would cascade-close the
+    underlying buffer on teardown). Falls back to the default text-mode
+    write if the stream exposes no .buffer attribute.
+
+    sys.stdout.reconfigure() would be simpler but silently no-ops on some
+    Windows console setups (observed with Python 3.12 + conda + cmd.exe),
+    so we encode explicitly.
+    """
+    def emit(self, record):
+        try:
+            msg = self.format(record)
+            stream = self.stream
+            buffer = getattr(stream, 'buffer', None)
+            if buffer is not None:
+                try:
+                    buffer.write((msg + self.terminator).encode('utf-8', errors='replace'))
+                    buffer.flush()
+                    return
+                except (AttributeError, ValueError, OSError):
+                    pass  # Fall through to text-mode write
+            stream.write(msg + self.terminator)
+            self.flush()
+        except RecursionError:
+            raise
+        except Exception:
+            self.handleError(record)
+
+
 class ArcpyLogHandler(logging.Handler):
     """A custom logging handler that redirects log messages to arcpy."""
     def emit(self, record):
@@ -66,15 +100,7 @@ def setup_logger(log_file: Optional[str] = None, is_arc_mode: bool = False, leve
         handler.setFormatter(formatter)
         logger.addHandler(handler)
     else:
-        # Force UTF-8 so mathematical symbols and emoji in log messages don't
-        # raise UnicodeEncodeError on Windows cp1252 consoles. errors='replace'
-        # is a safety net for terminals that still can't render a given glyph.
-        if hasattr(sys.stdout, 'reconfigure'):
-            try:
-                sys.stdout.reconfigure(encoding='utf-8', errors='replace')
-            except Exception:
-                pass
-        handler = logging.StreamHandler(sys.stdout)
+        handler = Utf8StreamHandler(sys.stdout)
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 

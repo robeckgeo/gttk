@@ -1258,7 +1258,7 @@ def calculate_compression_efficiency(
                     overhead_size += header_size
                     
                     if debug:
-                        logger.debug(f"    IFD {page_index} header/metadata: {header_size:,} bytes → overhead")
+                        logger.debug(f"    IFD {page_index} header/metadata: {header_size:,} bytes -> overhead")
                 else:
                     if debug:
                         logger.debug(f"  IFD {page_index}: No byte count data available")

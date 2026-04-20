@@ -137,13 +137,13 @@ def validate_metadata(args: ValidateArguments) -> None:
             # Track file-level status
             if file_result['failed'] > 0:
                 files_failed += 1
-                logger.info(f"  Result: ❌ FAIL ({file_result['failed']} failures)")
+                logger.info(f"  Result: FAIL ({file_result['failed']} failures)")
             elif file_result['passed'] > 0:
                 files_passed += 1
-                logger.info(f"  Result: ✅ PASS ({file_result['passed']} passed)")
+                logger.info(f"  Result: PASS ({file_result['passed']} passed)")
             else:
                 files_skipped += 1
-                logger.info(f"  Result: ⚠️ SKIP ({file_result['skipped']} skipped)")
+                logger.info(f"  Result: SKIP ({file_result['skipped']} skipped)")
 
         except Exception as e:
             logger.error(f"  Error validating {input_file.name}: {e}")
