@@ -27,7 +27,7 @@ from osgeo import gdal, osr
 from pathlib import Path
 from typing import Optional, List
 from gttk.utils.exceptions import ProcessingStepFailedError
-from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
+from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT, discard_lsb_bits_for
 from gttk.utils.geotiff_processor import remap_nodata_value, mask_nodata_value, normalize_existing_mask, is_nodata_valid, GeoTiffInfo
 from gttk.utils.geo_metadata_writer import write_geo_metadata
 from gttk.utils.path_helpers import find_xml_metadata_file
@@ -40,6 +40,36 @@ try:
     __version__ = metadata.version("geotiff-toolkit")
 except metadata.PackageNotFoundError:
     __version__ = "0.0.0-dev"
+
+
+def _discard_lsb_float(array, decimals, valid_mask):
+    """Clear the low mantissa bits of a float32/float64 array (round-to-nearest), sized so the
+    worst-case absolute error stays within ``decimals`` decimal places for the band's max
+    magnitude. Invalid pixels (NoData / non-finite, per ``valid_mask``) are left untouched.
+
+    Driver-independent equivalent of GDAL's DISCARD_LSB (the COG driver does not support the
+    DISCARD_LSB creation option); applying it to the source bands also lets built overviews
+    inherit the quantization. Returns (new_array, bits_cleared); bits_cleared == 0 => unchanged.
+    """
+    if array.dtype == np.float32:
+        uint_t, mantissa = np.uint32, 23
+    elif array.dtype == np.float64:
+        uint_t, mantissa = np.uint64, 52
+    else:
+        return array, 0
+    if not np.any(valid_mask):
+        return array, 0
+    vmax = float(np.max(np.abs(array[valid_mask])))
+    k = discard_lsb_bits_for(decimals, vmax, mantissa_bits=mantissa)
+    if k <= 0:
+        return array, 0
+    out = array.copy()
+    u = out.view(uint_t)
+    half = uint_t(1) << uint_t(k - 1)
+    keep = uint_t(np.iinfo(uint_t).max) ^ uint_t((1 << k) - 1)
+    u[valid_mask] = (u[valid_mask] + half) & keep
+    return out, k
+
 
 # --- Virtual File Manager ---
 class VirtualFileManager:
@@ -396,16 +426,42 @@ def preprocess_geotiff(
         ds = mask_nodata_value(ds, float(target_nodata))
         target_nodata = None  # NoData is now in mask, unset the value
 
-    # --- 3. Round floating point data ---
-    if args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and \
-       args.product_type in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value] and args.decimals is not None:
-        if 'Float' in str(info.data_type):
-            for i in range(1, ds.RasterCount + 1):
-                band = ds.GetRasterBand(i)
-                array = band.ReadAsArray()
-                array = np.round(array, int(args.decimals))
-                band.WriteArray(array)
-                band.FlushCache()
+    # --- 3. Quantize floating point data (base-10 rounding, or DISCARD_LSB bit-clearing) ---
+    # Rounding and DISCARD_LSB are mutually exclusive. When discard_lsb is set we clear low
+    # mantissa bits (driver-independent -- works for COG too, and built overviews inherit it)
+    # sized to stay within the requested decimal precision; otherwise we round in base-10.
+    _quantize = (args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and
+                 args.product_type in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value] and
+                 isinstance(args.decimals, int) and 'Float' in str(info.data_type))
+    if _quantize:
+        use_lsb = getattr(args, 'discard_lsb', False)
+        for i in range(1, ds.RasterCount + 1):
+            band = ds.GetRasterBand(i)
+            array = band.ReadAsArray()
+            if use_lsb:
+                nd = band.GetNoDataValue()
+                valid = np.isfinite(array)
+                if nd is not None and not np.isnan(nd):
+                    valid &= (array != nd)
+                array, k = _discard_lsb_float(array, int(args.decimals), valid)
+                if k > 0:
+                    band.WriteArray(array)
+                    band.FlushCache()
+                    logger.info(f"DISCARD_LSB: cleared {k} low mantissa bit(s) on band {i} "
+                                f"for ~{args.decimals}-decimal precision.")
+            else:
+                # Round via float64 then cast back: avoids the float32 x10^n round-trip noise
+                # (so decimals beyond the dtype's precision become a true no-op) and is more
+                # accurate at usable precisions.
+                rounded = np.round(array.astype(np.float64), int(args.decimals)).astype(array.dtype)
+                if np.array_equal(rounded, array, equal_nan=True):
+                    if i == 1:
+                        logger.warning(f"--decimals {args.decimals} exceeds the precision "
+                                       f"{info.data_type} can represent at this magnitude; no "
+                                       f"rounding applied (equivalent to --decimals none).")
+                else:
+                    band.WriteArray(rounded)
+                    band.FlushCache()
 
     # --- 4. Set Final NoData Value ---
     if target_nodata is not None:

@@ -1080,7 +1080,8 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
         # Internal masks conflict with external overview creation and overview rounding
         should_round_overviews = (
             args.overviews and
-            args.decimals is not None and
+            isinstance(args.decimals, int) and
+            not getattr(args, 'discard_lsb', False) and  # LSB mode quantizes at write time, not via np.round
             args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and
             args.product_type in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value] and
             'Float' in str(input_info.data_type) and
@@ -1196,9 +1197,25 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
         if args.algorithm == CA.JXL.value and args.quality is not None:
             jxl_options = _get_jxl_options(args.quality)
             creation_options.extend(jxl_options)
-        if args.algorithm == CA.LERC.value:
+        if args.algorithm in [CA.LERC.value, CA.LERC_DEFLATE.value, CA.LERC_ZSTD.value]:
             creation_options.append(f"MAX_Z_ERROR={args.max_z_error}")
-        
+
+        # Compression level: the COG driver uses LEVEL; the GTiff driver uses ZLEVEL
+        # (deflate) / ZSTD_LEVEL (zstd) -- also covering the LERC_DEFLATE/LERC_ZSTD
+        # backends. The arc path previously set no level option at all.
+        if args.level:
+            if args.algorithm in [CA.DEFLATE.value, CA.LERC_DEFLATE.value]:
+                creation_options.append(f"LEVEL={args.level}" if args.cog else f"ZLEVEL={args.level}")
+            elif args.algorithm in [CA.ZSTD.value, CA.LERC_ZSTD.value]:
+                creation_options.append(f"LEVEL={args.level}" if args.cog else f"ZSTD_LEVEL={args.level}")
+
+        # DISCARD_LSB is a benchmark-only capability implemented in the standard optimize
+        # path (which computes per-band magnitude in-process). The arc path stages GDAL
+        # commands before the preprocessed file exists, so it is not applied here.
+        if getattr(args, 'discard_lsb', False):
+            logger.warning("discard_lsb is only applied in the standard optimize path, not in "
+                           "ArcGIS (arc) mode; this output will not be LSB-quantized.")
+
         for co in creation_options:
             translate_options.extend(["-co", co])
 

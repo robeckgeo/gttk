@@ -56,6 +56,7 @@ def mock_optimize_args():
     args.vertical_srs = None
     args.raster_type = None
     args.geo_metadata = False
+    args.discard_lsb = False
     return args
 
 
@@ -393,6 +394,7 @@ class TestNoDataHandling:
         args.vertical_srs = None
         args.raster_type = None
         args.geo_metadata = False
+        args.discard_lsb = False
         
         # Create test dataset with NoData = -9999
         driver = gdal.GetDriverByName('MEM')
@@ -429,6 +431,7 @@ class TestNoDataHandling:
         args.vertical_srs = None
         args.raster_type = None
         args.geo_metadata = False
+        args.discard_lsb = False
         
         # Create test dataset with NoData
         driver = gdal.GetDriverByName('MEM')
@@ -468,6 +471,7 @@ class TestNoDataHandling:
         args.vertical_srs = None
         args.raster_type = None
         args.geo_metadata = False
+        args.discard_lsb = False
         
         # Create test dataset with -inf as NoData
         driver = gdal.GetDriverByName('MEM')
@@ -503,6 +507,7 @@ class TestNoDataHandling:
         args.vertical_srs = None
         args.raster_type = None
         args.geo_metadata = False
+        args.discard_lsb = False
         
         driver = gdal.GetDriverByName('MEM')
         original_ds = driver.Create('', 100, 100, 1, gdal.GDT_Byte)
@@ -541,6 +546,7 @@ class TestNoDataHandling:
         args.vertical_srs = None
         args.raster_type = None
         args.geo_metadata = False
+        args.discard_lsb = False
         
         driver = gdal.GetDriverByName('MEM')
         original_ds = driver.Create('', 100, 100, 3, gdal.GDT_Byte)
@@ -577,6 +583,7 @@ class TestNoDataHandling:
         args.vertical_srs = None
         args.raster_type = None
         args.geo_metadata = False
+        args.discard_lsb = False
         
         driver = gdal.GetDriverByName('MEM')
         original_ds = driver.Create('', 100, 100, 1, gdal.GDT_Float32)
@@ -614,6 +621,7 @@ class TestMainPreprocessingPipeline:
         args.vertical_srs = None
         args.raster_type = None
         args.geo_metadata = False
+        args.discard_lsb = False
         
         driver = gdal.GetDriverByName('MEM')
         original_ds = driver.Create('', 100, 100, 1, gdal.GDT_Float32)
@@ -631,7 +639,34 @@ class TestMainPreprocessingPipeline:
         # Data should be rounded to 2 decimals
         expected = np.round(data, 2)
         assert np.allclose(result_data, expected, atol=1e-9)
-    
+
+    def test_preprocess_geotiff_decimals_none_or_excessive_is_noop(self, mock_geotiff_info):
+        """decimals='none', and decimals beyond float32 precision, leave values unchanged."""
+        for dec in ('none', 8):
+            args = Mock(spec=OptimizeArguments)
+            args.algorithm = 'DEFLATE'
+            args.product_type = 'dem'
+            args.decimals = dec
+            args.nodata = None
+            args.mask_nodata = None
+            args.mask_alpha = False
+            args.vertical_srs = None
+            args.raster_type = None
+            args.geo_metadata = False
+            args.discard_lsb = False
+
+            driver = gdal.GetDriverByName('MEM')
+            original_ds = driver.Create('', 64, 64, 1, gdal.GDT_Float32)
+            data = np.tile(np.array([[1234.56789, 2345.6789],
+                                     [987.654321, 1500.123]], dtype=np.float32), (32, 32))
+            original_ds.GetRasterBand(1).WriteArray(data)
+
+            with VirtualFileManager() as vfm:
+                result_ds = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, None, {})
+                result_data = result_ds.GetRasterBand(1).ReadAsArray()
+
+            assert np.array_equal(result_data, data), f"decimals={dec} should not change the data"
+
     def test_preprocess_geotiff_metadata_preservation(self, mock_geotiff_info):
         """Source metadata preserved in output."""
         args = Mock(spec=OptimizeArguments)
@@ -644,6 +679,7 @@ class TestMainPreprocessingPipeline:
         args.vertical_srs = None
         args.raster_type = None
         args.geo_metadata = False
+        args.discard_lsb = False
         
         driver = gdal.GetDriverByName('MEM')
         original_ds = driver.Create('', 100, 100, 1, gdal.GDT_Float32)
@@ -680,6 +716,7 @@ class TestMainPreprocessingPipeline:
         args_dem.mask_alpha = False
         args_dem.vertical_srs = None
         args_dem.geo_metadata = False
+        args_dem.discard_lsb = False
         
         driver = gdal.GetDriverByName('MEM')
         ds_dem = driver.Create('', 100, 100, 1, gdal.GDT_Float32)
@@ -701,6 +738,7 @@ class TestMainPreprocessingPipeline:
         args_image.mask_alpha = False
         args_image.vertical_srs = None
         args_image.geo_metadata = False
+        args_image.discard_lsb = False
         
         ds_image = driver.Create('', 100, 100, 3, gdal.GDT_Byte)
         
@@ -731,6 +769,7 @@ class TestMainPreprocessingPipeline:
         args.vertical_srs = 'GGM10'  # Custom vertical (no EPSG)
         args.raster_type = None
         args.geo_metadata = False
+        args.discard_lsb = False
         
         driver = gdal.GetDriverByName('MEM')
         original_ds = driver.Create('', 100, 100, 1, gdal.GDT_Float32)
@@ -767,6 +806,7 @@ class TestMainPreprocessingPipeline:
         args.vertical_srs = None
         args.raster_type = None
         args.geo_metadata = False
+        args.discard_lsb = False
         
         driver = gdal.GetDriverByName('MEM')
         original_ds = driver.Create('', 100, 100, 1, gdal.GDT_Float32)
@@ -812,6 +852,7 @@ class TestErrorHandling:
         args.vertical_srs = None
         args.raster_type = None
         args.geo_metadata = False
+        args.discard_lsb = False
         
         with VirtualFileManager() as vfm:
             with pytest.raises(Exception):  # Could be ProcessingStepFailedError or GDAL error
@@ -829,6 +870,7 @@ class TestErrorHandling:
         args.vertical_srs = 'INVALID_SRS'  # Will cause error
         args.raster_type = None
         args.geo_metadata = False
+        args.discard_lsb = False
         
         driver = gdal.GetDriverByName('MEM')
         original_ds = driver.Create('', 100, 100, 1, gdal.GDT_Float32)

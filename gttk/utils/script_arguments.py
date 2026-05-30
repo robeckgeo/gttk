@@ -26,7 +26,7 @@ Classes:
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Union
 from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
 import gttk.utils.optimize_constants as oc
 from osgeo import gdal
@@ -88,8 +88,9 @@ class OptimizeArguments(BaseArguments):
     algorithm: Optional[str] = None
     vertical_srs: Optional[str] = None
     nodata: Optional[float] = None
-    decimals: Optional[int] = None
+    decimals: Optional[Union[int, str]] = None  # int places, or 'none' to keep full precision
     predictor: Optional[int] = None
+    discard_lsb: bool = False  # internal/benchmark-only bit-level quantizer; no CLI arg
     max_z_error: Optional[float] = None
     level: Optional[int] = None
     quality: Optional[int] = None
@@ -119,8 +120,13 @@ class OptimizeArguments(BaseArguments):
                 raise ValueError(f"Input file not found: {self.input_path}")
             if self.algorithm in [CA.JPEG.value, CA.JXL.value] and self.product_type != PT.IMAGE.value:
                 raise ValueError(f"{self.algorithm} compression is only suitable for imagery products.")
-            if self.algorithm == CA.LERC.value and self.product_type not in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value]:
+            if self.algorithm in (CA.LERC.value, CA.LERC_DEFLATE.value, CA.LERC_ZSTD.value) and self.product_type not in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value]:
                 raise ValueError("LERC compression is not optimal for image or thematic products.")
+            if self.discard_lsb:
+                if self.algorithm not in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value]:
+                    raise ValueError("discard_lsb is only applicable to LZW, DEFLATE, or ZSTD compression.")
+                if self.product_type not in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value]:
+                    raise ValueError("discard_lsb is only applicable to dem, error, or scientific products.")
             if self.product_type == PT.DEM.value and self.vertical_srs is None:
                 raise ValueError("Vertical SRS must be specified for DEM product type.")
             if self.product_type == PT.THEMATIC.value and self.mask_nodata is True:
@@ -155,7 +161,7 @@ class OptimizeArguments(BaseArguments):
         elif self.algorithm == CA.ZSTD.value and self.level is None:
             self.level = oc.DEFAULT_ZSTD_LEVEL
 
-        if self.algorithm == CA.LERC.value:
+        if self.algorithm in (CA.LERC.value, CA.LERC_DEFLATE.value, CA.LERC_ZSTD.value):
             if self.max_z_error is None:
                 self.max_z_error = oc.default_max_z_error_for(self.product_type)
             self.decimals = None
