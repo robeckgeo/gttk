@@ -20,12 +20,15 @@ Classes:
     ProductType: Enum for data types (DEM, Image, etc.).
 """
 from enum import Enum
+import math
 
 # --- Helper Accessors ---
 
 def default_decimals_for(product_type: str, algorithm: str):
-    # LERC doesn't use decimals
-    if algorithm == CompressionAlgorithm.LERC.value:
+    # LERC (and its DEFLATE/ZSTD variants) carry precision via max_z_error, not decimals
+    if algorithm in (CompressionAlgorithm.LERC.value,
+                     CompressionAlgorithm.LERC_DEFLATE.value,
+                     CompressionAlgorithm.LERC_ZSTD.value):
         return None
     return DEFAULT_DECIMALS_BY_TYPE.get(product_type)
 
@@ -38,6 +41,29 @@ def default_level_for(algorithm: str):
 def default_predictor_for(product_type: str):
     return DEFAULT_PREDICTOR_BY_TYPE.get(product_type, DEFAULT_DEM_PREDICTOR)
 
+def discard_lsb_bits_for(decimals, vmax, mantissa_bits: int = 23) -> int:
+    """Number of mantissa bits a DISCARD_LSB-style quantizer can clear while keeping the
+    worst-case absolute error within the precision implied by ``decimals`` decimal places,
+    for values up to magnitude ``vmax``. ``mantissa_bits`` is 23 for Float32, 52 for Float64.
+
+    Round-to-nearest clearing of K of the M mantissa bits of a value with exponent E
+    (2**E <= |v| < 2**(E+1)) gives a worst-case error of 2**(E-(M+1)+K); sizing K to the
+    largest magnitude present keeps that <= 0.5 * 10**-decimals (half a unit in the last
+    requested decimal place). Because the error is relative (magnitude-dependent), K is
+    sized conservatively from the band's max magnitude.
+
+    Returns 0 when nothing can be cleared (large vmax / tight precision / bad input) and
+    clamps to the mantissa width.
+    """
+    if decimals is None or vmax is None:
+        return 0
+    vmax = abs(float(vmax))
+    if vmax <= 0 or not math.isfinite(vmax):
+        return 0
+    # K <= mantissa_bits - floor(log2(vmax)) - decimals * log2(10)
+    k = math.floor(mantissa_bits - math.floor(math.log2(vmax)) - int(decimals) * math.log2(10))
+    return max(0, min(mantissa_bits, k))
+
 
 # --- Enumerations ---
 
@@ -49,6 +75,8 @@ class CompressionAlgorithm(Enum):
     DEFLATE = 'DEFLATE'
     ZSTD = 'ZSTD'
     LERC = 'LERC'
+    LERC_DEFLATE = 'LERC_DEFLATE'  # benchmark-only candidate (not a user-facing --algorithm choice)
+    LERC_ZSTD = 'LERC_ZSTD'        # benchmark-only candidate (not a user-facing --algorithm choice)
     NONE = 'NONE'
 
 class ProductType(Enum):
@@ -81,10 +109,12 @@ DEFAULT_ERROR_PREDICTOR = 2
 DEFAULT_SCIENTIFIC_PREDICTOR = 3
 DEFAULT_THEMATIC_PREDICTOR = 'NONE' # 1
 
-# Decimal precision by product_type
+# Decimal precision by product_type. NO_ROUNDING ('none') is the sentinel for
+# "keep full precision" (no base-10 rounding); see the --decimals CLI option.
+NO_ROUNDING = 'none'
 DEFAULT_DEM_DECIMALS = 2
 DEFAULT_ERROR_DECIMALS = 1
-DEFAULT_SCIENTIFIC_DECIMALS = 8
+DEFAULT_SCIENTIFIC_DECIMALS = NO_ROUNDING  # scientific data: preserve precision by default
 
 
 # --- Default Mappings ---

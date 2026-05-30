@@ -38,9 +38,10 @@ from typing import cast, Any, Dict, List, Optional, Tuple
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Side
-from gttk.main import str2bool
+from gttk.main import str2bool, parse_decimals
 from gttk.tools.optimize_compression import optimize_compression
 import gttk.tools.optimize_compression_arc as optimize_compression_arc
+from gttk.utils.accuracy_metrics import compute_error_metrics
 from gttk.utils.exceptions import CSVLoadError, OptimizationError
 from gttk.utils.geotiff_processor import calculate_compression_efficiency, determine_decimal_precision
 from gttk.utils.log_helpers import shutdown_logger, init_arcpy, ArcpyLogHandler
@@ -73,6 +74,8 @@ ALGO_NONE: str = CA.NONE.value
 ALGO_DEFLATE: str = CA.DEFLATE.value
 ALGO_ZSTD: str = CA.ZSTD.value
 ALGO_LERC: str = CA.LERC.value
+ALGO_LERC_DEFLATE: str = CA.LERC_DEFLATE.value
+ALGO_LERC_ZSTD: str = CA.LERC_ZSTD.value
 ALGO_JPEG: str = CA.JPEG.value
 ALGO_LZW: str = CA.LZW.value
 ALGO_JXL: str = CA.JXL.value
@@ -92,6 +95,7 @@ COL_TILE_SIZE = 'tile_size'
 COL_LEVEL = 'level'
 COL_PREDICTOR = 'predictor'
 COL_DECIMALS = 'decimals'
+COL_DISCARD_LSB = 'discard_lsb'  # parsed from CSV but not shown in the Excel report (benchmark-only)
 COL_MAX_Z_ERROR = 'max_z_error'
 COL_QUALITY = 'quality'
 COL_NODATA = 'nodata'
@@ -244,8 +248,13 @@ def _generate_temp_filename(source_name_stem: str, type_val: str, params_dict: D
     if decimals and str(decimals).strip() and type_val in [TYPE_DEM, TYPE_ERROR, TYPE_SCIENTIFIC]:
         suffix_parts.append(f"d{decimals}")
 
+    # discard_lsb marker keeps LSB-mode outputs from colliding with rounding-mode outputs
+    discard_lsb = params_dict.get(COL_DISCARD_LSB)
+    if discard_lsb and str2bool(discard_lsb):
+        suffix_parts.append("lsb")
+
     max_z = params_dict.get(COL_MAX_Z_ERROR)
-    if max_z and str(max_z).strip() and algo == ALGO_LERC:
+    if max_z and str(max_z).strip() and algo in [ALGO_LERC, ALGO_LERC_DEFLATE, ALGO_LERC_ZSTD]:
         suffix_parts.append(f"m{max_z}")
 
     quality = params_dict.get(COL_QUALITY)
@@ -276,7 +285,8 @@ def _call_optimize_geotiff(
         nodata = optimize_params.get(COL_NODATA, None),
         level = int(optimize_params[COL_LEVEL]) if optimize_params.get(COL_LEVEL) else None,
         predictor = int(optimize_params[COL_PREDICTOR]) if optimize_params.get(COL_PREDICTOR) else None,
-        decimals = int(optimize_params[COL_DECIMALS]) if optimize_params.get(COL_DECIMALS) else None,
+        decimals = parse_decimals(optimize_params[COL_DECIMALS]) if optimize_params.get(COL_DECIMALS) else None,
+        discard_lsb = str2bool(optimize_params[COL_DISCARD_LSB]) if optimize_params.get(COL_DISCARD_LSB) else False,
         max_z_error = float(optimize_params[COL_MAX_Z_ERROR]) if optimize_params.get(COL_MAX_Z_ERROR) else None ,
         quality = int(optimize_params[COL_QUALITY]) if optimize_params.get(COL_QUALITY) else None,
         tile_size = int(optimize_params.get(COL_TILE_SIZE, 512)),
@@ -543,7 +553,7 @@ def _get_geotiff_metadata(filepath: Path) -> GeoTiffMetadata:
             # The format_output_row function will handle displaying the correct value.
             metadata.quality = None
         
-        if metadata.algorithm == ALGO_LERC:
+        if metadata.algorithm in [ALGO_LERC, ALGO_LERC_DEFLATE, ALGO_LERC_ZSTD]:
             metadata.max_z_error = 0.0
             max_z_meta = ds.GetMetadataItem('MAX_Z_ERROR', 'IMAGE_STRUCTURE')
             if max_z_meta:
@@ -608,6 +618,7 @@ class ExcelWriter:
         self.start_row = start_row
         self.current_row = start_row
         self.group_start_row = None  # Track the start of each file group
+        self.accuracy_rows: List[Dict[str, Any]] = []  # accuracy metrics for the sidecar CSV
         try:
             template_path = resources.files('gttk.resources.templates').joinpath('test_compression_template.xlsx')
             with resources.as_file(template_path) as template_file:
@@ -736,6 +747,35 @@ class ExcelWriter:
         cell_eff = self._get_merge_anchor(cell)
         cast(Any, cell_eff).value = value
 
+    def add_accuracy(self, filename: str, metrics: 'TestResultMetrics') -> None:
+        """Record per-file accuracy metrics for the sidecar CSV (skips rows with none)."""
+        if metrics is None:
+            return
+        if metrics.max_abs_error is None and metrics.rmse is None and metrics.distinct_count is None:
+            return
+        self.accuracy_rows.append({
+            'filename': filename,
+            'max_abs_error': metrics.max_abs_error,
+            'rmse': metrics.rmse,
+            'pct_changed': metrics.pct_changed,
+            'distinct_count': metrics.distinct_count,
+        })
+
+    def _write_accuracy_sidecar(self) -> None:
+        """Write accuracy metrics next to the workbook as <stem>_accuracy.csv."""
+        if not self.accuracy_rows:
+            return
+        sidecar = self.excel_path.with_name(f"{self.excel_path.stem}_accuracy.csv")
+        try:
+            with open(sidecar, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(['filename', 'max_abs_error', 'rmse', 'pct_changed', 'distinct_count'])
+                for r in self.accuracy_rows:
+                    writer.writerow([r['filename'], r['max_abs_error'], r['rmse'], r['pct_changed'], r['distinct_count']])
+            logger.info(f"Accuracy metrics written to: {sidecar.resolve()}")
+        except Exception as e:
+            logger.error(f"Could not write accuracy sidecar {sidecar}: {e}")
+
     def save(self, success: bool = True):
         """Saves the workbook with controlled print area, selection, and page setup."""
         if not self.worksheet:
@@ -768,7 +808,8 @@ class ExcelWriter:
 
             # --- Save the Workbook ---
             self.workbook.save(self.excel_path)
-            
+            self._write_accuracy_sidecar()
+
             if success:
                 logger.info(f"Results successfully saved to: {self.excel_path.resolve()}")
             else:
@@ -789,6 +830,11 @@ class TestResultMetrics:
     filepath: Optional[Path] = None
     processing_error_msg: str = VAL_NA
     success_flag: bool = False
+    # Accuracy vs the original raster (None unless computed for a compressed case)
+    max_abs_error: Optional[float] = None
+    rmse: Optional[float] = None
+    pct_changed: Optional[float] = None
+    distinct_count: Optional[Any] = None
 
 
 def _process_geotiff_for_metrics(
@@ -853,6 +899,16 @@ def _process_geotiff_for_metrics(
                 metrics.read_speed_mb_s = 0.0 # Indicate error
             else:
                 metrics.read_speed_mb_s = read_speed
+
+            # Accuracy vs the original raster (lossy settings introduce error; lossless => 0).
+            # Skipped for the uncompressed baseline (it is the reference).
+            if not is_baseline:
+                err = compute_error_metrics(source_path, output_path)
+                if err:
+                    metrics.max_abs_error = err['max_abs_error']
+                    metrics.rmse = err['rmse']
+                    metrics.pct_changed = err['pct_changed']
+                    metrics.distinct_count = err['distinct_count']
         except FileNotFoundError as e_fnf:
             metrics.processing_error_msg += f"FileNotFoundDuringStats: {e_fnf}; "
             success = False
@@ -1201,6 +1257,7 @@ def _run_compression_tests(source_file: Path, args: TestArguments, test_cases: L
             original_compression_pct=original_compression_pct
         )
         excel_writer.write_row(formatted_row)
+        excel_writer.add_accuracy(temp_filepath.name, current_test_metrics)
 
         if temp_filepath.exists():
             if current_test_metrics.success_flag and args.delete_test_files:
@@ -1259,6 +1316,15 @@ def test_compression(args: TestArguments):
                 args.output_path = source_path / f"{source_path.name}_test.xlsx"
             else:
                 args.output_path = source_path.with_name(f"{source_path.stem}_test.xlsx")
+
+    # The test report is always an Excel workbook; coerce a non-.xlsx output path so the
+    # workbook isn't written under a misleading extension (e.g. a .tif the user expected to
+    # be a raster). The accuracy sidecar is derived from this path's stem.
+    if args.output_path is not None and Path(args.output_path).suffix.lower() != '.xlsx':
+        _orig_out = Path(args.output_path)
+        args.output_path = _orig_out.with_suffix('.xlsx')
+        logger.warning(f"Test report is an Excel workbook; writing to "
+                       f"'{args.output_path.name}' instead of '{_orig_out.name}'.")
 
     if not args.temp_dir:
         args.temp_dir = DEFAULT_TEMP_DIR

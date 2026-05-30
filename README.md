@@ -228,7 +228,7 @@ This powerful tool combines multiple optimization techniques into a single, stre
 | `--algorithm` | `-a` | str | No | Auto | Compression algorithm (`JPEG`, `JXL`, `LZW`, `DEFLATE`, `ZSTD`, `LERC`, `NONE`) |
 | `--vertical-srs` | `-s` | str | Varies | - | Vertical SRS for elevation products (required for `dem` type) |
 | `--nodata` | `-n` | float | No | - | NoData value |
-| `--decimals` | `-d` | int | No | Auto | Decimal places for rounding |
+| `--decimals` | `-d` | int or `none` | No | Auto | Decimal places to round DEM/error/scientific data, or `none` to keep full precision |
 | `--predictor` | `-p` | int | No | Auto | Predictor for LZW/DEFLATE/ZSTD compression (1, 2, or 3) |
 | `--max-z-error` | `-z` | float | No | Auto | Max Z error for LERC compression |
 | `--level` | `-l` | int | No | Auto | Compression level for DEFLATE or ZSTD |
@@ -736,7 +736,9 @@ GTTK automatically selects optimal predictors, but you can override:
 
 #### Rounding for Improved Compression
 
-For floating-point elevation data, rounding can significantly improve compression efficiency:
+For floating-point elevation data, rounding to a sensible precision can significantly improve
+compression efficiency. `--decimals` accepts a non-negative integer, or `none` to disable rounding
+and preserve the source values exactly:
 
 ```bash
 # Round DEM to 2 decimal places (1 cm precision)
@@ -744,6 +746,9 @@ gttk optimize -i input.tif -o output.tif -t dem -a ZSTD -v EPSG:5703 --decimals=
 
 # Round error model more aggressively (1 decimal = 10 cm precision)
 gttk optimize -i error.tif -o error_compressed.tif -t error -a DEFLATE --decimals=1 --predictor=2
+
+# Keep full precision -- no rounding (the default for the `scientific` type)
+gttk optimize -i data.tif -o data_compressed.tif -t scientific -a ZSTD --decimals=none
 ```
 
 **Benefits of Rounding:**
@@ -753,12 +758,19 @@ gttk optimize -i error.tif -o error_compressed.tif -t error -a DEFLATE --decimal
 - Creates more identical adjacent values in smooth terrain
 - Results in cleaner, easier-to-read data queries
 
-**Guidelines:**
+**Guidelines (defaults in parentheses):**
 
-- DEM data: 2 decimal places (1 cm precision)
-- Error models: 1 decimal place (10 cm precision)
+- DEM data: 2 decimal places, ~1 cm precision (default)
+- Error models: 1 decimal place, ~10 cm precision (default)
+- Scientific data: `none` — keep full precision (default)
 - Bathymetry: Match the precision of your sonar equipment
 - Document rounding or decimal precision in metadata (GTTK does this automatically)
+
+> **Float32 precision caveat:** a 32-bit float holds only ~7 significant digits, so at elevation
+> magnitudes it can resolve roughly 3–5 decimal places (fewer at higher elevations). Requesting more
+> decimals than the data type can represent does nothing useful — GTTK treats it as `none` and logs a
+> notice. Prefer `--decimals none` to say "keep full precision" explicitly rather than passing an
+> arbitrarily large number (e.g. `--decimals 8`), which used to add noise and bloat the file.
 
 #### Cloud Optimized GeoTIFF (COG) Settings
 

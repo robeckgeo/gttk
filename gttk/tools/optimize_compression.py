@@ -276,7 +276,8 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileM
         # Determine if we should round overviews (all conditions must be met)
         should_round_overviews = (
             args.overviews and
-            args.decimals is not None and
+            isinstance(args.decimals, int) and
+            not getattr(args, 'discard_lsb', False) and  # LSB mode quantizes at write time, not via np.round
             args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and
             args.product_type in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value] and
             'Float' in str(input_info.data_type) and
@@ -341,10 +342,18 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileM
         elif args.algorithm == CA.JXL.value and args.quality is not None:
             jxl_options = _get_jxl_options(args.quality)
             final_creation_options.extend(jxl_options)
-        elif args.algorithm == CA.LERC.value:
+        elif args.algorithm in [CA.LERC.value, CA.LERC_DEFLATE.value, CA.LERC_ZSTD.value]:
             final_creation_options.append(f'MAX_Z_ERROR={args.max_z_error}')
-        if args.level and args.algorithm in [CA.DEFLATE.value, CA.ZSTD.value]:
-            final_creation_options.append(f'LEVEL={args.level}')
+
+        # Compression level: the COG driver uses LEVEL; the GTiff driver uses ZLEVEL
+        # (deflate) / ZSTD_LEVEL (zstd) -- which also covers the LERC_DEFLATE/LERC_ZSTD
+        # backends. Passing LEVEL= to the GTiff driver is silently ignored, so branch.
+        if args.level:
+            if args.algorithm in [CA.DEFLATE.value, CA.LERC_DEFLATE.value]:
+                final_creation_options.append(f'LEVEL={args.level}' if args.cog else f'ZLEVEL={args.level}')
+            elif args.algorithm in [CA.ZSTD.value, CA.LERC_ZSTD.value]:
+                final_creation_options.append(f'LEVEL={args.level}' if args.cog else f'ZSTD_LEVEL={args.level}')
+
         logger.info(f"Final creation options set: {final_creation_options}")
 
         # --- 4. Build and round overviews on intermediate file (ONLY if rounding workflow) ---
@@ -467,6 +476,12 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileM
                 # Add predictor if applicable
                 if args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and args.predictor:
                     overview_options_external.append(f'PREDICTOR={args.predictor}')
+
+                # Match the main-band compression level on external GTiff overviews
+                if args.level and args.algorithm == CA.DEFLATE.value:
+                    overview_options_external.append(f'ZLEVEL={args.level}')
+                elif args.level and args.algorithm == CA.ZSTD.value:
+                    overview_options_external.append(f'ZSTD_LEVEL={args.level}')
 
                 # Set overview block size using GDAL config option (TILED/BLOCKXSIZE/BLOCKYSIZE not supported for overviews)
                 old_ovr_blocksize = gdal.GetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE')

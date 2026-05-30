@@ -49,6 +49,19 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
+def parse_decimals(v):
+    """argparse type for --decimals: a non-negative integer, or 'none'/'off'/'keep' to keep
+    full precision (no base-10 rounding)."""
+    if isinstance(v, str) and v.strip().lower() in ('none', 'off', 'keep'):
+        return 'none'
+    try:
+        n = int(v)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError("decimals must be a non-negative integer or 'none'")
+    if n < 0:
+        raise argparse.ArgumentTypeError("decimals must be >= 0 (or 'none' to keep full precision)")
+    return n
+
 def float_nodata(nodata_str: str) -> float:
     """Convert NoData string to float or np.nan."""
     if nodata_str.lower() == 'nan':
@@ -101,7 +114,10 @@ def main():
         p.add_argument('-a', '--algorithm', type=str.upper, choices=['JPEG', 'JXL', 'LZW', 'DEFLATE', 'ZSTD', 'LERC', 'NONE'], dest='algorithm', help='Compression algorithm.')
         p.add_argument('-s', '--vertical-srs', type=str, default=None, dest='vertical_srs', help="Vertical SRS for 'dem' type.")
         p.add_argument('-n', '--nodata', type=float_nodata, default=None,dest='nodata', help="NoData value for 'dem' or 'error' type.")
-        p.add_argument('-d', '--decimals', type=int, dest='decimals', help='Decimal places for rounding DEM/error data.')
+        p.add_argument('-d', '--decimals', type=parse_decimals, dest='decimals',
+                       help="Decimal places to round DEM/error/scientific data, or 'none' to keep "
+                            "full precision. Default: 2 (dem), 1 (error), none (scientific). Values "
+                            "finer than the data type can represent are treated as 'none'.")
         p.add_argument('-p', '--predictor', type=int, choices=[1, 2, 3], dest='predictor', help='Predictor for LZW/DEFLATE/ZSTD compression.')
         p.add_argument('-z', '--max-z-error', type=float, dest='max_z_error', help='Max Z error for LERC compression.')
         p.add_argument('-l', '--level', type=int, dest='level', help='Compression level for DEFLATE or ZSTD.')
