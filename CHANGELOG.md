@@ -6,6 +6,25 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Importing GTTK changed the host process.** GDAL configuration, GDAL's Python
+  exception mode and the *root* logger were all set at import time, so an application
+  that imported a single GTTK function silently had its GeoTIFF reading, its error
+  handling and its logging changed underneath it. Specifically: `OSR_WKT_FORMAT=WKT2_2019`
+  reformatted every `ExportToWkt` in the process; `GTIFF_SRS_SOURCE=WKT` (from the ArcGIS
+  module) changed how every GeoTIFF was *read*; `gdal.UseExceptions()` changed how every
+  GDAL call reported failure; `setup_logger` cleared the root logger's handlers, disabling
+  the application's own logging; and importing `gdal_runner` additionally created a
+  `logs/` directory and wrote to it. All of it now applies for the duration of a GTTK
+  operation and is restored afterwards, via the new `gttk.utils.gdal_env.gdal_env()`
+  context manager applied at each tool's public entry point. Importing GTTK is now free
+  of side effects, asserted in subprocesses by `tests/unit/test_import_side_effects.py`.
+- **Module loggers sat outside any namespace.** `optimize_compression`, `read_metadata`,
+  `compare_compression`, `test_compression` and `optimize_compression_arc` logged under
+  bare top-level names that collide with any other library using them and cannot be
+  configured as a group. Everything now logs under `gttk.*`, and `setup_logger`
+  configures the `gttk` logger rather than root, so an application that never calls it
+  still receives GTTK's messages by normal propagation.
+
 - **Compound CRS lost its vertical EPSG code.** The resolved SRS was written onto the in-memory
   intermediate and left to reach the output through GeoTIFF keys, which carry a compound CRS only
   partially: the vertical component came back identified by its datum (`VerticalDatumGeoKey`) and

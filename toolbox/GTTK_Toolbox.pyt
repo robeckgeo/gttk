@@ -98,6 +98,10 @@ else:
     arcpy.AddMessage(f"PROJ_LIB already set to: {os.environ['PROJ_LIB']}")
 
 try:
+    from osgeo import gdal
+    # GTTK applies GDAL's exception mode per operation, not at import, so this
+    # toolbox makes the choice for the ArcGIS process it runs in.
+    gdal.UseExceptions()
     import gttk.tools.compare_compression as cc
     import gttk.tools.optimize_compression_arc as oc
     import gttk.tools.read_metadata as rm

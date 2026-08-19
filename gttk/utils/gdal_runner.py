@@ -42,12 +42,19 @@ from gttk.utils.log_helpers import setup_logger, shutdown_logger
 # Load config to find the OSGeo4W path
 CONFIG_PATH = SCRIPT_DIR.parent.parent / 'config.toml'  # Project root
 
-# --- Global Logger Setup ---
-# Initialize the logger at the module level for consistent access.
-log_dir = SCRIPT_DIR.parent / 'logs'
-log_dir.mkdir(exist_ok=True)
-debug_log_file = log_dir / 'gdal_runner_debug.log'
-logger = setup_logger(log_file=str(debug_log_file))
+# --- Logger ---
+# This module doubles as a standalone script run in the OSGeo4W environment. Configuring
+# logging and creating a log directory used to happen at import, which meant merely
+# importing it reconfigured logging and touched the filesystem; both now wait until the
+# script actually runs.
+logger = logging.getLogger(__name__)
+
+
+def _configure_script_logging() -> logging.Logger:
+    """Configure logging for the standalone-script entry points."""
+    log_dir = SCRIPT_DIR.parent / 'logs'
+    log_dir.mkdir(exist_ok=True)
+    return setup_logger(log_file=str(log_dir / 'gdal_runner_debug.log'))
 
 def get_config() -> Dict[str, Any]:
     """Loads the main configuration file (TOML format)."""
@@ -593,4 +600,5 @@ def main():
         shutdown_logger(logger)
 
 if __name__ == "__main__":
+    logger = _configure_script_logging()
     main()

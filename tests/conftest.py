@@ -82,6 +82,12 @@ from tests.fixtures.mock_geotiff_factory import MockGeoTIFF
 # =============================================================================
 
 def pytest_configure(config):
+    # GTTK applies GDAL's exception mode per operation rather than at import, so
+    # the test session -- an application like any other -- makes the choice for
+    # itself. Import cleanliness is asserted separately, in subprocesses, by
+    # tests/unit/test_import_side_effects.py.
+    gdal.UseExceptions()
+
     """
     Configure pytest with custom markers and options.
     

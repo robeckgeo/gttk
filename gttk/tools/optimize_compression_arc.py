@@ -63,11 +63,10 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 GDAL_RUNNER_SCRIPT = SCRIPT_DIR.parent / 'utils' / 'gdal_runner.py'
 
 # Global logger variables
-logger = logging.getLogger('optimize_compression_arc')
-# Force WKT2_2019 formatting and preserve WKT2 in GTiff; prefer WKT when reading
-gdal.SetConfigOption('OSR_WKT_FORMAT', 'WKT2_2019')
-gdal.SetConfigOption('GTIFF_WRITE_SRS_WKT2', 'YES')
-gdal.SetConfigOption('GTIFF_SRS_SOURCE', 'WKT')
+logger = logging.getLogger(__name__)
+# GDAL configuration is applied per operation by gdal_env(GDAL_OPTIONS_ARC), not at
+# import.  GTIFF_SRS_SOURCE in particular changes how every GeoTIFF in the process is
+# read, which is not this module's call to make for its importer.
 
 if TYPE_CHECKING:
     import arcpy # type: ignore
@@ -1384,6 +1383,16 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
             tracker.stop("gdal_processing")
 
 def optimize_compression(args: OptimizeArguments, tracker: Optional[PerformanceTracker] = None):
+    """Public entry point: applies GTTK's GDAL settings for this call only.
+
+    The settings are restored afterwards, so importing this module does not
+    change GDAL's behaviour for the rest of the host process.
+    """
+    with gdal_env(GDAL_OPTIONS_ARC):
+        return _optimize_compression_arc_inner(args, tracker)
+
+
+def _optimize_compression_arc_inner(args: OptimizeArguments, tracker: Optional[PerformanceTracker] = None):
     """Main entry point for the ArcPy script."""
     arc_mode = args.arc_mode or False
     if arc_mode:

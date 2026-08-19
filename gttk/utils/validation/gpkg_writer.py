@@ -32,8 +32,9 @@ from gttk.utils.validation.gpkg_models import GeoPackageFeature
 
 logger = logging.getLogger(__name__)
 
-# Suppress GDAL errors during GeoPackage operations
-gdal.UseExceptions()
+# GDAL's exception mode is set per operation by gttk.utils.gdal_env.gdal_env(), which
+# validate_metadata() applies; enabling it here would change how GDAL reports failure
+# for the whole process just because this module was imported.
 
 
 # Field definitions: (field_name, ogr_type, width)

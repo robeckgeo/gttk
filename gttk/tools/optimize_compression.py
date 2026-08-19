@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Any, Optional
 from gttk.tools.compare_compression import generate_report_for_datasets
 from gttk.utils.exceptions import ProcessingStepFailedError
+from gttk.utils.gdal_env import gdal_env
 from gttk.utils.geotiff_processor import read_geotiff
 from gttk.utils.log_helpers import init_arcpy
 from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
@@ -57,17 +58,10 @@ arcMode = False
 arcpy = None
 base_path = os.path.dirname(os.path.abspath(__file__))
 
-# --- Configuration & Setup ---
-gdal.SetConfigOption('GDAL_NUM_THREADS', 'ALL_CPUS')
-gdal.SetConfigOption('ESRI_XML_PAM', 'TRUE')
-# Force WKT2_2019 formatting and encourage GTiff driver to preserve SRS as WKT2 where possible
-gdal.SetConfigOption('OSR_WKT_FORMAT', 'WKT2_2019')
-gdal.SetConfigOption('GTIFF_WRITE_SRS_WKT2', 'YES')
+# GDAL configuration is applied per operation by gdal_env(), not at import: setting it
+# here made it process-global for anything that merely imported this module.
 
-logger = logging.getLogger('optimize_compression')
-
-# --- Custom Handlers and Logging Setup ---
-report_logger = logging.getLogger('report_logger')
+logger = logging.getLogger(__name__)
 
 # --- Helper Functions ---
 def format_gdal_progress(complete: float, message: str, data: Any) -> int:
@@ -238,6 +232,11 @@ def _calculate_overview_levels(x_size: int, y_size: int, tile_size: int = 512) -
 
 def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileManager, tracker: Optional[PerformanceTracker] = None):
     """Orchestrates the end-to-end GeoTIFF optimization and compression workflow."""
+    with gdal_env():
+        return _orchestrate_geotiff_optimization_inner(args, vfm, tracker)
+
+
+def _orchestrate_geotiff_optimization_inner(args: OptimizeArguments, vfm: VirtualFileManager, tracker: Optional[PerformanceTracker] = None):
     if tracker:
         tracker.start("gdal_processing")
     
@@ -573,6 +572,11 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileM
 
 def optimize_compression(args: OptimizeArguments, tracker: Optional[PerformanceTracker] = None):
     """Main entry point for the CLI script."""
+    with gdal_env():
+        return _optimize_compression_inner(args, tracker)
+
+
+def _optimize_compression_inner(args: OptimizeArguments, tracker: Optional[PerformanceTracker] = None):
     global arcMode
     arcMode = args.arc_mode or False
     if arcMode:

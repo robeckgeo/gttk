@@ -22,6 +22,7 @@ import numpy as np
 from pathlib import Path
 from gttk.utils.log_helpers import setup_logger
 import gttk.utils.optimize_constants as oc
+from osgeo import gdal
 from gttk.utils.script_arguments import CompareArguments, ReadArguments, OptimizeArguments, TestArguments, ValidateArguments
 
 
@@ -83,6 +84,9 @@ def valid_quality(value: str) -> int:
     return ivalue
 
 def main():
+    # GTTK is a library: it applies GDAL's exception mode per operation rather than
+    # at import, so this application makes the choice for its own process.
+    gdal.UseExceptions()
     """
     Main function to parse arguments and call the appropriate tool.
     """

@@ -22,6 +22,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 from osgeo import gdal
 from gttk.utils.contexts import banner_context, output_format_context, xml_type_context
+from gttk.utils.gdal_env import gdal_env
 from gttk.utils.log_helpers import setup_logger
 from gttk.utils.metadata_extractor import MetadataExtractor
 from gttk.utils.path_helpers import open_file
@@ -32,8 +33,7 @@ from gttk.utils.section_registry import get_section_ids_from_args, filter_sectio
 from gttk.utils.statistics import write_pam_xml, build_pam_data_from_stats
 
 # --- Configuration & Setup ---
-gdal.SetConfigOption('GDAL_NUM_THREADS', 'ALL_CPUS')
-logger = logging.getLogger('read_metadata')
+logger = logging.getLogger(__name__)
 
 
 def get_report_path(input_path: str, suffix: str, format: str) -> str:
@@ -192,6 +192,16 @@ def _generate_report_summary(input_path: str) -> str:
 
 
 def read_metadata(args: ReadArguments):
+    """Public entry point: applies GTTK's GDAL settings for this call only.
+
+    The settings are restored afterwards, so importing this module does not
+    change GDAL's behaviour for the rest of the host process.
+    """
+    with gdal_env():
+        return _read_metadata_inner(args)
+
+
+def _read_metadata_inner(args: ReadArguments):
     """
     Generate GeoTIFF metadata report using ReportFormatter.
     
@@ -201,8 +211,11 @@ def read_metadata(args: ReadArguments):
     Returns:
         0 on success, 1 on failure
     """
-    # Set up logger with appropriate handlers for ArcGIS or CLI
-    setup_logger(is_arc_mode=args.arc_mode, level=logging.INFO)
+    # Route messages to arcpy when the ArcGIS toolbox calls this directly. Under the
+    # CLI, main() has already configured logging; reconfiguring it from inside a tool
+    # would take that decision away from any other caller.
+    if args.arc_mode:
+        setup_logger(is_arc_mode=True, level=logging.INFO)
     
     logger.info("=== read_metadata.py started ===")
     logger.info(f"Arguments: {args}")

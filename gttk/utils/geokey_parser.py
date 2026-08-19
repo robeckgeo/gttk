@@ -508,7 +508,7 @@ def is_geotiff(filepath: Path) -> bool:
         >>> is_geotiff(Path('image.jpg'))
         False
     """
-    logger = logging.getLogger('read_metadata')
+    logger = logging.getLogger(__name__)
     
     if not os.path.exists(filepath):
         logger.debug(f"is_geotiff: File does not exist: {filepath}")
