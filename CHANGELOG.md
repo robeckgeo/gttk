@@ -2,6 +2,65 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Fixed
+
+- **Importing GTTK changed the host process.** GDAL configuration, GDAL's Python
+  exception mode and the *root* logger were all set at import time, so an application
+  that imported a single GTTK function silently had its GeoTIFF reading, its error
+  handling and its logging changed underneath it. Specifically: `OSR_WKT_FORMAT=WKT2_2019`
+  reformatted every `ExportToWkt` in the process; `GTIFF_SRS_SOURCE=WKT` (from the ArcGIS
+  module) changed how every GeoTIFF was *read*; `gdal.UseExceptions()` changed how every
+  GDAL call reported failure; `setup_logger` cleared the root logger's handlers, disabling
+  the application's own logging; and importing `gdal_runner` additionally created a
+  `logs/` directory and wrote to it. All of it now applies for the duration of a GTTK
+  operation and is restored afterwards, via the new `gttk.utils.gdal_env.gdal_env()`
+  context manager applied at each tool's public entry point. Importing GTTK is now free
+  of side effects, asserted in subprocesses by `tests/unit/test_import_side_effects.py`.
+- **Module loggers sat outside any namespace.** `optimize_compression`, `read_metadata`,
+  `compare_compression`, `test_compression` and `optimize_compression_arc` logged under
+  bare top-level names that collide with any other library using them and cannot be
+  configured as a group. Everything now logs under `gttk.*`, and `setup_logger`
+  configures the `gttk` logger rather than root, so an application that never calls it
+  still receives GTTK's messages by normal propagation.
+
+- **Compound CRS lost its vertical EPSG code.** The resolved SRS was written onto the in-memory
+  intermediate and left to reach the output through GeoTIFF keys, which carry a compound CRS only
+  partially: the vertical component came back identified by its datum (`VerticalDatumGeoKey`) and
+  lost its own code, so an EGM2008 DEM named EGM2008 without ever citing `EPSG:3855`. The target SRS
+  is now re-asserted on the final write (`-a_srs`, an assignment -- pixels and the geotransform are
+  untouched). Verified on a real TREx cell: the output now reports compound `EPSG:9518` and vertical
+  `EPSG:3855`, where before both were absent.
+- **Categorical overviews were interpolated.** On the COG path GTTK never emitted
+  `OVERVIEW_RESAMPLING`, so the driver fell back to its own default (`CUBIC` for any band without a
+  colour table) and blended class codes together in the pyramids of `thematic` products. Measured on
+  a real 6-class provenance mask, the overviews contained five codes that were not in the source.
+  The kernel is now stated explicitly and comes from `--product-type`.
+- **Overviews used a different codec from the main image.** The COG driver defaults
+  `OVERVIEW_COMPRESS` to LZW regardless of `COMPRESS`, so a ZSTD COG carried LZW pyramids.
+  Overviews now inherit `--algorithm` and `--predictor`.
+- **`AREA_OR_POINT` was written in the wrong case.** `--raster-type` is lowercased by the CLI and
+  was written verbatim, stamping `point` instead of GDAL's `Point`. Normalised on resolution.
+- **`PREDICTOR=NONE` was emitted for thematic products.** `NONE` is not a value GDAL accepts. The
+  default is now 1, and `PREDICTOR` is omitted entirely when it is 1: that is already both drivers'
+  default, and they spell it differently -- the COG driver's value list is
+  `NO/YES/STANDARD/FLOATING_POINT` and it warns on `1`, while GTiff takes an int and errors on `NO`.
+- **`PREDICTOR=3` was emitted for integer `scientific` products.** The floating-point predictor is
+  invalid on integer samples; it now falls back to `2` with a warning when the source is not float.
+- **A failure leaked a read handle on the input file.** `_orchestrate_geotiff_optimization` released
+  its datasets only on the success path, so an exception left the source open — which on Windows
+  blocks deleting or overwriting it. Release now happens in a `finally`.
+- Documentation: the vertical-SRS examples used `-v`, which is `--verbose` (the flag is `-s`), and
+  DEVELOPER.md described a `gdal.Warp` reprojection step that does not exist — GTTK is assign-only.
+
+### Added
+
+- `--overview-resampling`, `--overview-compress`, `--overview-predictor` for explicit overview
+  control. An interpolating kernel on a `thematic` product is rejected.
+- `--num-threads` to cap compression threads per file, for running several `gttk` processes at once.
+- `--report` to skip report generation on batch runs. Directory input no longer auto-opens reports.
+
 ## [0.9.0] - 2026-01-19
 
 ### Added

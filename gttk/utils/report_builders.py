@@ -345,7 +345,7 @@ class MetadataReportBuilder(ReportBuilder):
         }
 
         import logging
-        logger = logging.getLogger('read_metadata')
+        logger = logging.getLogger(__name__)
         
         for section_id in section_ids:
             adder_method = section_map.get(section_id)

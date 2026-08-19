@@ -36,6 +36,7 @@ try:
 except metadata.PackageNotFoundError:
     __version__ = "0.0.0-dev"
 
+from gttk.utils.gdal_env import gdal_env
 from gttk.utils.script_arguments import ValidateArguments
 from gttk.utils.metadata_extractor import MetadataExtractor
 from gttk.utils.path_helpers import open_file, find_xml_metadata_file
@@ -57,6 +58,16 @@ logger = logging.getLogger(__name__)
 
 
 def validate_metadata(args: ValidateArguments) -> None:
+    """Public entry point: applies GTTK's GDAL settings for this call only.
+
+    The settings are restored afterwards, so importing this module does not
+    change GDAL's behaviour for the rest of the host process.
+    """
+    with gdal_env():
+        return _validate_metadata_inner(args)
+
+
+def _validate_metadata_inner(args: ValidateArguments) -> None:
     """
     Main entry point for the validate_metadata tool.
 

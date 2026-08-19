@@ -26,11 +26,11 @@ from gttk.utils.metadata_extractor import MetadataExtractor
 from gttk.utils.path_helpers import open_file
 from gttk.utils.report_builders import ComparisonReportBuilder
 from gttk.utils.report_formatters import HtmlReportFormatter, MarkdownReportFormatter
+from gttk.utils.gdal_env import gdal_env
 from gttk.utils.script_arguments import CompareArguments
 
 # --- Configuration & Setup ---
-gdal.SetConfigOption('GDAL_NUM_THREADS', 'ALL_CPUS')
-logger = logging.getLogger('compare_compression')
+logger = logging.getLogger(__name__)
 
 def generate_report_for_datasets(
     base_ds: Union[gdal.Dataset, str, Path],
@@ -190,6 +190,16 @@ def _generate_report_summary(base_file: str, comp_file: str, base_name: str, com
     return "\n".join(lines)
 
 def compare_compression(args: CompareArguments):
+    """Public entry point: applies GTTK's GDAL settings for this call only.
+
+    The settings are restored afterwards, so importing this module does not
+    change GDAL's behaviour for the rest of the host process.
+    """
+    with gdal_env():
+        return _compare_compression_inner(args)
+
+
+def _compare_compression_inner(args: CompareArguments):
     """
     Compare compression for two GeoTIFF files.
     Returns the path to the generated report, or None on failure.

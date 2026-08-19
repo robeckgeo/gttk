@@ -41,6 +41,41 @@ def default_level_for(algorithm: str):
 def default_predictor_for(product_type: str):
     return DEFAULT_PREDICTOR_BY_TYPE.get(product_type, DEFAULT_DEM_PREDICTOR)
 
+def default_overview_resampling_for(product_type: str):
+    """Resampling kernel for overview generation, by product type.
+
+    NEAREST for categorical (thematic) and paletted (image) data, BILINEAR for
+    continuous surfaces.  Callers may override; see ``--overview-resampling``.
+    """
+    return DEFAULT_OVERVIEW_RESAMPLING_BY_TYPE.get(product_type, 'BILINEAR')
+
+def is_float_dtype(data_type) -> bool:
+    """True when a GDAL data type name denotes floating point (Float32/Float64/CFloat*)."""
+    return 'Float' in str(data_type)
+
+def resolve_predictor(predictor, data_type):
+    """Clamp a predictor to one the data type can actually carry.
+
+    PREDICTOR=3 is the TIFF floating-point predictor and libtiff rejects it on
+    integer samples, so an integer raster falls back to 2 (horizontal
+    differencing).  Returns ``(predictor, warning_or_None)``.
+    """
+    if predictor is None:
+        return None, None
+    try:
+        predictor = int(predictor)
+    except (TypeError, ValueError):
+        return DEFAULT_THEMATIC_PREDICTOR, (
+            f"PREDICTOR={predictor!r} is not a valid GDAL value; using "
+            f"{DEFAULT_THEMATIC_PREDICTOR} (no predictor)."
+        )
+    if predictor == 3 and not is_float_dtype(data_type):
+        return 2, (
+            f"PREDICTOR=3 is the floating-point predictor and is invalid for "
+            f"{data_type} data; falling back to PREDICTOR=2."
+        )
+    return predictor, None
+
 def discard_lsb_bits_for(decimals, vmax, mantissa_bits: int = 23) -> int:
     """Number of mantissa bits a DISCARD_LSB-style quantizer can clear while keeping the
     worst-case absolute error within the precision implied by ``decimals`` decimal places,
@@ -107,7 +142,8 @@ DEFAULT_SCIENTIFIC_MAX_Z_ERROR = 0.0
 DEFAULT_DEM_PREDICTOR = 2
 DEFAULT_ERROR_PREDICTOR = 2
 DEFAULT_SCIENTIFIC_PREDICTOR = 3
-DEFAULT_THEMATIC_PREDICTOR = 'NONE' # 1
+DEFAULT_THEMATIC_PREDICTOR = 1  # PREDICTOR=1 is "no predictor"; GDAL rejects 'NONE'
+DEFAULT_IMAGE_PREDICTOR = 1
 
 # Decimal precision by product_type. NO_ROUNDING ('none') is the sentinel for
 # "keep full precision" (no base-10 rounding); see the --decimals CLI option.
@@ -136,7 +172,32 @@ DEFAULT_PREDICTOR_BY_TYPE = {
     ProductType.ERROR.value: DEFAULT_ERROR_PREDICTOR,
     ProductType.SCIENTIFIC.value: DEFAULT_SCIENTIFIC_PREDICTOR,
     ProductType.THEMATIC.value: DEFAULT_THEMATIC_PREDICTOR,
+    ProductType.IMAGE.value: DEFAULT_IMAGE_PREDICTOR,
 }
+
+# Overview resampling by product_type.  Categorical rasters must never be
+# interpolated: averaging class code 2 with class code 4 invents class code 3.
+# The COG driver's own default is an interpolating kernel for any band without a
+# colour table, so this has to be stated explicitly rather than relied upon.
+DEFAULT_OVERVIEW_RESAMPLING_BY_TYPE = {
+    ProductType.DEM.value: 'BILINEAR',
+    ProductType.ERROR.value: 'BILINEAR',
+    ProductType.SCIENTIFIC.value: 'BILINEAR',
+    ProductType.THEMATIC.value: 'NEAREST',
+    ProductType.IMAGE.value: 'NEAREST',
+}
+
+#: Resampling kernels GDAL accepts for overview generation.
+OVERVIEW_RESAMPLING_CHOICES = (
+    'NEAREST', 'AVERAGE', 'BILINEAR', 'CUBIC', 'CUBICSPLINE',
+    'LANCZOS', 'MODE', 'RMS', 'GAUSS',
+)
+
+#: Resampling kernels that blend neighbouring pixels, and so must not be applied
+#: to categorical data.
+INTERPOLATING_RESAMPLING = frozenset({
+    'AVERAGE', 'BILINEAR', 'CUBIC', 'CUBICSPLINE', 'LANCZOS', 'RMS', 'GAUSS',
+})
 DEFAULT_LEVEL_BY_ALGORITHM = {
     CompressionAlgorithm.DEFLATE.value: DEFAULT_DEFLATE_LEVEL,
     CompressionAlgorithm.ZSTD.value: DEFAULT_ZSTD_LEVEL,

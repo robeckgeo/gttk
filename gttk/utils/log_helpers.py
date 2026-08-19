@@ -11,6 +11,10 @@
 """
 This module provides logging helpers for the GeoTIFF ToolKit, including
 support for both CLI and ArcGIS Pro environments.
+
+Everything here operates on the ``gttk`` logger, never the root logger: an importing
+application owns root, and GTTK reconfiguring it used to disable that application's
+logging as a side effect of an import.
 """
 
 import logging
@@ -74,23 +78,41 @@ class ArcpyLogHandler(logging.Handler):
         except Exception as e:
             sys.stderr.write(f"ArcpyLogHandler Error: {e}\n")
 
-def setup_logger(log_file: Optional[str] = None, is_arc_mode: bool = False, level: int = logging.INFO) -> logging.Logger:
+#: Every GTTK module logs under this name, so configuring it configures GTTK and
+#: nothing else.
+PACKAGE_LOGGER = 'gttk'
+
+
+def setup_logger(log_file: Optional[str] = None, is_arc_mode: bool = False,
+                 level: int = logging.INFO, quiet_matplotlib: bool = True) -> logging.Logger:
     """
-    Set up and configure the root logger.
+    Set up and configure GTTK's own logger.
+
+    Configures ``logging.getLogger('gttk')``, **not** the root logger. Clearing root's
+    handlers -- which this used to do -- silently disabled the logging of any
+    application that imported GTTK. An application that never calls this gets GTTK's
+    messages through its own root handlers by normal propagation, which is what a
+    library should do; calling this is opting in to GTTK managing its own output.
 
     Args:
         log_file (str, optional): The full path to the log file.
         is_arc_mode (bool): If True, configures logging for the ArcGIS environment.
         level (int): The logging level.
+        quiet_matplotlib (bool): Raise matplotlib's own logger to WARNING. On by default
+            because GTTK renders histograms and matplotlib is noisy at DEBUG; pass False
+            to leave another library's logger alone.
 
     Returns:
-        logging.Logger: The configured root logger instance.
+        logging.Logger: The configured ``gttk`` logger.
     """
-    logger = logging.getLogger()
+    logger = logging.getLogger(PACKAGE_LOGGER)
     logger.setLevel(level)
 
-    if logger.hasHandlers():
-        logger.handlers.clear()
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+    # GTTK now owns its own output, so do not also hand it to the application's root
+    # handlers -- that would print every message twice.
+    logger.propagate = False
 
     formatter = logging.Formatter('%(message)s')
     file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -114,18 +136,23 @@ def setup_logger(log_file: Optional[str] = None, is_arc_mode: bool = False, leve
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
 
-    # Quieting matplotlib's verbose logging
-    logging.getLogger('matplotlib').setLevel(logging.WARNING)
-    
+    if quiet_matplotlib:
+        logging.getLogger('matplotlib').setLevel(logging.WARNING)
+
     return logger
 
 def shutdown_logger(logger: logging.Logger):
     """
     Safely shuts down a logger by removing and closing its handlers.
     This is crucial for releasing file locks.
+
+    Also restores propagation, so a later import of GTTK by the same process behaves
+    like a fresh one.
     """
     if not logger:
         return
+    if logger.name == PACKAGE_LOGGER:
+        logger.propagate = True
     handlers = logger.handlers[:]
     for handler in handlers:
         handler.flush()

@@ -44,6 +44,7 @@ import gttk.tools.optimize_compression_arc as optimize_compression_arc
 from gttk.utils.accuracy_metrics import compute_error_metrics
 from gttk.utils.exceptions import CSVLoadError, OptimizationError
 from gttk.utils.geotiff_processor import calculate_compression_efficiency, determine_decimal_precision
+from gttk.utils.gdal_env import gdal_env
 from gttk.utils.log_helpers import shutdown_logger, init_arcpy, ArcpyLogHandler
 from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
 from gttk.utils.path_helpers import get_geotiff_files, open_file
@@ -51,8 +52,7 @@ from gttk.utils.script_arguments import TestArguments, OptimizeArguments
 from gttk.utils.validate_cloud_optimized_geotiff import validate as validate_cog
 
 # --- Configuration & Setup ---
-gdal.SetConfigOption('GDAL_NUM_THREADS', 'ALL_CPUS')
-logger = logging.getLogger('test_compression')
+logger = logging.getLogger(__name__)
 
 # --- Constants ---
 # Script Behavior
@@ -1274,6 +1274,16 @@ def _run_compression_tests(source_file: Path, args: TestArguments, test_cases: L
 
 
 def test_compression(args: TestArguments):
+    """Public entry point: applies GTTK's GDAL settings for this call only.
+
+    The settings are restored afterwards, so importing this module does not
+    change GDAL's behaviour for the rest of the host process.
+    """
+    with gdal_env():
+        return _test_compression_inner(args)
+
+
+def _test_compression_inner(args: TestArguments):
     """Main function to orchestrate the GeoTIFF compression testing."""
     # --- Logging Setup ---
     assert args.temp_dir is not None, "temp_dir must be set"

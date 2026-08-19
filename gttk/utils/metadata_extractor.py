@@ -264,7 +264,7 @@ class MetadataExtractor:
         calling geokey_parser.get_geographic_extents() and re-transforming coordinates.
         """
         import logging
-        logger = logging.getLogger('read_metadata')
+        logger = logging.getLogger(__name__)
         
         try:
             if not self.is_geotiff or not self.geotiff_info:
@@ -453,7 +453,7 @@ class MetadataExtractor:
     def extract_wkt_string(self) -> Optional[WktString]:
         """Extracts WKT2 string, preferring custom metadata for non-EPSG vertical CRSs."""
         import logging
-        logger = logging.getLogger('read_metadata')
+        logger = logging.getLogger(__name__)
         
         try:
             if not self.is_geotiff or not self.gdal_ds:
@@ -493,7 +493,7 @@ class MetadataExtractor:
     def extract_projjson_string(self) -> Optional[JsonString]:
         """Extracts PROJJSON string."""
         import logging
-        logger = logging.getLogger('read_metadata')
+        logger = logging.getLogger(__name__)
         
         try:
             if not self.is_geotiff or not self.gdal_ds:

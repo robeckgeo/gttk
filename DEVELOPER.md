@@ -155,13 +155,47 @@ When running within ArcGIS Pro, the toolkit uses an isolation strategy to ensure
         * Ensure the `gdal`, `python3-gdal`, `numpy`, and `python3-numpy` packages are selected during installation (typically included in the "Express Desktop" install).
         * The path to the OSGeo4W root directory (e.g., `C:\OSGeo4W`) must be correctly set in `config.toml`.
 
+## GTTK as a Library: No Import Side Effects
+
+Importing GTTK does not change the process it is imported into. GDAL configuration and
+GDAL's Python exception mode are applied for the duration of an operation by
+`gttk.utils.gdal_env.gdal_env()` and restored afterwards, so a host application keeps its
+own settings.
+
+Each tool's **public** entry point (`optimize_compression`, `compare_compression`,
+`read_metadata`, `test_compression`, `validate_metadata`, and the ArcGIS variant) opens
+that context and delegates to a `_*_inner` function holding the real work. When adding a
+tool, follow the same shape; when calling into the utility layer directly, open
+`gdal_env()` yourself:
+
+```python
+from gttk.utils.gdal_env import gdal_env
+
+with gdal_env():
+    ...  # GDAL sees GTTK's settings here, and only here
+```
+
+`gdal_env()` nests safely, so an entry point and a helper may both use it.
+
+**Applications choose the exception mode.** `gdal.UseExceptions()` is process-global, so
+GTTK does not call it at import. The CLI (`gttk/main.py`), the ArcGIS toolbox and the
+test suite each call it for themselves; a library consumer should do the same, or rely on
+`gdal_env()` around the calls it makes.
+
+**Logging goes to the `gttk` logger, never root.** Every module uses
+`logging.getLogger(__name__)`, which places it under `gttk.*`. `setup_logger()`
+configures that logger and sets `propagate = False`, so GTTK owns its output once you opt
+in; an application that never calls it receives GTTK's messages through its own root
+handlers by normal propagation. Clearing root's handlers -- which `setup_logger` used to
+do -- silently disabled the logging of anything that imported GTTK.
+
 ## Understanding the Processing Pipeline
 
 `gttk optimize` uses a sophisticated, multi-step pipeline to process your data. All steps are performed in-memory using GDAL's virtual file system, meaning no temporary files are written to disk.
 
 1. **Initial Read & Analysis**: Opens the input file and gathers key metadata (resolution, data type, spatial reference system)
 2. **SRS Handling**: Checks for and parses compound SRS; creates new compound SRS if `--vertical-srs` is provided
-3. **Resampling/Reprojection** (if needed): Uses `gdal.Warp` to create a new in-memory dataset if resolution or SRS changes
+3. **SRS Assignment**: Writes the resolved SRS as WKT2. This is an assignment, not a warp -- pixels and the geotransform are never touched, so a file's georeferencing cannot shift. GTTK does not reproject; use `gdalwarp` first if you need a different CRS
 4. **Alpha-to-Mask Conversion** (for images): Converts alpha channel to internal mask for better COG compatibility and compression
 5. **Rounding** (for floats): Performs block-based rounding for large floating-point rasters, allowing efficient processing of files too large for RAM
 6. **Final Compression and COG Creation**: Processed in-memory dataset is passed to the COG driver for compression and writing. Overviews are generated at this stage.
