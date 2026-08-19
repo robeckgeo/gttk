@@ -21,6 +21,7 @@ import sys
 import numpy as np
 from pathlib import Path
 from gttk.utils.log_helpers import setup_logger
+import gttk.utils.optimize_constants as oc
 from gttk.utils.script_arguments import CompareArguments, ReadArguments, OptimizeArguments, TestArguments, ValidateArguments
 
 
@@ -129,6 +130,13 @@ def main():
         p.add_argument('--mask-nodata', type=str2bool, default=None, dest='mask_nodata', help='If True, add NoData pixels to transparency mask. Default: True for images, False for all others.')
         p.add_argument('--cog', type=str2bool, default=True, dest='cog', help='Create a COG (True/False, Yes/No). Default: True.')
         p.add_argument('--overviews', type=str2bool, default=True, dest='overviews', help='Generate internal overviews (True/False, Yes/No). Default: True.')
+        p.add_argument('--overview-resampling', type=str.upper, choices=list(oc.OVERVIEW_RESAMPLING_CHOICES), dest='overview_resampling',
+                       help='Resampling kernel for overviews. Default: NEAREST for thematic/image (categorical data must not be interpolated), BILINEAR otherwise.')
+        p.add_argument('--overview-compress', type=str.upper, choices=['NONE', 'LZW', 'DEFLATE', 'ZSTD', 'JPEG', 'JXL', 'LERC', 'WEBP'], dest='overview_compress',
+                       help='Compression for overviews. Default: same as --algorithm.')
+        p.add_argument('--overview-predictor', type=int, choices=[1, 2, 3], dest='overview_predictor', help='Predictor for overviews. Default: same as --predictor.')
+        p.add_argument('--num-threads', type=str, default=None, dest='num_threads', help="Worker threads for compression: an integer or ALL_CPUS. Default: ALL_CPUS. Lower it when running several gttk processes in parallel.")
+        p.add_argument('--report', type=str2bool, default=True, dest='report', help='Generate the before/after comparison report. Default: True. Set False for batch runs.')
         p.add_argument('-f', '--report-format', type=str.lower, default='html', choices=['html', 'md'], dest='report_format', help='Output format for the report file.')
         p.add_argument('--report-suffix', type=str, default='_comp', dest='report_suffix', help='Suffix for the report filename.')
         p.add_argument('--open-report', type=str2bool, default=True, dest='open_report', help='Open the report automatically after generation.')

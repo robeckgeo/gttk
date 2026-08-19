@@ -1105,7 +1105,7 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
             assert args.decimals is not None, "args.decimals must be set when should_round_overviews is True"
             
             logger.info("Building internal overviews on preprocessed file for rounding (float data, no mask).")
-            resample_alg = 'NEAREST' if args.product_type in [PT.IMAGE.value, PT.THEMATIC.value] else 'BILINEAR'
+            resample_alg = args.overview_resampling
             overview_list = _calculate_overview_levels(input_info.x_size, input_info.y_size, tile_size=args.tile_size)
             logger.info(f"Using overview levels: {', '.join(overview_list)}")
             
@@ -1152,7 +1152,7 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
         creation_options = [
             "GEOTIFF_VERSION=1.1",
             "BIGTIFF=IF_SAFER",
-            "NUM_THREADS=ALL_CPUS",
+            f"NUM_THREADS={args.num_threads}",
             f"COMPRESS={args.algorithm}"
         ]
         
@@ -1166,8 +1166,15 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
                     # Use existing overviews (built on intermediate and rounded)
                     creation_options.append('OVERVIEWS=FORCE_USE_EXISTING')
                 else:
-                    # Let COG driver build overviews (standard workflow)
+                    # Let COG driver build overviews.  Its own default kernel
+                    # interpolates, which invents class codes in categorical data.
                     creation_options.append('OVERVIEWS=AUTO')
+                    creation_options.append(f'OVERVIEW_RESAMPLING={args.overview_resampling}')
+                # The COG driver otherwise defaults OVERVIEW_COMPRESS to LZW.
+                creation_options.append(f'OVERVIEW_COMPRESS={args.overview_compress}')
+                if (args.overview_compress in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value]
+                        and args.overview_predictor and int(args.overview_predictor) != 1):
+                    creation_options.append(f'OVERVIEW_PREDICTOR={args.overview_predictor}')
             else:
                 creation_options.append('OVERVIEWS=NONE')
         else:
@@ -1187,7 +1194,8 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
             else:
                 creation_options.append("COPY_SRC_OVERVIEWS=NO")
 
-        if args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and args.predictor:
+        if (args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value]
+                and args.predictor and int(args.predictor) != 1):
             creation_options.append(f"PREDICTOR={args.predictor}")
         if args.algorithm == CA.JPEG.value:
             quality_flag = f"QUALITY={args.quality}" if args.cog else f"JPEG_QUALITY={args.quality}"
@@ -1306,7 +1314,7 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
                 tracker.start("external_overviews")
             
             logger.info("Step 6: Building overviews on final GTiff file (standard workflow)...")
-            resample_alg = 'NEAREST' if args.product_type in [PT.IMAGE.value, PT.THEMATIC.value] else 'BILINEAR'
+            resample_alg = args.overview_resampling
             overview_levels = _calculate_overview_levels(input_info.x_size, input_info.y_size, tile_size=args.tile_size)
             
             external_overview_cmd = [

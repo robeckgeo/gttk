@@ -101,6 +101,11 @@ class OptimizeArguments(BaseArguments):
     mask_nodata: Optional[bool] = None
     cog: bool = True
     overviews: bool = True
+    overview_resampling: Optional[str] = None
+    overview_compress: Optional[str] = None
+    overview_predictor: Optional[int] = None
+    num_threads: Optional[str] = None
+    report: bool = True
     report_format: str = 'html'
     report_suffix: str = '_comp'
 
@@ -115,6 +120,22 @@ class OptimizeArguments(BaseArguments):
 
     def _validate_optimize(self) -> None:
         """Perform validation checks for optimization arguments."""
+        if self.overview_resampling is not None:
+            if self.overview_resampling.upper() not in oc.OVERVIEW_RESAMPLING_CHOICES:
+                raise ValueError(
+                    f"Unsupported overview resampling '{self.overview_resampling}'. "
+                    f"Choose from: {', '.join(oc.OVERVIEW_RESAMPLING_CHOICES)}."
+                )
+            if (self.product_type == PT.THEMATIC.value
+                    and self.overview_resampling.upper() in oc.INTERPOLATING_RESAMPLING):
+                raise ValueError(
+                    f"'{self.overview_resampling.upper()}' interpolates between pixel values and "
+                    f"would invent class codes in the overviews of a thematic product. "
+                    f"Use NEAREST or MODE."
+                )
+        if self.raster_type is not None and self.raster_type.strip().lower() not in ('point', 'area'):
+            raise ValueError(f"raster_type must be 'point' or 'area', not '{self.raster_type}'.")
+
         if self.input_path and isinstance(self.input_path, Path):
             if not self.input_path.exists():
                 raise ValueError(f"Input file not found: {self.input_path}")
@@ -131,7 +152,6 @@ class OptimizeArguments(BaseArguments):
                 raise ValueError("Vertical SRS must be specified for DEM product type.")
             if self.product_type == PT.THEMATIC.value and self.mask_nodata is True:
                 raise ValueError("Thematic products should not have transparency masks.")
-
             # Lightweight check for single-band restriction on DEM, ERROR, and THEMATIC types
             if self.product_type in [PT.DEM.value, PT.ERROR.value, PT.THEMATIC.value]:
                 try:
@@ -171,6 +191,33 @@ class OptimizeArguments(BaseArguments):
                 self.decimals = oc.default_decimals_for(self.product_type, self.algorithm)
             if self.predictor is None:
                 self.predictor = oc.default_predictor_for(self.product_type)
+
+        # AREA_OR_POINT is written verbatim into the output's metadata, and the CLI
+        # lowercases its choices.  GDAL's own reads are tolerant; consumers doing an
+        # exact 'Point' comparison are not -- so normalise to GDAL's own spelling.
+        if self.raster_type:
+            self.raster_type = self.raster_type.strip().capitalize()
+
+        if self.overview_resampling is None:
+            self.overview_resampling = oc.default_overview_resampling_for(self.product_type)
+        else:
+            self.overview_resampling = self.overview_resampling.upper()
+
+        # Overviews inherit the main image's codec unless told otherwise: the COG
+        # driver otherwise falls back to LZW, silently mixing codecs in one file.
+        if self.overview_compress is None:
+            self.overview_compress = self.algorithm
+        else:
+            self.overview_compress = self.overview_compress.upper()
+        if self.overview_predictor is None:
+            self.overview_predictor = self.predictor
+
+        if self.num_threads is None:
+            self.num_threads = 'ALL_CPUS'
+        else:
+            self.num_threads = str(self.num_threads).strip().upper() \
+                if str(self.num_threads).strip().upper() == 'ALL_CPUS' \
+                else str(int(self.num_threads))
 
         if self.mask_alpha is None:
             self.mask_alpha = True

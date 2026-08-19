@@ -161,7 +161,7 @@ When running within ArcGIS Pro, the toolkit uses an isolation strategy to ensure
 
 1. **Initial Read & Analysis**: Opens the input file and gathers key metadata (resolution, data type, spatial reference system)
 2. **SRS Handling**: Checks for and parses compound SRS; creates new compound SRS if `--vertical-srs` is provided
-3. **Resampling/Reprojection** (if needed): Uses `gdal.Warp` to create a new in-memory dataset if resolution or SRS changes
+3. **SRS Assignment**: Writes the resolved SRS as WKT2. This is an assignment, not a warp -- pixels and the geotransform are never touched, so a file's georeferencing cannot shift. GTTK does not reproject; use `gdalwarp` first if you need a different CRS
 4. **Alpha-to-Mask Conversion** (for images): Converts alpha channel to internal mask for better COG compatibility and compression
 5. **Rounding** (for floats): Performs block-based rounding for large floating-point rasters, allowing efficient processing of files too large for RAM
 6. **Final Compression and COG Creation**: Processed in-memory dataset is passed to the COG driver for compression and writing. Overviews are generated at this stage.
