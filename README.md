@@ -83,24 +83,34 @@ conda activate gttk
 
 ### Module Installation
 
-After activating the environment, install GTTK as a Python module:
+**Activate the environment first.** GTTK's remaining dependencies install with pip, but
+GDAL does not, and the two steps are not interchangeable:
 
 ```bash
-# For development (editable install)
-pip install -e .
-
-# For production
-pip install .
+conda activate gttk     # <- not optional; see the note below
+pip install -e .        # editable install for development
+# or: pip install .     # for production
 ```
 
-This makes the `gttk` command available system-wide within your Conda environment.
+This makes the `gttk` command available within your Conda environment.
+
+> **Why GDAL is not a pip dependency.** The `gdal` package on PyPI is a source
+> distribution of the *Python bindings* only — installing it compiles them against a
+> GDAL C++ library that must already be on the machine. Run `pip install -e .` outside
+> the Conda environment and pip will spend several minutes building before failing with
+> `fatal error C1083: Cannot open include file: 'gdal.h'`, which is a confusing way to be
+> told the environment was not activated. GDAL is therefore declared in
+> `environment.yml` and left out of `pyproject.toml`'s dependencies, so pip fails fast
+> and GTTK reports the problem in plain language instead. If the GDAL library *and* its
+> development headers are already installed, `pip install ".[gdal]"` will build the
+> bindings.
 
 ### Key Dependencies
 
 The `environment.yml` includes:
 
 - `python>=3.12`
-- `gdal>=3.11`
+- `gdal>=3.11` — from conda-forge, not pip (see above)
 - `jsonpath-ng`
 - `lxml`
 - `matplotlib`

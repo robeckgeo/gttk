@@ -27,8 +27,14 @@ classifiers = [
   "Topic :: Utilities"
 ]
 
+# GDAL is deliberately NOT listed here. The `gdal` package on PyPI is a source
+# distribution of the Python bindings only: installing it compiles against an existing
+# GDAL C++ library, so on a machine without one pip spends several minutes building
+# before failing with `fatal error C1083: Cannot open include file: 'gdal.h'`. Leaving
+# it out means `pip install` fails fast and legibly instead. Get GDAL from conda-forge
+# (see environment.yml) or OSGeo4W; the `gdal` extra below is for the rare case where
+# the library and its headers are already present.
 dependencies = [
-  "gdal>=3.11",
   "jsonpath-ng>=1.5.0",
   "lxml>=5.3.1",
   "matplotlib>=3.10.0",
@@ -37,6 +43,12 @@ dependencies = [
   "openpyxl>=3.1.5",
   "tifffile>=2025.1.10",
 ]
+
+[project.optional-dependencies]
+# Only useful where the GDAL C++ library and its development headers are already
+# installed; otherwise this builds from source and fails. conda-forge is the supported
+# route: `conda env create -f environment.yml`.
+gdal = ["gdal>=3.11"]
 
 [project.urls]
 Homepage = "https://github.com/robeckgeo/gttk"

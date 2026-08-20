@@ -22,6 +22,7 @@ its side effects have already happened, so asserting on them in-process proves n
 """
 
 import logging
+import pathlib
 import subprocess
 import sys
 import textwrap
@@ -263,3 +264,43 @@ class TestOperationsStillGetTheSettings:
 
         assert seen == GDAL_OPTIONS, "the settings were not in force during the operation"
         assert {k: gdal.GetConfigOption(k) for k in GDAL_OPTIONS} == before
+
+
+class TestGdalIsNotAPipDependency:
+    """GDAL must stay out of the declared dependencies.
+
+    The PyPI `gdal` package is a source distribution of the bindings alone: pip has to
+    compile it against a GDAL C++ library that pip cannot install. Declaring it turns a
+    forgotten `conda activate` into a multi-minute build ending in
+    "Cannot open include file: 'gdal.h'", instead of an immediate, legible failure.
+    """
+
+    @staticmethod
+    def _pyproject():
+        import tomllib
+        # Read the file rather than the installed metadata: an editable install keeps a
+        # stale copy until it is reinstalled, so metadata would not catch a regression.
+        root = pathlib.Path(__file__).resolve().parents[2]
+        with (root / "pyproject.toml").open("rb") as fh:
+            return tomllib.load(fh)
+
+    def test_not_in_required_dependencies(self):
+        required = self._pyproject()["project"]["dependencies"]
+        offenders = [d for d in required if d.lower().replace("_", "-").startswith("gdal")]
+        assert not offenders, (
+            f"{offenders} is a required dependency again; pip cannot install GDAL, so "
+            f"this makes `pip install` fail obscurely outside the conda environment")
+
+    def test_available_as_an_extra(self):
+        extras = self._pyproject()["project"].get("optional-dependencies", {})
+        assert "gdal" in extras, "the 'gdal' extra is the documented escape hatch"
+        assert any(d.startswith("gdal") for d in extras["gdal"])
+
+    def test_the_package_still_states_the_requirement_clearly(self):
+        """Dropping the declaration must not turn a missing GDAL into a bare
+        ModuleNotFoundError from somewhere deep in the package."""
+        import gttk
+        message = gttk._GDAL_MISSING
+        assert "conda" in message and "environment.yml" in message
+        assert "gdal.h" in message, "name the actual error people will have just seen"
+        assert "geotiff-toolkit[gdal]" in message

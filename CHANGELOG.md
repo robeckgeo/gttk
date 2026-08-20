@@ -4,7 +4,23 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **GDAL is no longer a declared pip dependency**, and is available as the `gdal` extra
+  instead. The PyPI `gdal` package is a source distribution of the Python bindings that
+  compiles against a GDAL C++ library pip cannot install, so listing it meant a
+  forgotten `conda activate` produced a multi-minute build ending in
+  `fatal error C1083: Cannot open include file: 'gdal.h'` rather than an immediate,
+  legible failure. Importing GTTK without GDAL now raises an `ImportError` naming that
+  exact error and the conda-forge command that fixes it. Use `pip install ".[gdal]"`
+  only where the GDAL library and its headers are already present.
+
 ### Fixed
+
+- **A stray empty `__init__.py` at the repository root** made the repo directory
+  importable as a package named `gttk`, shadowing the real `gttk/` package whenever the
+  repo's parent directory reached `sys.path` -- which pytest does, because that file is
+  what makes the root look like a package. Present since the initial commit; removed.
 
 - **Importing GTTK changed the host process.** GDAL configuration, GDAL's Python
   exception mode and the *root* logger were all set at import time, so an application
