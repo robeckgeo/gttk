@@ -218,6 +218,43 @@ python tools/build_esri_epsg_lookup.py
 
 This will fetch the latest CRS definitions from the repository and overwrite the existing JSON file with the updated data.
 
+## Where the `optimize` Defaults Live
+
+Most `gttk optimize` options are declared with `default=None`. That `None` is a sentinel,
+not a value: `OptimizeArguments._resolve_defaults` (`gttk/utils/script_arguments.py`)
+turns it into a real setting using `--product-type` and the codec that ends up selected.
+`_resolve_defaults` opens no files, so a throwaway `OptimizeArguments(product_type=...)`
+is a complete, always-current answer to "what would GTTK choose here?".
+
+That property is what everything else hangs off. `gttk/utils/cli_help.py` exposes it as
+`probe_defaults()`, and three consumers call it rather than restating the rules:
+
+| Consumer | Uses it for |
+|---|---|
+| `gttk/main.py` | the `Default: ...` clause in each option's help, and the profile table in `optimize`'s epilog |
+| `--show-defaults` | the resolved settings block, including where each value came from |
+| `toolbox/GTTK_Toolbox.pyt` | pre-filling the ArcGIS dialog in `_reset_all_dependents` |
+
+**When you change a default, change it in `optimize_constants.py` or `_resolve_defaults`
+and nowhere else.** Help text, the epilog table, the ArcGIS dialog and
+`--show-defaults` all follow. `tests/unit/test_cli_help.py` pins the epilog table and the
+README table to the resolver, so a hand-edit that disagrees fails the suite.
+
+### Known ArcGIS toolbox divergences
+
+The toolbox deliberately differs from the CLI in three places, all in the **Read
+Metadata** tool. These serve the dialog's audience rather than a script's, and are left
+as they are on purpose:
+
+| Parameter | Toolbox | CLI | Why |
+|---|---|---|---|
+| `reader_type` | `analyst` | `producer` | someone opening a GUI is usually reading, not producing |
+| `tag_scope` | `compact` | `complete` | the full tag dump overwhelms a dialog-driven review |
+| `write_pam_xml` | `True` | `False` | ArcGIS wants the `.aux.xml` alongside the raster |
+
+`OptimizeCompression.write_pam_xml` used to diverge too (`False` against the CLI's
+`True`); that one was a plain bug and now matches.
+
 ## Third-Party Code
 
 This project includes code from the following external source:

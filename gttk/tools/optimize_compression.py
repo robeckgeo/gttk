@@ -40,6 +40,7 @@ from gttk.utils.geotiff_processor import read_geotiff
 from gttk.utils.log_helpers import init_arcpy
 from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
 import gttk.utils.optimize_constants as oc
+from gttk.utils.cli_help import render_resolved_settings
 from gttk.utils.path_helpers import get_geotiff_files, prepare_output_path, copy_folder_structure
 from gttk.utils.performance_tracker import PerformanceTracker
 from gttk.utils.preprocessor import preprocess_geotiff, round_overviews, VirtualFileManager
@@ -240,9 +241,9 @@ def _orchestrate_geotiff_optimization_inner(args: OptimizeArguments, vfm: Virtua
     if tracker:
         tracker.start("gdal_processing")
     
-    # Print the optimization arguments
-    logger.info(f"GeoTIFF ToolKit (GTTK) v{__version__} - Starting optimization with arguments: {args}")
-    
+    logger.info(f"GeoTIFF ToolKit (GTTK) v{__version__} - optimizing "
+                f"{Path(args.input_path).name} as '{args.product_type}'")
+
     original_input_ds = gdal.Open(str(args.input_path), gdal.GA_ReadOnly)
     if original_input_ds is None:
         raise ProcessingStepFailedError(f"Could not open input file '{args.input_path}'.")
@@ -260,6 +261,17 @@ def _orchestrate_geotiff_optimization_inner(args: OptimizeArguments, vfm: Virtua
         args.overview_predictor, input_info.data_type)
     if _ovr_warning and _ovr_warning != _pred_warning:
         logger.warning(f"Overview {_ovr_warning[0].lower()}{_ovr_warning[1:]}")
+
+    # Logged here rather than on entry: the clamp above is the one decision that cannot
+    # be described from the flags alone, so reporting the settings before it would print
+    # a predictor the run does not use.
+    _clamp_notes = {}
+    if _pred_warning:
+        _clamp_notes['predictor'] = f'clamped for {input_info.data_type} data'
+    if _ovr_warning:
+        _clamp_notes['overview_predictor'] = f'clamped for {input_info.data_type} data'
+    logger.info(render_resolved_settings(args, notes=_clamp_notes,
+                                         data_type=str(input_info.data_type)))
 
     temp_ds = None
     final_ds = None

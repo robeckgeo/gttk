@@ -27,7 +27,8 @@ from osgeo import gdal, osr
 from pathlib import Path
 from typing import Optional, List
 from gttk.utils.exceptions import ProcessingStepFailedError
-from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT, discard_lsb_bits_for
+from gttk.utils.optimize_constants import (CompressionAlgorithm as CA, ProductType as PT,
+                                           default_raster_type_for, discard_lsb_bits_for)
 from gttk.utils.geotiff_processor import remap_nodata_value, mask_nodata_value, normalize_existing_mask, is_nodata_valid, GeoTiffInfo
 from gttk.utils.geo_metadata_writer import write_geo_metadata
 from gttk.utils.path_helpers import find_xml_metadata_file
@@ -495,8 +496,7 @@ def preprocess_geotiff(
 
     # --- 6. Set Area/Point Metadata ---
     # This is done AFTER transferring source metadata to ensure our explicit choice takes precedence
-    default_raster_type = 'Point' if args.product_type in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value] else 'Area'
-    final_raster_type = args.raster_type if args.raster_type else default_raster_type
+    final_raster_type = args.raster_type or default_raster_type_for(args.product_type)
     ds.SetMetadataItem('AREA_OR_POINT', final_raster_type)
     if srs:
         # Set the projection using WKT2

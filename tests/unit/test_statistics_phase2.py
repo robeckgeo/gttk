@@ -265,22 +265,46 @@ class TestPhase2Performance:
     """Performance-oriented tests for Phase 2."""
     
     def test_alpha_characteristics_overhead(self):
-        """Verify AlphaCharacteristics has minimal overhead."""
+        """AlphaCharacteristics.update must stay vectorized.
+
+        This was an absolute budget -- one un-warmed call, `assert elapsed < 0.05` --
+        and it flaked. update() costs ~20ms for a 4MP block on an idle machine, so the
+        50ms budget left under 3x of headroom, which is less than a loaded CI runner
+        can eat; the first call also pays for faulting in a freshly allocated 4MB
+        array. What the test is really guarding is that the implementation does not
+        stop being vectorized, and that is an orders-of-magnitude regression rather
+        than a 2x one -- a Python loop over 4M elements takes seconds. Measuring
+        against a NumPy pass over the same array states that without depending on how
+        fast the machine is.
+        """
         import time
-        
-        alpha_char = AlphaCharacteristics()
-        
-        # Large block (typical 2048x2048)
+
         block = np.random.randint(0, 256, size=(2048, 2048), dtype=np.uint8)
-        
-        # Time the update (should be very fast, < 50ms for 4MP block)
-        start = time.time()
-        alpha_char.update(block)
-        elapsed = time.time() - start
-        
-        assert elapsed < 0.05, f"AlphaCharacteristics.update too slow: {elapsed:.4f}s"
-        
+
+        def best_of(operation, runs=5):
+            """Fastest of several runs: scheduler noise only ever adds time."""
+            operation()                       # warm -- first touch pages the array in
+            timings = []
+            for _ in range(runs):
+                start = time.perf_counter()
+                operation()
+                timings.append(time.perf_counter() - start)
+            return min(timings)
+
+        elapsed = best_of(lambda: AlphaCharacteristics().update(block))
+        one_pass = best_of(lambda: (block.min(), block.max()))
+
+        # update() makes a handful of vectorized passes -- measured at ~66x a bare
+        # min+max pair -- so 250x is generous headroom for a slow or busy machine
+        # while still being orders of magnitude short of an unvectorized rewrite.
+        assert elapsed < 250 * one_pass, (
+            f"AlphaCharacteristics.update looks unvectorized: {elapsed * 1000:.1f}ms "
+            f"is {elapsed / one_pass:.0f}x a NumPy pass over the same block"
+        )
+
         # Verify correctness
+        alpha_char = AlphaCharacteristics()
+        alpha_char.update(block)
         assert alpha_char.total_count == 2048 * 2048
         assert alpha_char.min_val >= 0
         assert alpha_char.max_val <= 255

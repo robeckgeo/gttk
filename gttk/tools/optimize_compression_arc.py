@@ -38,7 +38,9 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Union, Tuple, TYPE_CHECKING
 from gttk.tools.compare_compression import generate_report_for_datasets
 from gttk.utils.exceptions import ProcessingStepFailedError
-from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
+from gttk.utils.optimize_constants import (CompressionAlgorithm as CA, ProductType as PT,
+                                           default_raster_type_for, resolve_predictor)
+from gttk.utils.cli_help import render_resolved_settings
 from gttk.utils.gdal_runner import create_isolated_env
 from gttk.utils.geo_metadata_writer import prepare_xml_for_gdal
 from gttk.utils.geotiff_processor import is_nodata_valid, GeoTiffInfo
@@ -823,7 +825,28 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
         data_type=info.get('bands', [{}])[0].get('type'),
         has_alpha=any(b.get('colorInterpretation') == 'Alpha' for b in info.get('bands', []))
     )
-    
+
+    # PREDICTOR=3 is the TIFF floating-point predictor and libtiff rejects it on integer
+    # samples.  The CLI path has always clamped it here; this one did not, so a
+    # 'scientific' integer raster from the toolbox resolved PREDICTOR=3 and handed GDAL
+    # an option it cannot honour.  Overviews follow.
+    args.predictor, _pred_warning = resolve_predictor(args.predictor, input_info.data_type)
+    if _pred_warning:
+        logger.warning(_pred_warning)
+    args.overview_predictor, _ovr_warning = resolve_predictor(
+        args.overview_predictor, input_info.data_type)
+    if _ovr_warning and _ovr_warning != _pred_warning:
+        logger.warning(f"Overview {_ovr_warning[0].lower()}{_ovr_warning[1:]}")
+
+    # Nobody typed these flags -- they came from a dialog, or from the profile -- so
+    # saying where each one came from matters more here than on the command line.
+    _clamp_notes = {}
+    if _pred_warning:
+        _clamp_notes['predictor'] = f'clamped for {input_info.data_type} data'
+    if _ovr_warning:
+        _clamp_notes['overview_predictor'] = f'clamped for {input_info.data_type} data'
+    logger.info(render_resolved_settings(args, notes=_clamp_notes,
+                                         data_type=str(input_info.data_type)))
 
     # Perform vertical SRS mismatch check
     target_srs = None
@@ -911,8 +934,7 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
         preprocess_cmd.extend(["-mo", f"TIFFTAG_SOFTWARE={new_software_tag}"])
 
         # Add Area/Point with correct priority
-        default_raster_type = 'Point' if args.product_type in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value] else 'Area'
-        final_raster_type = args.raster_type or default_raster_type
+        final_raster_type = args.raster_type or default_raster_type_for(args.product_type)
         preprocess_cmd.extend(["-mo", f"AREA_OR_POINT={final_raster_type}"])
 
         # Determine bands to keep
@@ -1143,9 +1165,8 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
         translate_options = ["-of", "COG" if args.cog else "GTiff"]
 
         # Add Area/Point with correct priority
-        default_raster_type = 'Point' if args.product_type in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value] else 'Area'
         # Use user's value ONLY if it's explicitly provided and not an empty string from the toolbox.
-        final_raster_type = args.raster_type if args.raster_type else default_raster_type
+        final_raster_type = args.raster_type or default_raster_type_for(args.product_type)
         translate_options.extend(["-mo", f"AREA_OR_POINT={final_raster_type}"])
         
         creation_options = [

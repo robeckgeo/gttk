@@ -19,6 +19,8 @@ surprise.  These tests pin the creation options gttk emits, and the categorical
 ones verify the actual pixels rather than just the option string.
 """
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 from osgeo import gdal
@@ -160,6 +162,87 @@ class TestRasterTypeNormalisation:
             OptimizeArguments(product_type='thematic', raster_type='middle')
 
 
+class TestSemanticValidation:
+    """Checks over flag combinations, none of which needs a raster.
+
+    They used to sit behind an `if self.input_path` guard, so the ArcGIS toolbox and
+    any library caller -- both of which build this dataclass directly -- slipped past
+    them entirely.
+    """
+
+    def test_rejects_lerc_on_imagery_without_a_file(self):
+        with pytest.raises(ValueError, match="not suitable for imagery"):
+            OptimizeArguments(product_type='image', algorithm='LERC')
+
+    def test_rejects_lossy_codec_on_non_imagery_without_a_file(self):
+        with pytest.raises(ValueError, match="only suitable for imagery"):
+            OptimizeArguments(product_type='dem', algorithm='JPEG',
+                              vertical_srs='EPSG:5703')
+
+    def test_requires_vertical_srs_for_dem_without_a_file(self):
+        with pytest.raises(ValueError, match="Vertical SRS"):
+            OptimizeArguments(product_type='dem')
+
+    def test_band_count_check_still_needs_a_file(self):
+        """The one rule that genuinely has to open the raster stays behind the guard."""
+        assert OptimizeArguments(product_type='thematic').product_type == 'thematic'
+
+
+class TestThematicLerc:
+    """Esri writes lossless LERC widely, so thematic LERC is supported -- but only
+    lossless.  A non-zero tolerance quantises neighbouring values together, merging
+    adjacent class codes the same way an interpolating overview kernel invents them.
+    """
+
+    def test_lossless_lerc_is_allowed(self):
+        args = OptimizeArguments(product_type='thematic', algorithm='LERC')
+        assert args.max_z_error == 0
+
+    def test_explicit_zero_is_allowed(self):
+        args = OptimizeArguments(product_type='thematic', algorithm='LERC', max_z_error=0)
+        assert args.max_z_error == 0
+
+    def test_rejects_a_lossy_tolerance(self):
+        with pytest.raises(ValueError, match="merge adjacent class codes"):
+            OptimizeArguments(product_type='thematic', algorithm='LERC', max_z_error=0.5)
+
+    def test_thematic_is_a_lerc_product_type(self):
+        assert 'thematic' in oc.LERC_PRODUCT_TYPES
+        assert 'image' not in oc.LERC_PRODUCT_TYPES
+
+    @pytest.mark.parametrize("product_type,expected", [
+        ('dem', 'Point'), ('error', 'Point'), ('scientific', 'Point'),
+        ('image', 'Area'), ('thematic', 'Area'),
+    ])
+    def test_raster_type_is_resolved_not_left_none(self, product_type, expected):
+        """Three call sites used to re-derive this inline; the resolver owns it now."""
+        args = OptimizeArguments(product_type=product_type, vertical_srs='EPSG:5703')
+        assert args.raster_type == expected
+        assert oc.default_raster_type_for(product_type) == expected
+
+
+class TestLevelResolution:
+    """LERC_DEFLATE/LERC_ZSTD carry a level for their entropy stage exactly as the
+    bare codecs do, and optimize_compression emits it -- but _resolve_defaults used to
+    match only the bare names, so `-a LERC_ZSTD` with no level emitted no LEVEL at all
+    while `-a ZSTD` emitted 9.  Benchmark-only today; a trap when it is not."""
+
+    @pytest.mark.parametrize("algorithm,expected", [
+        ('DEFLATE', 6), ('ZSTD', 9),
+        ('LERC_DEFLATE', 6), ('LERC_ZSTD', 9),
+        ('LERC', None), ('LZW', None), ('NONE', None),
+    ])
+    def test_level_follows_the_entropy_stage(self, algorithm, expected):
+        args = OptimizeArguments(product_type='dem', vertical_srs='EPSG:5703',
+                                 algorithm=algorithm)
+        assert args.level == expected
+
+    def test_an_explicit_level_is_never_overridden(self):
+        args = OptimizeArguments(product_type='dem', vertical_srs='EPSG:5703',
+                                 algorithm='ZSTD', level=15)
+        assert args.level == 15
+
+
 class TestPredictorResolution:
     """PREDICTOR=3 is the floating-point predictor; libtiff rejects it on ints."""
 
@@ -185,6 +268,26 @@ class TestPredictorResolution:
         predictor, warning = oc.resolve_predictor('NONE', 'Byte')
         assert predictor == 1
         assert 'not a valid GDAL value' in warning
+
+    @pytest.mark.parametrize("module", ['optimize_compression', 'optimize_compression_arc'])
+    def test_both_optimize_paths_clamp(self, module):
+        """The clamp needs the raster's data type, so it cannot live in the resolver
+        and each orchestrator has to do it.  The ArcGIS path did not, which meant a
+        'scientific' integer raster from the toolbox handed GDAL a PREDICTOR=3 that
+        libtiff will not honour.  Checked structurally: the arc path shells out to a
+        separate GDAL install and cannot be exercised here.
+        """
+        source = (Path(__file__).resolve().parents[2] / 'gttk' / 'tools'
+                  / f'{module}.py').read_text(encoding='utf-8')
+        collapsed = ' '.join(source.split())        # tolerate line wrapping
+        assert 'resolve_predictor(args.predictor' in collapsed
+        assert 'resolve_predictor( args.overview_predictor' in collapsed
+
+    @pytest.mark.parametrize("module", ['optimize_compression', 'optimize_compression_arc'])
+    def test_both_optimize_paths_report_their_settings(self, module):
+        source = (Path(__file__).resolve().parents[2] / 'gttk' / 'tools'
+                  / f'{module}.py').read_text(encoding='utf-8')
+        assert 'render_resolved_settings(args' in source
 
 
 # --- Emitted creation options ---------------------------------------------

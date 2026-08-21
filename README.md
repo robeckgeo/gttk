@@ -234,23 +234,23 @@ This powerful tool combines multiple optimization techniques into a single, stre
 | `--input` | `-i` | Path | Yes | - | Input source GeoTIFF file path |
 | `--output` | `-o` | Path | Yes | - | Output COG file path |
 | `--product-type` | `-t` | str | Yes | - | Type of GeoTIFF product (`dem`, `image`, `error`, `scientific`, `thematic`) |
-| `--raster-type` | `-r` | str | No | Auto | Override raster type (`point` for PixelIsPoint, `area` for PixelIsArea) |
-| `--algorithm` | `-a` | str | No | Auto | Compression algorithm (`JPEG`, `JXL`, `LZW`, `DEFLATE`, `ZSTD`, `LERC`, `NONE`) |
+| `--raster-type` | `-r` | str | No | Profile | Override raster type (`point` for PixelIsPoint, `area` for PixelIsArea) |
+| `--algorithm` | `-a` | str | No | Profile | Compression algorithm (`JPEG`, `JXL`, `LZW`, `DEFLATE`, `ZSTD`, `LERC`, `NONE`) |
 | `--vertical-srs` | `-s` | str | Varies | - | Vertical SRS for elevation products (required for `dem` type) |
 | `--nodata` | `-n` | float | No | - | NoData value |
-| `--decimals` | `-d` | int or `none` | No | Auto | Decimal places to round DEM/error/scientific data, or `none` to keep full precision |
-| `--predictor` | `-p` | int | No | Auto | Predictor for LZW/DEFLATE/ZSTD compression (1, 2, or 3) |
-| `--max-z-error` | `-z` | float | No | Auto | Max Z error for LERC compression |
-| `--level` | `-l` | int | No | Auto | Compression level for DEFLATE or ZSTD |
+| `--decimals` | `-d` | int or `none` | No | Profile | Decimal places to round DEM/error/scientific data, or `none` to keep full precision |
+| `--predictor` | `-p` | int | No | Profile | Predictor for LZW/DEFLATE/ZSTD compression (1, 2, or 3) |
+| `--max-z-error` | `-z` | float | No | Profile | Max Z error for LERC compression |
+| `--level` | `-l` | int | No | Profile | Compression level for DEFLATE or ZSTD |
 | `--quality` | `-q` | int | No | `90` | JPEG/JXL quality (75-100) for image products |
 | `--geo-metadata` | `-g` | bool | No | `False` | Write external XML metadata to the GEO_METADATA tag |
 | `--write-pam-xml` | `-w` | bool | No | `True` | Write an Esri-compatible .aux.xml PAM statistics file |
 | `--tile-size` | - | int | No | `512` | Tile size in pixels for primary layer and overviews |
 | `--mask-alpha` | - | bool | No | `True` | Convert alpha band to internal mask (RGB+mask) vs. preserve RGBA |
-| `--mask-nodata` | - | bool | No | Auto | Add NoData pixels to transparency mask |
+| `--mask-nodata` | - | bool | No | Profile | Add NoData pixels to transparency mask |
 | `--cog` | - | bool | No | `True` | Create a Cloud Optimized GeoTIFF |
 | `--overviews` | - | bool | No | `True` | Generate internal overviews |
-| `--overview-resampling` | - | str | No | Auto | Resampling kernel for overviews (`NEAREST`, `AVERAGE`, `BILINEAR`, `CUBIC`, `CUBICSPLINE`, `LANCZOS`, `MODE`, `RMS`, `GAUSS`). Default: `NEAREST` for `thematic`/`image`, `BILINEAR` otherwise |
+| `--overview-resampling` | - | str | No | Profile | Resampling kernel for overviews (`NEAREST`, `AVERAGE`, `BILINEAR`, `CUBIC`, `CUBICSPLINE`, `LANCZOS`, `MODE`, `RMS`, `GAUSS`) |
 | `--overview-compress` | - | str | No | `--algorithm` | Compression for overviews |
 | `--overview-predictor` | - | int | No | `--predictor` | Predictor for overviews |
 | `--num-threads` | - | str | No | `ALL_CPUS` | Worker threads for compression; lower it when running several `gttk` processes at once |
@@ -258,7 +258,40 @@ This powerful tool combines multiple optimization techniques into a single, stre
 | `--report-format` | `-f` | str | No | `html` | Output format for the report file (`html` or `md`) |
 | `--report-suffix` | - | str | No | `_comp` | Suffix for the report filename |
 | `--open-report` | - | bool | No | `True` | Open the report automatically after generation |
+| `--show-defaults` | - | str | No | - | Print every setting that would be used for a product type, and where each one comes from, then exit |
 | `--verbose` | `-v` | flag | No | `False` | Enable verbose logging |
+
+#### Product-Type Profiles
+
+`Profile` in the table above means the value is chosen from `--product-type` when you
+omit the flag. These are those values — exactly what a bare
+`gttk optimize -t TYPE -i in.tif -o out.tif` produces:
+
+| `-t` | `-a` | `-p` | `-d` | `-z` * | `--mask-nodata` | `--mask-alpha` | `--overview-resampling` | `--raster-type` |
+|---|---|---|---|---|---|---|---|---|
+| `dem` | DEFLATE | 2 | 2 | 0.01 | False | True | BILINEAR | Point |
+| `error` | DEFLATE | 2 | 1 | 0.1 | False | True | BILINEAR | Point |
+| `scientific` | DEFLATE | 3 | none | 0 | False | True | BILINEAR | Point |
+| `image` | JPEG | - | - | n/a | True | True | NEAREST | Area |
+| `thematic` | DEFLATE | 1 | - | 0 | False | False | NEAREST | Area |
+
+\* `-z` applies only when you select `-a LERC`; the column shows what LERC would use.
+LERC is not offered for `image`, and must stay lossless (`0`) for `thematic` — a
+non-zero tolerance merges adjacent class codes and is rejected.
+
+Some defaults follow the codec rather than the product type: `-p` and `-d` apply to
+LZW/DEFLATE/ZSTD only, `-q` (`90`) to JPEG/JXL only, and `-l` is `6` for DEFLATE and
+`9` for ZSTD. `-p 3` is the floating-point predictor and falls back to `2` on integer
+data. `--overview-compress` and `--overview-predictor` inherit `--algorithm` and
+`--predictor`.
+
+The same table is printed at the end of `gttk optimize --help`. To see every resolved
+value for one product type, with a note of where each one came from:
+
+```bash
+gttk optimize --show-defaults dem
+```
+
 
 #### Example Usage
 
@@ -727,16 +760,26 @@ gttk optimize -i input.tif -o output.tif -t dem -a ZSTD -s EPSG:5703 --predictor
 *LERC (Limited Error Raster Compression):*
 
 ```bash
-# Lossless
+# Near-lossless (1 cm max error for elevation in meters) -- this is the dem default,
+# so selecting LERC without --max-z-error gives you this, not lossless
 gttk optimize -i input.tif -o output.tif -t dem -a LERC -s EPSG:5703
 
-# Near-lossless (1 cm max error for elevation in meters)
-gttk optimize -i input.tif -o output.tif -t dem -a LERC -s EPSG:5703 --max-z-error=0.01
+# Lossless -- ask for it explicitly
+gttk optimize -i input.tif -o output.tif -t dem -a LERC -s EPSG:5703 --max-z-error=0
+
+# Class rasters: lossless only, and a non-zero tolerance is rejected
+gttk optimize -i classes.tif -o classes_lerc.tif -t thematic -a LERC
 ```
 
 - **Strengths**: Excellent compression for floating-point data, quantifiable error tolerance
 - **Weaknesses**: Not supported in all legacy software, not optimal for integer data
 - **Use Case**: Floating-point scientific data where controlled precision loss is acceptable
+- **Availability**: `dem`, `error`, `scientific`, and `thematic`. Esri writes lossless LERC
+  widely, so `thematic` is supported — but only at `--max-z-error=0`: a lossy tolerance
+  quantises neighbouring values together and merges adjacent class codes, the same way an
+  interpolating overview kernel invents them. LERC is not offered for `image`, where its
+  block bit-packing buys little on 8-bit RGB and its lossy mode is beaten by JPEG/JXL at
+  every quality.
 - **⚠️ Warning**: See section below regarding hydro-conditioned DEMs
 
 #### Predictor Optimization (LZW, DEFLATE, ZSTD)

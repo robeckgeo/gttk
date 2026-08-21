@@ -26,9 +26,7 @@ import math
 
 def default_decimals_for(product_type: str, algorithm: str):
     # LERC (and its DEFLATE/ZSTD variants) carry precision via max_z_error, not decimals
-    if algorithm in (CompressionAlgorithm.LERC.value,
-                     CompressionAlgorithm.LERC_DEFLATE.value,
-                     CompressionAlgorithm.LERC_ZSTD.value):
+    if algorithm in LERC_ALGORITHMS:
         return None
     return DEFAULT_DECIMALS_BY_TYPE.get(product_type)
 
@@ -40,6 +38,15 @@ def default_level_for(algorithm: str):
 
 def default_predictor_for(product_type: str):
     return DEFAULT_PREDICTOR_BY_TYPE.get(product_type, DEFAULT_DEM_PREDICTOR)
+
+def default_raster_type_for(product_type: str) -> str:
+    """AREA_OR_POINT for a product type, in GDAL's own spelling.
+
+    Elevation-like surfaces sample a value *at* a grid node (PixelIsPoint); imagery
+    and class rasters cover an *area* (PixelIsArea).  Callers may override; see
+    ``--raster-type``.
+    """
+    return DEFAULT_RASTER_TYPE_BY_TYPE.get(product_type, 'Area')
 
 def default_overview_resampling_for(product_type: str):
     """Resampling kernel for overview generation, by product type.
@@ -110,6 +117,10 @@ class CompressionAlgorithm(Enum):
     DEFLATE = 'DEFLATE'
     ZSTD = 'ZSTD'
     LERC = 'LERC'
+    # LERC_DEFLATE/LERC_ZSTD stay benchmark-only rather than becoming --algorithm
+    # choices: measured against plain LERC they showed no significant size gain (LERC
+    # is already close to its entropy limit), and they are hard to reason about.  They
+    # remain reachable from a `gttk test` CSV for anyone who wants to re-measure.
     LERC_DEFLATE = 'LERC_DEFLATE'  # benchmark-only candidate (not a user-facing --algorithm choice)
     LERC_ZSTD = 'LERC_ZSTD'        # benchmark-only candidate (not a user-facing --algorithm choice)
     NONE = 'NONE'
@@ -137,6 +148,7 @@ DEFAULT_ZSTD_LEVEL = 9
 DEFAULT_DEM_MAX_Z_ERROR = 0.01
 DEFAULT_ERROR_MAX_Z_ERROR = 0.1
 DEFAULT_SCIENTIFIC_MAX_Z_ERROR = 0.0
+DEFAULT_THEMATIC_MAX_Z_ERROR = 0.0  # class codes: lossless or nothing
 
 # Default predictor by product_type
 DEFAULT_DEM_PREDICTOR = 2
@@ -161,10 +173,14 @@ DEFAULT_DECIMALS_BY_TYPE = {
     ProductType.SCIENTIFIC.value: DEFAULT_SCIENTIFIC_DECIMALS,
 }
 
+# Max Z error by product_type.  THEMATIC is listed explicitly rather than relying on
+# the .get() fallback: 0 is not a default there but a hard requirement, because a
+# non-zero tolerance merges adjacent class codes (see _validate_optimize).
 DEFAULT_MAX_Z_ERROR_BY_TYPE = {
     ProductType.DEM.value: DEFAULT_DEM_MAX_Z_ERROR,
     ProductType.ERROR.value: DEFAULT_ERROR_MAX_Z_ERROR,
     ProductType.SCIENTIFIC.value: DEFAULT_SCIENTIFIC_MAX_Z_ERROR,
+    ProductType.THEMATIC.value: DEFAULT_THEMATIC_MAX_Z_ERROR,
 }
 
 DEFAULT_PREDICTOR_BY_TYPE = {
@@ -187,10 +203,42 @@ DEFAULT_OVERVIEW_RESAMPLING_BY_TYPE = {
     ProductType.IMAGE.value: 'NEAREST',
 }
 
+# AREA_OR_POINT by product_type.  Duplicated as an inline expression in three places
+# before this table existed; keep those calling default_raster_type_for().
+DEFAULT_RASTER_TYPE_BY_TYPE = {
+    ProductType.DEM.value: 'Point',
+    ProductType.ERROR.value: 'Point',
+    ProductType.SCIENTIFIC.value: 'Point',
+    ProductType.THEMATIC.value: 'Area',
+    ProductType.IMAGE.value: 'Area',
+}
+
+#: Product types for which LERC compression is offered.  Imagery is excluded on
+#: purpose: LERC's per-block bit-packing buys little on 8-bit RGB, and its lossy mode
+#: is dominated by JPEG/JXL at every quality, so every setting is worse than an option
+#: already on offer.  THEMATIC is included but constrained to MAX_Z_ERROR=0.
+LERC_PRODUCT_TYPES = (
+    ProductType.DEM.value, ProductType.ERROR.value,
+    ProductType.SCIENTIFIC.value, ProductType.THEMATIC.value,
+)
+
+#: LERC and its composite flavours, all of which carry precision via MAX_Z_ERROR.
+LERC_ALGORITHMS = (
+    CompressionAlgorithm.LERC.value,
+    CompressionAlgorithm.LERC_DEFLATE.value,
+    CompressionAlgorithm.LERC_ZSTD.value,
+)
+
 #: Resampling kernels GDAL accepts for overview generation.
 OVERVIEW_RESAMPLING_CHOICES = (
     'NEAREST', 'AVERAGE', 'BILINEAR', 'CUBIC', 'CUBICSPLINE',
     'LANCZOS', 'MODE', 'RMS', 'GAUSS',
+)
+
+#: Codecs GDAL accepts for an overview pyramid.  A superset of the --algorithm choices:
+#: WEBP is valid for overviews but is not offered for the primary image.
+OVERVIEW_COMPRESS_CHOICES = (
+    'NONE', 'LZW', 'DEFLATE', 'ZSTD', 'JPEG', 'JXL', 'LERC', 'WEBP',
 )
 
 #: Resampling kernels that blend neighbouring pixels, and so must not be applied
@@ -198,8 +246,14 @@ OVERVIEW_RESAMPLING_CHOICES = (
 INTERPOLATING_RESAMPLING = frozenset({
     'AVERAGE', 'BILINEAR', 'CUBIC', 'CUBICSPLINE', 'LANCZOS', 'RMS', 'GAUSS',
 })
+# Compression level by algorithm.  The LERC composites carry a level for their entropy
+# stage exactly as the bare codecs do, and optimize_compression emits it for them --
+# so they need an entry here too, or `-a LERC_ZSTD` with no level would silently fall
+# through to GDAL's default while `-a ZSTD` used GTTK's.
 DEFAULT_LEVEL_BY_ALGORITHM = {
     CompressionAlgorithm.DEFLATE.value: DEFAULT_DEFLATE_LEVEL,
     CompressionAlgorithm.ZSTD.value: DEFAULT_ZSTD_LEVEL,
+    CompressionAlgorithm.LERC_DEFLATE.value: DEFAULT_DEFLATE_LEVEL,
+    CompressionAlgorithm.LERC_ZSTD.value: DEFAULT_ZSTD_LEVEL,
 }
 

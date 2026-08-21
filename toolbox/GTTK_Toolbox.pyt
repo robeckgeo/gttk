@@ -111,6 +111,7 @@ try:
     from gttk.utils.section_registry import ALL_SECTIONS, PRODUCER_SECTIONS, ANALYST_SECTIONS, get_config
     import gttk.utils.optimize_constants as C
     from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
+    from gttk.utils.cli_help import probe_defaults
     from gttk.utils.script_arguments import OptimizeArguments, CompareArguments, TestArguments, ReadArguments, ValidateArguments
     from gttk.utils.validation import get_available_products
     from gttk.utils.validation.loader import VALID_SECTIONS as VALIDATION_SECTIONS
@@ -118,6 +119,27 @@ except ImportError as e:
     arcpy.AddError(f"Failed to import a required module. Ensure the tool scripts are in the correct directory: {gttk_path}")
     arcpy.AddError(f"System Path: {sys.path}")
     raise e
+
+#: Dialog group for the options that are not part of the core compression choice.
+OVERVIEW_CATEGORY = "Overview and Performance"
+
+#: GDAL predictor codes as the dialog spells them.  int <-> label in one place.
+PREDICTOR_LABELS = {
+    1: "1 - None",
+    2: "2 - Horizontal differencing",
+    3: "3 - Floating-point",
+}
+
+
+def _predictor_label(value):
+    """A predictor code as the dialog's ValueList spells it, or None."""
+    return PREDICTOR_LABELS.get(value)
+
+
+def _predictor_code(label):
+    """The int behind a dialog predictor label, or None when nothing is selected."""
+    return int(label[0:1]) if label else None
+
 
 def _get_report_path(input_path: str, suffix: str, format: str) -> str:
     """
@@ -332,6 +354,10 @@ class OptimizeCompression:
         param_product_type.filter.type = "ValueList"
         param_product_type.filter.list = list(self.PRODUCT_TYPE_MAP.keys())
         param_product_type.value = "Digital Elevation Model"
+        # The dialog opens on DEM/DEFLATE, so every static value below is that pair's
+        # resolved answer.  Read it back rather than restating it; updateParameters
+        # replaces the lot as soon as either selection changes.
+        opening = probe_defaults(PT.DEM.value, algorithm=CA.DEFLATE.value)
 
         param_raster_type = arcpy.Parameter(
             displayName="Raster Type",
@@ -341,7 +367,8 @@ class OptimizeCompression:
             direction="Input")
         param_raster_type.filter.type = "ValueList"
         param_raster_type.filter.list = ["PixelIsArea", "PixelIsPoint"]
-        param_raster_type.value = "PixelIsPoint" # Default for DEM
+        param_raster_type.value = ("PixelIsPoint" if opening.raster_type == 'Point'
+                                   else "PixelIsArea")
 
         param_vertical_srs = arcpy.Parameter(
             displayName="Vertical SRS Name",
@@ -401,8 +428,7 @@ class OptimizeCompression:
             "2 - Horizontal differencing",
             "3 - Floating-point"
         ]
-        # Set default predictor for DEM type
-        param_predictor.value = "2 - Horizontal differencing"
+        param_predictor.value = _predictor_label(opening.predictor)
 
         param_level = arcpy.Parameter(
             displayName="Compression Level",
@@ -410,7 +436,7 @@ class OptimizeCompression:
             datatype="GPLong",
             parameterType="Optional",
             direction="Input")
-        param_level.value = 6  # DEFLATE default
+        param_level.value = opening.level
 
         # --- LERC Settings ---
         param_max_z_error = arcpy.Parameter(
@@ -419,8 +445,7 @@ class OptimizeCompression:
             datatype="GPDouble",
             parameterType="Optional",
             direction="Input")
-        # Set default for DEM type
-        param_max_z_error.value = C.DEFAULT_DEM_MAX_Z_ERROR
+        param_max_z_error.value = C.default_max_z_error_for(PT.DEM.value)
 
         # --- Rounding Settings ---
         param_decimals = arcpy.Parameter(
@@ -429,8 +454,7 @@ class OptimizeCompression:
             datatype="GPLong",
             parameterType="Optional",
             direction="Input")
-        # Set default for DEM type
-        param_decimals.value = C.DEFAULT_DEM_DECIMALS
+        param_decimals.value = opening.decimals
 
        # --- Block or Tile Size ---
         param_tile_size = arcpy.Parameter(
@@ -457,7 +481,7 @@ class OptimizeCompression:
             datatype="GPBoolean",
             parameterType="Optional",
             direction="Input")
-        param_write_pam_xml.value = False
+        param_write_pam_xml.value = True  # matches `gttk optimize -w`
 
         # --- COG vs. GTiff Driver ---
         param_cog = arcpy.Parameter(
@@ -482,7 +506,7 @@ class OptimizeCompression:
             datatype="GPBoolean",
             parameterType="Optional",
             direction="Input")
-        param_mask_nodata.value = False
+        param_mask_nodata.value = opening.mask_nodata
 
         param_mask_alpha = arcpy.Parameter(
             displayName="Convert Alpha Band (if one exists) to Internal Mask",
@@ -490,7 +514,7 @@ class OptimizeCompression:
             datatype="GPBoolean",
             parameterType="Optional",
             direction="Input")
-        param_mask_alpha.value = True
+        param_mask_alpha.value = opening.mask_alpha
 
         param_add_to_map = arcpy.Parameter(
             displayName="Add Output to Map",
@@ -528,13 +552,67 @@ class OptimizeCompression:
         param_open_report.value = True
 
 
+        # --- Overview and performance settings ---
+        # Appended rather than slotted in beside "Create Overviews": every method below
+        # addresses parameters by position, so a new index in the middle would silently
+        # shift them all.  `category` is what groups them in the dialog instead.
+        param_overview_resampling = arcpy.Parameter(
+            displayName="Overview Resampling",
+            name="overview_resampling",
+            datatype="GPString",
+            parameterType="Optional",
+            direction="Input",
+            category=OVERVIEW_CATEGORY)
+        param_overview_resampling.filter.type = "ValueList"
+        param_overview_resampling.filter.list = list(C.OVERVIEW_RESAMPLING_CHOICES)
+
+        param_overview_compress = arcpy.Parameter(
+            displayName="Overview Compression",
+            name="overview_compress",
+            datatype="GPString",
+            parameterType="Optional",
+            direction="Input",
+            category=OVERVIEW_CATEGORY)
+        param_overview_compress.filter.type = "ValueList"
+        param_overview_compress.filter.list = list(C.OVERVIEW_COMPRESS_CHOICES)
+
+        param_overview_predictor = arcpy.Parameter(
+            displayName="Overview Predictor",
+            name="overview_predictor",
+            datatype="GPString",
+            parameterType="Optional",
+            direction="Input",
+            category=OVERVIEW_CATEGORY)
+        param_overview_predictor.filter.type = "ValueList"
+        param_overview_predictor.filter.list = list(PREDICTOR_LABELS.values())
+
+        param_num_threads = arcpy.Parameter(
+            displayName="Worker Threads",
+            name="num_threads",
+            datatype="GPString",
+            parameterType="Optional",
+            direction="Input",
+            category=OVERVIEW_CATEGORY)
+        param_num_threads.value = "ALL_CPUS"
+
+        param_report = arcpy.Parameter(
+            displayName="Generate Comparison Report",
+            name="report",
+            datatype="GPBoolean",
+            parameterType="Optional",
+            direction="Input",
+            category=OVERVIEW_CATEGORY)
+        param_report.value = True
+
         params = [
             param_input, param_output, param_product_type, param_raster_type,
             param_vertical_srs, param_nodata, param_algorithm, param_quality,
             param_predictor, param_level, param_max_z_error, param_decimals,
             param_tile_size, param_geo_metadata, param_write_pam_xml, param_cog,
             param_overviews, param_mask_nodata, param_mask_alpha, param_add_to_map,
-            param_report_format, param_report_suffix, param_open_report
+            param_report_format, param_report_suffix, param_open_report,
+            param_overview_resampling, param_overview_compress,
+            param_overview_predictor, param_num_threads, param_report
         ]
         return params
 
@@ -618,57 +696,53 @@ class OptimizeCompression:
 
         return
 
+    def _resolved(self, selected_type_key, algorithm):
+        """What the CLI would choose for this product type and codec.
+
+        The toolbox used to keep its own copy of this branching, which is how its
+        masking and predictor pre-fills drifted away from `gttk optimize`.  Asking
+        OptimizeArguments instead means there is only one answer to maintain; it
+        needs no raster, and returns None for a combination it would reject (LERC on
+        imagery, say), in which case the product type alone still gives an answer.
+        """
+        return (probe_defaults(selected_type_key, algorithm=algorithm)
+                or probe_defaults(selected_type_key))
+
     def _reset_all_dependents(self, parameters, selected_type_key, algorithm):
-        """Resets all parameters that depend on product type or algorithm."""
-        # Reset Raster Type
-        if selected_type_key in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value]:
-            parameters[3].value = "PixelIsPoint"
-        else:
-            parameters[3].value = "PixelIsArea"
+        """Re-prefill every parameter that depends on product type or algorithm."""
+        defaults = self._resolved(selected_type_key, algorithm)
+        if defaults is None:
+            return
 
-        # Reset JPEG quality
-        parameters[7].value = C.DEFAULT_QUALITY
-        
-        # Reset predictor
-        if selected_type_key == PT.SCIENTIFIC.value:
-            parameters[8].value = "3 - Floating-point"
-        else:
-            parameters[8].value = "2 - Horizontal differencing"
+        parameters[3].value = ("PixelIsPoint" if defaults.raster_type == 'Point'
+                               else "PixelIsArea")
+        parameters[7].value = defaults.quality or C.DEFAULT_QUALITY
+        # The predictor box stays populated even for a codec that ignores it, so fall
+        # back to the product type's own value rather than blanking the dialog.
+        parameters[8].value = _predictor_label(
+            defaults.predictor or C.default_predictor_for(selected_type_key))
+        parameters[17].value = defaults.mask_nodata
+        parameters[18].value = defaults.mask_alpha
 
-        # Reset masking options
-        if selected_type_key == PT.IMAGE.value:
-            parameters[17].value = True  # Mask NoData defaults to True for imagery
-            parameters[18].value = True  # Mask Alpha defaults to True for imagery
-        else:
-            parameters[17].value = False
-            parameters[18].value = True
-            
-        # Reset LERC and rounding decimal precision by type
-        if selected_type_key == PT.DEM.value:
-            parameters[10].value = C.DEFAULT_DEM_MAX_Z_ERROR
-            parameters[11].value = C.DEFAULT_DEM_DECIMALS
-        elif selected_type_key == PT.ERROR.value:
-            parameters[10].value = C.DEFAULT_ERROR_MAX_Z_ERROR
-            parameters[11].value = C.DEFAULT_ERROR_DECIMALS
-        elif selected_type_key == PT.SCIENTIFIC.value:
-            parameters[10].value = C.DEFAULT_SCIENTIFIC_MAX_Z_ERROR
-            parameters[11].value = C.DEFAULT_SCIENTIFIC_DECIMALS
-        else:
-            parameters[10].value = None
-            parameters[11].value = None
+        max_z_error = C.default_max_z_error_for(selected_type_key)
+        parameters[10].value = (max_z_error if selected_type_key in C.LERC_PRODUCT_TYPES
+                                else None)
+        decimals = C.default_decimals_for(selected_type_key, algorithm)
+        # The box is a GPLong; NO_ROUNDING ('none') is not a number it can hold.
+        parameters[11].value = decimals if isinstance(decimals, int) else None
+
+        parameters[23].value = defaults.overview_resampling
+        parameters[24].value = defaults.overview_compress
+        parameters[25].value = _predictor_label(defaults.overview_predictor)
+        parameters[26].value = defaults.num_threads
 
         # Reset algorithm-specific parameters
         self._reset_algorithm_dependents(parameters, algorithm)
 
     def _reset_algorithm_dependents(self, parameters, algorithm):
         """Resets parameters that depend only on the algorithm."""
-        if algorithm == CA.DEFLATE.value:
-            parameters[9].value = 6
-        elif algorithm == CA.ZSTD.value:
-            parameters[9].value = 9
-        else:
-            parameters[9].value = None
-            
+        parameters[9].value = C.default_level_for(algorithm)
+
     def _update_parameter_states(self, parameters, selected_type_key, algorithm):
         """Update the enabled/disabled state of parameters based on current selections."""
         is_dem = (selected_type_key == PT.DEM.value)
@@ -686,6 +760,12 @@ class OptimizeCompression:
         parameters[9].enabled = algorithm in [CA.DEFLATE.value, CA.ZSTD.value]
         parameters[10].enabled = is_lerc
         parameters[11].enabled = (is_dem or is_error or is_scientific) and not is_lerc
+
+        # Overview settings only mean anything while overviews are being built.
+        building_overviews = bool(parameters[16].value)
+        for index in (23, 24, 25):
+            parameters[index].enabled = building_overviews
+        parameters[25].enabled = building_overviews and parameters[8].enabled
 
     def updateMessages(self, parameters):
         """Modify the messages created by internal validation for each tool
@@ -722,8 +802,7 @@ class OptimizeCompression:
 
         algorithm = parameters[6].valueAsText
         quality = parameters[7].value
-        predictor_str = parameters[8].valueAsText
-        predictor = int(predictor_str[0:1]) if predictor_str else None
+        predictor = _predictor_code(parameters[8].valueAsText)
         level = parameters[9].value
         max_z_error = parameters[10].value
         decimals = parameters[11].value
@@ -739,6 +818,11 @@ class OptimizeCompression:
         report_format = "html" if "HTML" in report_format_desc else "md"
         report_suffix = parameters[21].valueAsText
         open_report = parameters[22].value
+        overview_resampling = parameters[23].valueAsText
+        overview_compress = parameters[24].valueAsText
+        overview_predictor = _predictor_code(parameters[25].valueAsText)
+        num_threads = parameters[26].valueAsText
+        report = parameters[27].value
 
         # --- Validate JPEG + RGBA + mask_alpha=False (unsupported) ---
         # If the input has an alpha band and JPEG is selected while the user disabled mask_alpha,
@@ -821,6 +905,11 @@ class OptimizeCompression:
             mask_nodata=mask_nodata,
             cog=cog,
             overviews=overviews,
+            overview_resampling=overview_resampling,
+            overview_compress=overview_compress,
+            overview_predictor=overview_predictor,
+            num_threads=num_threads,
+            report=report,
             report_format=report_format,
             report_suffix=report_suffix,
             open_report=open_report,

@@ -24,7 +24,7 @@ Classes:
     TestArguments: Arguments for the test_compression tool.
 """
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Optional, List, Union
 from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
@@ -108,10 +108,24 @@ class OptimizeArguments(BaseArguments):
     report: bool = True
     report_format: str = 'html'
     report_suffix: str = '_comp'
+    #: Which of the deferred options the caller actually chose.  Not an input: it is
+    #: computed below, and only accepted as an argument so that rebuilding these
+    #: arguments from vars() -- as the directory walk does, once per file -- carries
+    #: the original answer forward instead of recomputing it from resolved values and
+    #: concluding the caller chose everything.
+    explicit_fields: Optional[frozenset] = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Validation and default resolution for optimization arguments."""
         super().__post_init__()
+        # _resolve_defaults fills the deferred options in place, which erases the
+        # difference between a value the caller picked and one GTTK picked for them.
+        # A field declared `= None` is deferred, so anything non-None now was chosen.
+        if self.explicit_fields is None:
+            self.explicit_fields = frozenset(
+                f.name for f in fields(self)
+                if f.default is None and getattr(self, f.name) is not None
+            )
         try:
             self._validate_optimize()
             self._resolve_defaults()
@@ -119,7 +133,16 @@ class OptimizeArguments(BaseArguments):
             self.handle_error(str(e))
 
     def _validate_optimize(self) -> None:
-        """Perform validation checks for optimization arguments."""
+        """Perform validation checks for optimization arguments.
+
+        Everything here except the band-count probe is a check over flag combinations
+        and needs no raster, so it runs whether or not an input file was supplied.
+        The ArcGIS toolbox and library callers build this dataclass directly, and used
+        to slip past these rules entirely because they sat behind an input_path guard.
+        """
+        if self.product_type is None:
+            raise ValueError("The 'product_type' argument is required.")
+
         if self.overview_resampling is not None:
             if self.overview_resampling.upper() not in oc.OVERVIEW_RESAMPLING_CHOICES:
                 raise ValueError(
@@ -136,22 +159,39 @@ class OptimizeArguments(BaseArguments):
         if self.raster_type is not None and self.raster_type.strip().lower() not in ('point', 'area'):
             raise ValueError(f"raster_type must be 'point' or 'area', not '{self.raster_type}'.")
 
+        if self.algorithm in [CA.JPEG.value, CA.JXL.value] and self.product_type != PT.IMAGE.value:
+            raise ValueError(f"{self.algorithm} compression is only suitable for imagery products.")
+
+        if self.algorithm in oc.LERC_ALGORITHMS:
+            if self.product_type not in oc.LERC_PRODUCT_TYPES:
+                raise ValueError(
+                    "LERC is not suitable for imagery products. Use JPEG or JXL for lossy, "
+                    "or DEFLATE/ZSTD with a predictor for lossless."
+                )
+            # A non-zero tolerance quantises neighbouring values together, merging
+            # adjacent class codes exactly the way an interpolating overview kernel
+            # invents them.  Same rule as INTERPOLATING_RESAMPLING above, second axis:
+            # refuse rather than silently clamp, so the user learns why.
+            if self.product_type == PT.THEMATIC.value and self.max_z_error:
+                raise ValueError(
+                    f"LERC with a max Z error of {self.max_z_error} is lossy and would merge "
+                    f"adjacent class codes in a thematic product. Thematic LERC must be "
+                    f"lossless: omit --max-z-error or pass 0."
+                )
+
+        if self.discard_lsb:
+            if self.algorithm not in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value]:
+                raise ValueError("discard_lsb is only applicable to LZW, DEFLATE, or ZSTD compression.")
+            if self.product_type not in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value]:
+                raise ValueError("discard_lsb is only applicable to dem, error, or scientific products.")
+        if self.product_type == PT.DEM.value and self.vertical_srs is None:
+            raise ValueError("Vertical SRS must be specified for DEM product type.")
+        if self.product_type == PT.THEMATIC.value and self.mask_nodata is True:
+            raise ValueError("Thematic products should not have transparency masks.")
+
         if self.input_path and isinstance(self.input_path, Path):
             if not self.input_path.exists():
                 raise ValueError(f"Input file not found: {self.input_path}")
-            if self.algorithm in [CA.JPEG.value, CA.JXL.value] and self.product_type != PT.IMAGE.value:
-                raise ValueError(f"{self.algorithm} compression is only suitable for imagery products.")
-            if self.algorithm in (CA.LERC.value, CA.LERC_DEFLATE.value, CA.LERC_ZSTD.value) and self.product_type not in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value]:
-                raise ValueError("LERC compression is not optimal for image or thematic products.")
-            if self.discard_lsb:
-                if self.algorithm not in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value]:
-                    raise ValueError("discard_lsb is only applicable to LZW, DEFLATE, or ZSTD compression.")
-                if self.product_type not in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value]:
-                    raise ValueError("discard_lsb is only applicable to dem, error, or scientific products.")
-            if self.product_type == PT.DEM.value and self.vertical_srs is None:
-                raise ValueError("Vertical SRS must be specified for DEM product type.")
-            if self.product_type == PT.THEMATIC.value and self.mask_nodata is True:
-                raise ValueError("Thematic products should not have transparency masks.")
             # Lightweight check for single-band restriction on DEM, ERROR, and THEMATIC types
             if self.product_type in [PT.DEM.value, PT.ERROR.value, PT.THEMATIC.value]:
                 try:
@@ -176,10 +216,8 @@ class OptimizeArguments(BaseArguments):
         if self.algorithm in [CA.JPEG.value, CA.JXL.value] and self.quality is None:
             self.quality = oc.DEFAULT_QUALITY
         
-        if self.algorithm == CA.DEFLATE.value and self.level is None:
-            self.level = oc.DEFAULT_DEFLATE_LEVEL
-        elif self.algorithm == CA.ZSTD.value and self.level is None:
-            self.level = oc.DEFAULT_ZSTD_LEVEL
+        if self.level is None:
+            self.level = oc.default_level_for(self.algorithm)
 
         if self.algorithm in (CA.LERC.value, CA.LERC_DEFLATE.value, CA.LERC_ZSTD.value):
             if self.max_z_error is None:
@@ -197,6 +235,8 @@ class OptimizeArguments(BaseArguments):
         # exact 'Point' comparison are not -- so normalise to GDAL's own spelling.
         if self.raster_type:
             self.raster_type = self.raster_type.strip().capitalize()
+        else:
+            self.raster_type = oc.default_raster_type_for(self.product_type)
 
         if self.overview_resampling is None:
             self.overview_resampling = oc.default_overview_resampling_for(self.product_type)
