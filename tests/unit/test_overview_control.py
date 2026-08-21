@@ -19,6 +19,8 @@ surprise.  These tests pin the creation options gttk emits, and the categorical
 ones verify the actual pixels rather than just the option string.
 """
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 from osgeo import gdal
@@ -266,6 +268,26 @@ class TestPredictorResolution:
         predictor, warning = oc.resolve_predictor('NONE', 'Byte')
         assert predictor == 1
         assert 'not a valid GDAL value' in warning
+
+    @pytest.mark.parametrize("module", ['optimize_compression', 'optimize_compression_arc'])
+    def test_both_optimize_paths_clamp(self, module):
+        """The clamp needs the raster's data type, so it cannot live in the resolver
+        and each orchestrator has to do it.  The ArcGIS path did not, which meant a
+        'scientific' integer raster from the toolbox handed GDAL a PREDICTOR=3 that
+        libtiff will not honour.  Checked structurally: the arc path shells out to a
+        separate GDAL install and cannot be exercised here.
+        """
+        source = (Path(__file__).resolve().parents[2] / 'gttk' / 'tools'
+                  / f'{module}.py').read_text(encoding='utf-8')
+        collapsed = ' '.join(source.split())        # tolerate line wrapping
+        assert 'resolve_predictor(args.predictor' in collapsed
+        assert 'resolve_predictor( args.overview_predictor' in collapsed
+
+    @pytest.mark.parametrize("module", ['optimize_compression', 'optimize_compression_arc'])
+    def test_both_optimize_paths_report_their_settings(self, module):
+        source = (Path(__file__).resolve().parents[2] / 'gttk' / 'tools'
+                  / f'{module}.py').read_text(encoding='utf-8')
+        assert 'render_resolved_settings(args' in source
 
 
 # --- Emitted creation options ---------------------------------------------

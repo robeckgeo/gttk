@@ -89,6 +89,13 @@ All notable changes to this project will be documented in this file.
 - **Two help strings had missing spaces** (`internal mask(e.g. RGB+mask)` and
   `syntax-highlightedtext`).
 
+- **The ArcGIS path never clamped the floating-point predictor.** PREDICTOR=3 is the
+  TIFF floating-point predictor and libtiff rejects it on integer samples; the CLI
+  path has always clamped it once the source data type is known, but
+  `optimize_compression_arc` did not, so a `scientific` integer raster driven from the
+  toolbox resolved PREDICTOR=3 and handed GDAL an option it cannot honour. It now
+  clamps through the same helper, and both orchestrators log their resolved settings.
+
 - **`LERC_DEFLATE` and `LERC_ZSTD` resolved no compression level.** `_resolve_defaults`
   matched only the bare `DEFLATE`/`ZSTD` names, so `args.level` stayed `None` and the
   `if args.level:` guard downstream emitted no `LEVEL=` at all -- silently taking GDAL's
