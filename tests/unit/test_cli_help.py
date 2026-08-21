@@ -216,3 +216,84 @@ class TestOptionSurface:
         for title in ('required:', 'compression:', 'overviews:',
                       'masking and nodata:', 'report:'):
             assert title in text
+
+
+# --- The README says the same thing as the code -----------------------------
+
+class TestReadmeMatchesResolver:
+    """README's profile table is written by hand, so pin it to the resolver.  It is
+    one of the four copies of this knowledge that drifted apart in the first place."""
+
+    README = Path(__file__).resolve().parents[2] / 'README.md'
+    #: Column header -> (OptimizeArguments field, extra flags to pin)
+    COLUMNS = {
+        '`-a`': ('algorithm', {}),
+        '`-p`': ('predictor', {}),
+        '`-d`': ('decimals', {}),
+        '`-z` *': ('max_z_error', {'algorithm': 'LERC'}),
+        '`--mask-nodata`': ('mask_nodata', {}),
+        '`--mask-alpha`': ('mask_alpha', {}),
+        '`--overview-resampling`': ('overview_resampling', {}),
+        '`--raster-type`': ('raster_type', {}),
+    }
+
+    @pytest.fixture(scope='class')
+    def table(self):
+        text = self.README.read_text(encoding='utf-8')
+        body = text.split('#### Product-Type Profiles', 1)[1].split('\n#### ', 1)[0]
+        rows = [[c.strip() for c in line.strip().strip('|').split('|')]
+                for line in body.splitlines()
+                if line.startswith('|') and '---' not in line]
+        header, *data = rows
+        return header, {row[0].strip('`'): row for row in data}
+
+    def test_every_product_type_has_a_row(self, table):
+        _, rows = table
+        assert set(rows) == set(ch.PRODUCT_TYPES)
+
+    @pytest.mark.parametrize('product_type', ch.PRODUCT_TYPES)
+    def test_row_matches_the_resolver(self, table, product_type):
+        header, rows = table
+        row = rows[product_type]
+        for column, (field, overrides) in self.COLUMNS.items():
+            args = ch.probe_defaults(product_type, **overrides)
+            expected = 'n/a' if args is None else ch.fmt_value(getattr(args, field))
+            assert row[header.index(column)] == expected, \
+                f'README {product_type}/{column} says {row[header.index(column)]!r}, ' \
+                f'resolver says {expected!r}'
+
+
+# --- The ArcGIS toolbox reads the same resolver -----------------------------
+
+class TestToolboxParity:
+    """GTTK_Toolbox.pyt used to keep a hand-maintained second copy of the
+    per-product-type defaults, and it had drifted."""
+
+    TOOLBOX = Path(__file__).resolve().parents[2] / 'toolbox' / 'GTTK_Toolbox.pyt'
+
+    def test_toolbox_has_no_second_defaults_table(self):
+        """The per-product-type branching the toolbox used to duplicate is gone;
+        _reset_all_dependents now asks the resolver instead."""
+        source = self.TOOLBOX.read_text(encoding='utf-8')
+        for leaked in ('DEFAULT_SCIENTIFIC_MAX_Z_ERROR', 'DEFAULT_DEM_MAX_Z_ERROR',
+                       'DEFAULT_ERROR_MAX_Z_ERROR', 'DEFAULT_DEM_DECIMALS',
+                       'DEFAULT_ERROR_DECIMALS'):
+            assert leaked not in source, \
+                f'toolbox reaches past the resolver for {leaked}'
+
+    def test_toolbox_exposes_every_optimize_option(self):
+        """The toolbox param list had fallen five options behind the CLI."""
+        source = self.TOOLBOX.read_text(encoding='utf-8')
+        for name in ('overview_resampling', 'overview_compress', 'overview_predictor',
+                     'num_threads', 'report'):
+            assert f'"{name}"' in source or f"'{name}'" in source, \
+                f'toolbox does not expose {name}'
+
+    @pytest.mark.parametrize('product_type', ch.PRODUCT_TYPES)
+    def test_resolver_answers_every_question_the_toolbox_asks(self, product_type):
+        """Whatever the toolbox pre-fills has to be something the resolver produces,
+        or the dialog would show values the run then ignores."""
+        args = OptimizeArguments(product_type=product_type, vertical_srs='EPSG:5703')
+        assert args.raster_type in ('Point', 'Area')
+        assert args.overview_resampling in oc.OVERVIEW_RESAMPLING_CHOICES
+        assert isinstance(args.mask_alpha, bool) and isinstance(args.mask_nodata, bool)
