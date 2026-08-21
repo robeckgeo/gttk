@@ -28,6 +28,7 @@ Contents:
     ShowDefaultsAction: backs ``--show-defaults``.
 """
 import argparse
+import dataclasses
 import logging
 import re
 from functools import lru_cache
@@ -246,8 +247,12 @@ _SHOW_SECTIONS = (
 )
 
 
-def _provenance(field: str, args) -> str:
-    """Where this value came from, derived rather than hand-written."""
+def _provenance(field: str, args, *, concrete: bool = False) -> str:
+    """Where this value came from, derived rather than hand-written.
+
+    ``concrete`` names the actual product type instead of describing the rule, which
+    is what a run log wants: "profile: dem" rather than "varies by --product-type".
+    """
     if field in _PROVENANCE_ALWAYS:
         return _PROVENANCE_ALWAYS[field]
     if getattr(args, field, None) is None:
@@ -262,31 +267,82 @@ def _provenance(field: str, args) -> str:
     if field in _PROVENANCE_WHEN_SET:
         return _PROVENANCE_WHEN_SET[field].format(algorithm=args.algorithm)
     across = set(fmt_value(v) for v in resolved_by_type(field).values())
-    return 'varies by --product-type' if len(across) > 1 else 'always'
+    if len(across) > 1:
+        return f'profile: {args.product_type}' if concrete else 'varies by --product-type'
+    return 'built-in default' if concrete else 'always'
+
+
+def _render_block(heading: str, args, provenance, footnotes: Sequence[str]) -> str:
+    """One settings block.  ``provenance`` answers "where did this come from?" for a
+    field name; the two callers differ only in how they answer it."""
+    lines = [heading, '']
+    for title, section in _SHOW_SECTIONS:
+        lines.append(f'  {title}')
+        for flag, field in section:
+            value = fmt_value(getattr(args, field, None))
+            lines.append(f'    {flag:<22} {value:<11} {provenance(field)}')
+    return '\n'.join(lines + [''] + [f'  {note}' for note in footnotes])
 
 
 def render_show_defaults(which: str = 'all') -> str:
-    """The block printed by ``--show-defaults``: every value that will be used, and
-    where each one came from."""
+    """The block printed by ``--show-defaults``: every value that would be used for a
+    product type, and where each one would come from."""
     types = TABLE_ORDER if which in (None, 'all') else (which,)
     blocks = []
     for product_type in types:
         args = probe_defaults(product_type)
         if args is None:                                  # cannot happen for a bare type
             continue
-        lines = [f'gttk optimize -t {product_type}  -  settings that will be used', '']
-        for title, fields in _SHOW_SECTIONS:
-            lines.append(f'  {title}')
-            for flag, field in fields:
-                value = fmt_value(getattr(args, field, None))
-                lines.append(f'    {flag:<22} {value:<11} {_provenance(field, args)}')
-        lines.append('')
+        footnotes = []
         if product_type == PT.DEM.value:
-            lines.append("  --vertical-srs is required for 'dem'.")
-        lines.append('  --predictor 3 falls back to 2 on integer rasters.')
-        lines.append('  Report and metadata options are static; see `gttk optimize -h`.')
-        blocks.append('\n'.join(lines))
+            footnotes.append("--vertical-srs is required for 'dem'.")
+        footnotes.append('--predictor 3 falls back to 2 on integer rasters.')
+        footnotes.append('Report and metadata options are static; see `gttk optimize -h`.')
+        blocks.append(_render_block(
+            f'gttk optimize -t {product_type}  -  settings that will be used',
+            args, lambda field, a=args: _provenance(field, a), footnotes))
     return '\n\n'.join(blocks)
+
+
+def render_resolved_settings(args, notes: Optional[Dict[str, str]] = None,
+                             data_type: Optional[str] = None) -> str:
+    """The block a run logs: every setting actually in force, and how it got there.
+
+    Unlike --show-defaults this has a real caller to account for, so it can separate
+    "you asked for this" from "GTTK chose it" -- using ``explicit_fields``, captured
+    before _resolve_defaults overwrote the evidence.  ``notes`` overrides individual
+    entries for decisions made after resolution, which is where the integer-data
+    predictor clamp lands; no static description can cover that one, because it
+    depends on the raster.
+    """
+    notes = notes or {}
+    explicit = getattr(args, 'explicit_fields', None) or frozenset()
+    declared = _declared_defaults(type(args))
+
+    def provenance(field: str) -> str:
+        if field in notes:
+            return notes[field]
+        if field in explicit:
+            return 'set by you'
+        # explicit_fields only covers the deferred options.  An option with a real
+        # default (--tile-size, --cog) is never None, so the only evidence left is the
+        # value differing from what the dataclass declares.  Passing the default value
+        # explicitly is indistinguishable, and harmlessly so -- it reads as the default
+        # because it is.
+        if field in declared and getattr(args, field, None) != declared[field]:
+            return 'set by you'
+        return _provenance(field, args, concrete=True)
+
+    described = f"'{args.product_type}'" + (f', {data_type}' if data_type else '')
+    return _render_block(f'Resolved settings for {described}:', args, provenance, ())
+
+
+@lru_cache(maxsize=None)
+def _declared_defaults(cls) -> Dict[str, Any]:
+    """Fields of an arguments dataclass that declare a real default, and what it is.
+    Deferred fields (declared ``None``) are excluded -- explicit_fields covers those."""
+    return {f.name: f.default for f in dataclasses.fields(cls)
+            if f.default is not None and f.default is not dataclasses.MISSING}
 
 
 class ShowDefaultsAction(argparse.Action):

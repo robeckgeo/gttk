@@ -219,6 +219,28 @@ class TestThematicLerc:
         assert oc.default_raster_type_for(product_type) == expected
 
 
+class TestLevelResolution:
+    """LERC_DEFLATE/LERC_ZSTD carry a level for their entropy stage exactly as the
+    bare codecs do, and optimize_compression emits it -- but _resolve_defaults used to
+    match only the bare names, so `-a LERC_ZSTD` with no level emitted no LEVEL at all
+    while `-a ZSTD` emitted 9.  Benchmark-only today; a trap when it is not."""
+
+    @pytest.mark.parametrize("algorithm,expected", [
+        ('DEFLATE', 6), ('ZSTD', 9),
+        ('LERC_DEFLATE', 6), ('LERC_ZSTD', 9),
+        ('LERC', None), ('LZW', None), ('NONE', None),
+    ])
+    def test_level_follows_the_entropy_stage(self, algorithm, expected):
+        args = OptimizeArguments(product_type='dem', vertical_srs='EPSG:5703',
+                                 algorithm=algorithm)
+        assert args.level == expected
+
+    def test_an_explicit_level_is_never_overridden(self):
+        args = OptimizeArguments(product_type='dem', vertical_srs='EPSG:5703',
+                                 algorithm='ZSTD', level=15)
+        assert args.level == 15
+
+
 class TestPredictorResolution:
     """PREDICTOR=3 is the floating-point predictor; libtiff rejects it on ints."""
 

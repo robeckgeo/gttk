@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Every run now logs the settings it resolved, and where each one came from** --
+  a profile value, a codec default, an inherited flag, a caller's explicit choice, or a
+  clamp forced by the raster's data type. It replaces a single-line dump of the
+  dataclass `repr`, and is logged *after* the integer-data predictor clamp rather than
+  before it, so it can no longer report a predictor the run does not use. The
+  comparison report is deliberately untouched: it characterises the two files
+  independently of what was asked for, which is what makes it a check rather than an
+  echo.
+
 - **`gttk optimize --show-defaults [TYPE]`** prints every setting that would be used for
   a product type, and where each one came from -- a profile value, a codec default, an
   inherited flag, or unused by the selected codec -- then exits. It needs no input file.
@@ -79,6 +88,16 @@ All notable changes to this project will be documented in this file.
 
 - **Two help strings had missing spaces** (`internal mask(e.g. RGB+mask)` and
   `syntax-highlightedtext`).
+
+- **`LERC_DEFLATE` and `LERC_ZSTD` resolved no compression level.** `_resolve_defaults`
+  matched only the bare `DEFLATE`/`ZSTD` names, so `args.level` stayed `None` and the
+  `if args.level:` guard downstream emitted no `LEVEL=` at all -- silently taking GDAL's
+  default where `-a ZSTD` would have used GTTK's 9. Latent, since these are
+  benchmark-only and the presets that use them supply a level explicitly.
+
+- **`--mask-alpha` defaulted to `True` in argparse while the dataclass declared `None`**,
+  so `_resolve_defaults`' own `mask_alpha` branch never ran from the CLI and every run
+  looked as though the caller had asked for the value. The resolved result is unchanged.
 
 - **A stray empty `__init__.py` at the repository root** made the repo directory
   importable as a package named `gttk`, shadowing the real `gttk/` package whenever the

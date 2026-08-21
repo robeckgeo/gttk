@@ -246,8 +246,14 @@ OVERVIEW_COMPRESS_CHOICES = (
 INTERPOLATING_RESAMPLING = frozenset({
     'AVERAGE', 'BILINEAR', 'CUBIC', 'CUBICSPLINE', 'LANCZOS', 'RMS', 'GAUSS',
 })
+# Compression level by algorithm.  The LERC composites carry a level for their entropy
+# stage exactly as the bare codecs do, and optimize_compression emits it for them --
+# so they need an entry here too, or `-a LERC_ZSTD` with no level would silently fall
+# through to GDAL's default while `-a ZSTD` used GTTK's.
 DEFAULT_LEVEL_BY_ALGORITHM = {
     CompressionAlgorithm.DEFLATE.value: DEFAULT_DEFLATE_LEVEL,
     CompressionAlgorithm.ZSTD.value: DEFAULT_ZSTD_LEVEL,
+    CompressionAlgorithm.LERC_DEFLATE.value: DEFAULT_DEFLATE_LEVEL,
+    CompressionAlgorithm.LERC_ZSTD.value: DEFAULT_ZSTD_LEVEL,
 }
 

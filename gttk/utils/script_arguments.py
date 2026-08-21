@@ -24,7 +24,7 @@ Classes:
     TestArguments: Arguments for the test_compression tool.
 """
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Optional, List, Union
 from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
@@ -108,10 +108,24 @@ class OptimizeArguments(BaseArguments):
     report: bool = True
     report_format: str = 'html'
     report_suffix: str = '_comp'
+    #: Which of the deferred options the caller actually chose.  Not an input: it is
+    #: computed below, and only accepted as an argument so that rebuilding these
+    #: arguments from vars() -- as the directory walk does, once per file -- carries
+    #: the original answer forward instead of recomputing it from resolved values and
+    #: concluding the caller chose everything.
+    explicit_fields: Optional[frozenset] = field(default=None, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         """Validation and default resolution for optimization arguments."""
         super().__post_init__()
+        # _resolve_defaults fills the deferred options in place, which erases the
+        # difference between a value the caller picked and one GTTK picked for them.
+        # A field declared `= None` is deferred, so anything non-None now was chosen.
+        if self.explicit_fields is None:
+            self.explicit_fields = frozenset(
+                f.name for f in fields(self)
+                if f.default is None and getattr(self, f.name) is not None
+            )
         try:
             self._validate_optimize()
             self._resolve_defaults()
@@ -202,10 +216,8 @@ class OptimizeArguments(BaseArguments):
         if self.algorithm in [CA.JPEG.value, CA.JXL.value] and self.quality is None:
             self.quality = oc.DEFAULT_QUALITY
         
-        if self.algorithm == CA.DEFLATE.value and self.level is None:
-            self.level = oc.DEFAULT_DEFLATE_LEVEL
-        elif self.algorithm == CA.ZSTD.value and self.level is None:
-            self.level = oc.DEFAULT_ZSTD_LEVEL
+        if self.level is None:
+            self.level = oc.default_level_for(self.algorithm)
 
         if self.algorithm in (CA.LERC.value, CA.LERC_DEFLATE.value, CA.LERC_ZSTD.value):
             if self.max_z_error is None:

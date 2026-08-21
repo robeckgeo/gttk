@@ -169,7 +169,10 @@ def build_parser() -> argparse.ArgumentParser:
 
         masking = p.add_argument_group('masking and nodata')
         masking.add_argument('-n', '--nodata', type=float_nodata, default=None, dest='nodata', help="NoData value for 'dem' or 'error' type. Default: inherited from the input file.")
-        masking.add_argument('--mask-alpha', type=str2bool, default=True, metavar='BOOL', dest='mask_alpha', help='If True, convert alpha band (if present) to internal mask (e.g. RGB+mask). If False, preserve unchanged (e.g. RGBA). Default: True, except thematic (False).')
+        # default=None, not True: _resolve_defaults already supplies True (and forces
+        # False for thematic), and argparse pre-empting it made every run look as though
+        # the caller had asked for the value.
+        masking.add_argument('--mask-alpha', type=str2bool, default=None, metavar='BOOL', dest='mask_alpha', help='If True, convert alpha band (if present) to internal mask (e.g. RGB+mask). If False, preserve unchanged (e.g. RGBA). Default: True, except thematic (False).')
         masking.add_argument('--mask-nodata', type=str2bool, default=None, metavar='BOOL', dest='mask_nodata',
                              help=f"If True, add NoData pixels to transparency mask. Default: "
                                   f"{ch.default_clause('mask_nodata')}.")

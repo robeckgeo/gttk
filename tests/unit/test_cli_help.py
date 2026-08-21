@@ -218,6 +218,79 @@ class TestOptionSurface:
             assert title in text
 
 
+# --- What a run reports about itself ----------------------------------------
+
+class TestResolvedSettingsBlock:
+    """`--show-defaults` says what would happen; the run log says what did.  The
+    difference worth reporting is who chose each value, which _resolve_defaults
+    overwrites in place -- hence explicit_fields, captured before it runs."""
+
+    def _block(self, **kwargs):
+        kwargs.setdefault('vertical_srs', 'EPSG:5703')
+        return ch.render_resolved_settings(OptimizeArguments(product_type='dem', **kwargs))
+
+    def _row(self, block, flag):
+        return next(line for line in block.splitlines() if line.strip().startswith(flag + ' '))
+
+    def test_a_deferred_option_the_caller_set_is_credited_to_them(self):
+        assert 'set by you' in self._row(self._block(algorithm='ZSTD'), '--algorithm')
+
+    def test_a_deferred_option_left_alone_is_credited_to_the_profile(self):
+        assert 'profile: dem' in self._row(self._block(), '--algorithm')
+
+    def test_a_static_default_the_caller_changed_is_credited_to_them(self):
+        """explicit_fields cannot see these -- they are never None -- so the value
+        differing from the declared default is the only evidence."""
+        assert 'set by you' in self._row(self._block(tile_size=256), '--tile-size')
+
+    def test_a_static_default_left_alone_is_not(self):
+        assert 'built-in default' in self._row(self._block(), '--tile-size')
+
+    def test_notes_override_a_derived_answer(self):
+        """The integer-data predictor clamp happens after resolution and depends on the
+        raster, so nothing derivable from the flags could describe it."""
+        args = OptimizeArguments(product_type='dem', vertical_srs='EPSG:5703')
+        block = ch.render_resolved_settings(args, notes={'predictor': 'clamped for Int16 data'})
+        assert 'clamped for Int16 data' in self._row(block, '--predictor')
+
+    def test_data_type_reaches_the_heading(self):
+        args = OptimizeArguments(product_type='dem', vertical_srs='EPSG:5703')
+        assert 'Float32' in ch.render_resolved_settings(args, data_type='Float32')
+
+    def test_same_shape_as_show_defaults(self):
+        """One renderer, so the two blocks stay comparable."""
+        runtime = self._block()
+        static = ch.render_show_defaults('dem')
+        for title, _ in ch._SHOW_SECTIONS:
+            assert f'  {title}' in runtime and f'  {title}' in static
+
+
+class TestExplicitFieldTracking:
+
+    def test_records_only_what_the_caller_passed(self):
+        args = OptimizeArguments(product_type='dem', vertical_srs='EPSG:5703',
+                                 algorithm='ZSTD', predictor=3)
+        assert {'algorithm', 'predictor'} <= args.explicit_fields
+        assert 'level' not in args.explicit_fields      # resolved to 9, not asked for
+        assert 'overview_compress' not in args.explicit_fields
+
+    def test_survives_being_rebuilt_from_vars(self):
+        """The directory walk rebuilds these once per file.  Recomputing would see
+        resolved values everywhere and credit the caller with all of them."""
+        first = OptimizeArguments(product_type='dem', vertical_srs='EPSG:5703',
+                                  algorithm='ZSTD')
+        again = OptimizeArguments(**vars(first))
+        assert again.explicit_fields == first.explicit_fields
+        assert 'level' not in again.explicit_fields
+
+    def test_mask_alpha_is_not_pre_empted_by_argparse(self):
+        """argparse used to default --mask-alpha to True while the dataclass declared
+        None, so every run looked as though the caller had asked for it."""
+        args = build_parser().parse_args(
+            ['optimize', '-i', 'in.tif', '-o', 'out.tif', '-t', 'thematic'])
+        assert args.mask_alpha is None
+
+
 # --- The README says the same thing as the code -----------------------------
 
 class TestReadmeMatchesResolver:
