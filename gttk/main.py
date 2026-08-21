@@ -22,6 +22,8 @@ import numpy as np
 from pathlib import Path
 from gttk.utils.log_helpers import setup_logger
 import gttk.utils.optimize_constants as oc
+import gttk.utils.cli_help as ch
+from gttk.utils.cli_help import GttkHelpFormatter, ShowDefaultsAction
 from osgeo import gdal
 from gttk.utils.script_arguments import CompareArguments, ReadArguments, OptimizeArguments, TestArguments, ValidateArguments
 
@@ -83,16 +85,15 @@ def valid_quality(value: str) -> int:
         raise argparse.ArgumentTypeError(f"Quality must be between 75 and 100, got '{ivalue}'")
     return ivalue
 
-def main():
-    # GTTK is a library: it applies GDAL's exception mode per operation rather than
-    # at import, so this application makes the choice for its own process.
-    gdal.UseExceptions()
-    """
-    Main function to parse arguments and call the appropriate tool.
+def build_parser() -> argparse.ArgumentParser:
+    """Build the complete gttk argument parser.
+
+    Split out from main() so the rendered help can be exercised by tests without
+    dispatching to a tool.
     """
     parser = argparse.ArgumentParser(
         description='GTTK',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=GttkHelpFormatter
     )
     subparsers = parser.add_subparsers(dest='tool', help='Available tools')
     subparsers.required = True
@@ -101,56 +102,112 @@ def main():
     compare_parser = subparsers.add_parser(
         'compare',
         help='Compare compression settings and metadata between two GeoTIFF files.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=GttkHelpFormatter
     )
-    compare_parser.add_argument('-i', '--input', '--baseline', required=True, type=Path, dest='input_path', help='The baseline (or original) GeoTIFF for comparison.')
-    compare_parser.add_argument('-o', '--output', '--comparison', required=True, type=Path, dest='output_path', help='The comparison (or processed) GeoTIFF.')
+    compare_parser.add_argument('-i', '--input', '--baseline', required=True, type=Path, metavar='PATH', dest='input_path', help='The baseline (or original) GeoTIFF for comparison.')
+    compare_parser.add_argument('-o', '--output', '--comparison', required=True, type=Path, metavar='PATH', dest='output_path', help='The comparison (or processed) GeoTIFF.')
     compare_parser.add_argument('-c', '--config', default='config.toml', help='Path to a custom configuration file.')
-    compare_parser.add_argument('-f', '--report_format', type=str.lower, default='html', choices=['html', 'md'], dest='report_format', help='Output format for the report file.')
-    compare_parser.add_argument('--open-report', type=str2bool, default=True, dest='open_report', help='Open the report automatically after generation.')
+    # '--report_format' is the historic spelling; every other subcommand and the README
+    # use the hyphen, so that is the primary name and the underscore stays as an alias.
+    compare_parser.add_argument('-f', '--report-format', '--report_format', type=str.lower, default='html', choices=['html', 'md'], dest='report_format', help='Output format for the report file.')
+    compare_parser.add_argument('--open-report', type=str2bool, default=True, metavar='BOOL', dest='open_report', help='Open the report automatically after generation.')
     compare_parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', help='Enable verbose logging.')
 
     # --- Optimize Compression Base Arguments ---
+    # Help strings that state a default read it back from the resolver
+    # (gttk.utils.cli_help), so they cannot drift from what the tool actually does.
     def add_optimize_args(p):
-        p.add_argument('-i', '--input', required=True, type=Path, dest='input_path', help='Input source GeoTIFF file path.')
-        p.add_argument('-o', '--output', required=True, type=Path, dest='output_path', help='Output COG file path.')
-        p.add_argument('-t', '--product-type', required=True, type=str.lower,choices=['dem', 'image', 'error', 'scientific', 'thematic'], dest='product_type', help='Type of GeoTIFF product.')
-        p.add_argument('-r', '--raster-type', type=str.lower, choices=['point', 'area'], dest='raster_type', help="Override raster type ('point' for PixelIsPoint, 'area' for PixelIsArea).")
-        p.add_argument('-a', '--algorithm', type=str.upper, choices=['JPEG', 'JXL', 'LZW', 'DEFLATE', 'ZSTD', 'LERC', 'NONE'], dest='algorithm', help='Compression algorithm.')
-        p.add_argument('-s', '--vertical-srs', type=str, default=None, dest='vertical_srs', help="Vertical SRS for 'dem' type.")
-        p.add_argument('-n', '--nodata', type=float_nodata, default=None,dest='nodata', help="NoData value for 'dem' or 'error' type.")
-        p.add_argument('-d', '--decimals', type=parse_decimals, dest='decimals',
-                       help="Decimal places to round DEM/error/scientific data, or 'none' to keep "
-                            "full precision. Default: 2 (dem), 1 (error), none (scientific). Values "
-                            "finer than the data type can represent are treated as 'none'.")
-        p.add_argument('-p', '--predictor', type=int, choices=[1, 2, 3], dest='predictor', help='Predictor for LZW/DEFLATE/ZSTD compression.')
-        p.add_argument('-z', '--max-z-error', type=float, dest='max_z_error', help='Max Z error for LERC compression.')
-        p.add_argument('-l', '--level', type=int, dest='level', help='Compression level for DEFLATE or ZSTD.')
-        p.add_argument('-q', '--quality', type=valid_quality, dest='quality', help="JPEG quality (75-100) for 'image' type.")
-        p.add_argument('-g', '--geo-metadata', type=str2bool, default=False, dest='geo_metadata', help='Write the external XML file (.xml or _meta.xml) to the GEO_METADATA tag.')
-        p.add_argument('-w', '--write-pam-xml', type=str2bool, default=True, dest='write_pam_xml', help='Write an Esri-compatible .aux.xml PAM statistics file.')
-        p.add_argument('--tile-size', type=int, default=512,dest='tile_size', help='Tile size in pixels for primary layer and overviews. Default: 512.')
-        p.add_argument('--mask-alpha', type=str2bool, default=True, dest='mask_alpha', help='If True, convert alpha band (if present) to internal mask(e.g. RGB+mask). If False, preserve unchanged(e.g. RGBA). Default: True.')
-        p.add_argument('--mask-nodata', type=str2bool, default=None, dest='mask_nodata', help='If True, add NoData pixels to transparency mask. Default: True for images, False for all others.')
-        p.add_argument('--cog', type=str2bool, default=True, dest='cog', help='Create a COG (True/False, Yes/No). Default: True.')
-        p.add_argument('--overviews', type=str2bool, default=True, dest='overviews', help='Generate internal overviews (True/False, Yes/No). Default: True.')
-        p.add_argument('--overview-resampling', type=str.upper, choices=list(oc.OVERVIEW_RESAMPLING_CHOICES), dest='overview_resampling',
-                       help='Resampling kernel for overviews. Default: NEAREST for thematic/image (categorical data must not be interpolated), BILINEAR otherwise.')
-        p.add_argument('--overview-compress', type=str.upper, choices=['NONE', 'LZW', 'DEFLATE', 'ZSTD', 'JPEG', 'JXL', 'LERC', 'WEBP'], dest='overview_compress',
-                       help='Compression for overviews. Default: same as --algorithm.')
-        p.add_argument('--overview-predictor', type=int, choices=[1, 2, 3], dest='overview_predictor', help='Predictor for overviews. Default: same as --predictor.')
-        p.add_argument('--num-threads', type=str, default=None, dest='num_threads', help="Worker threads for compression: an integer or ALL_CPUS. Default: ALL_CPUS. Lower it when running several gttk processes in parallel.")
-        p.add_argument('--report', type=str2bool, default=True, dest='report', help='Generate the before/after comparison report. Default: True. Set False for batch runs.')
-        p.add_argument('-f', '--report-format', type=str.lower, default='html', choices=['html', 'md'], dest='report_format', help='Output format for the report file.')
-        p.add_argument('--report-suffix', type=str, default='_comp', dest='report_suffix', help='Suffix for the report filename.')
-        p.add_argument('--open-report', type=str2bool, default=True, dest='open_report', help='Open the report automatically after generation.')
+        required = p.add_argument_group('required')
+        required.add_argument('-i', '--input', required=True, type=Path, metavar='PATH', dest='input_path', help='Input source GeoTIFF file path.')
+        required.add_argument('-o', '--output', required=True, type=Path, metavar='PATH', dest='output_path', help='Output COG file path.')
+        required.add_argument('-t', '--product-type', required=True, type=str.lower, choices=list(ch.PRODUCT_TYPES), dest='product_type',
+                              help='Type of GeoTIFF product. This is what selects the defaults for '
+                                   'most of the options below; see the table at the end of this help.')
+
+        compression = p.add_argument_group('compression')
+        compression.add_argument('-a', '--algorithm', type=str.upper, choices=['JPEG', 'JXL', 'LZW', 'DEFLATE', 'ZSTD', 'LERC', 'NONE'], dest='algorithm',
+                                 help=f"Compression algorithm. Default: {ch.default_clause('algorithm')}. "
+                                      f"JPEG/JXL are for imagery only; LERC is for "
+                                      f"{', '.join(oc.LERC_PRODUCT_TYPES)}.")
+        compression.add_argument('-p', '--predictor', type=int, choices=[1, 2, 3], dest='predictor',
+                                 help=f"Predictor, for LZW/DEFLATE/ZSTD only. Default: "
+                                      f"{ch.default_clause('predictor', algorithm='DEFLATE')}. "
+                                      f"3 is the floating-point predictor and falls back to 2 on integer data.")
+        compression.add_argument('-l', '--level', type=int, dest='level',
+                                 help=f"Compression level, for DEFLATE/ZSTD only. Default: "
+                                      f"{ch.default_clause('level', algorithm='DEFLATE')} (DEFLATE), "
+                                      f"{ch.default_clause('level', algorithm='ZSTD')} (ZSTD).")
+        compression.add_argument('-q', '--quality', type=valid_quality, metavar='75-100', dest='quality',
+                                 help=f"Quality, for JPEG/JXL only. Default: "
+                                      f"{ch.default_clause('quality', algorithm='JPEG')}. "
+                                      f"100 selects lossless JXL.")
+        compression.add_argument('-z', '--max-z-error', type=float, dest='max_z_error',
+                                 help=f"Max Z error, for LERC only. Default: "
+                                      f"{ch.default_clause('max_z_error', types=oc.LERC_PRODUCT_TYPES, algorithm='LERC')}. "
+                                      f"Thematic LERC must stay lossless: a non-zero value is rejected "
+                                      f"because it merges adjacent class codes.")
+        compression.add_argument('-d', '--decimals', type=parse_decimals, dest='decimals',
+                                 help=f"Decimal places to round DEM/error/scientific data, or 'none' to keep "
+                                      f"full precision. Applies to LZW/DEFLATE/ZSTD only. Default: "
+                                      f"{ch.default_clause('decimals', algorithm='DEFLATE')}. Values "
+                                      f"finer than the data type can represent are treated as 'none'.")
+
+        overviews = p.add_argument_group('overviews')
+        overviews.add_argument('--overviews', type=str2bool, default=True, metavar='BOOL', dest='overviews', help='Generate internal overviews. Default: True.')
+        # These two carry the longest choice lists in the CLI.  Left as the metavar they
+        # blow past 80 columns in the usage block as one unbreakable token, so name them
+        # and let the help text carry the list, where it can wrap.
+        overviews.add_argument('--overview-resampling', type=str.upper, choices=list(oc.OVERVIEW_RESAMPLING_CHOICES), metavar='KERNEL', dest='overview_resampling',
+                               help=f"Resampling kernel for overviews: "
+                                    f"{', '.join(oc.OVERVIEW_RESAMPLING_CHOICES)}. Default: "
+                                    f"{ch.default_clause('overview_resampling')}. Categorical data must "
+                                    f"not be interpolated, so an interpolating kernel is rejected for 'thematic'.")
+        overviews.add_argument('--overview-compress', type=str.upper, choices=list(oc.OVERVIEW_COMPRESS_CHOICES), metavar='CODEC', dest='overview_compress',
+                               help=f"Compression for overviews: {', '.join(oc.OVERVIEW_COMPRESS_CHOICES)}. "
+                                    f"Default: same as --algorithm.")
+        overviews.add_argument('--overview-predictor', type=int, choices=[1, 2, 3], dest='overview_predictor', help='Predictor for overviews. Default: same as --predictor.')
+
+        masking = p.add_argument_group('masking and nodata')
+        masking.add_argument('-n', '--nodata', type=float_nodata, default=None, dest='nodata', help="NoData value for 'dem' or 'error' type. Default: inherited from the input file.")
+        masking.add_argument('--mask-alpha', type=str2bool, default=True, metavar='BOOL', dest='mask_alpha', help='If True, convert alpha band (if present) to internal mask (e.g. RGB+mask). If False, preserve unchanged (e.g. RGBA). Default: True, except thematic (False).')
+        masking.add_argument('--mask-nodata', type=str2bool, default=None, metavar='BOOL', dest='mask_nodata',
+                             help=f"If True, add NoData pixels to transparency mask. Default: "
+                                  f"{ch.default_clause('mask_nodata')}.")
+
+        georef = p.add_argument_group('georeferencing and metadata')
+        georef.add_argument('-r', '--raster-type', type=str.lower, choices=['point', 'area'], dest='raster_type',
+                            help=f"Override raster type ('point' for PixelIsPoint, 'area' for PixelIsArea). "
+                                 f"Default: {ch.default_clause('raster_type').lower()}.")
+        georef.add_argument('-s', '--vertical-srs', type=str, default=None, dest='vertical_srs', help="Vertical SRS, e.g. EPSG:5703. Required for 'dem'.")
+        georef.add_argument('-g', '--geo-metadata', type=str2bool, default=False, metavar='BOOL', dest='geo_metadata', help='Write the external XML file (.xml or _meta.xml) to the GEO_METADATA tag.')
+        georef.add_argument('-w', '--write-pam-xml', type=str2bool, default=True, metavar='BOOL', dest='write_pam_xml', help='Write an Esri-compatible .aux.xml PAM statistics file.')
+
+        output = p.add_argument_group('output file')
+        output.add_argument('--cog', type=str2bool, default=True, metavar='BOOL', dest='cog', help='Create a COG. Default: True.')
+        output.add_argument('--tile-size', type=int, default=512, metavar='PX', dest='tile_size', help='Tile size in pixels for primary layer and overviews. Default: 512.')
+        output.add_argument('--num-threads', type=str, default=None, metavar='N', dest='num_threads',
+                            help=f"Worker threads for compression: an integer or ALL_CPUS. Default: "
+                                 f"{ch.default_clause('num_threads')}. Lower it when running several "
+                                 f"gttk processes in parallel.")
+
+        report = p.add_argument_group('report')
+        report.add_argument('--report', type=str2bool, default=True, metavar='BOOL', dest='report', help='Generate the before/after comparison report. Default: True. Set False for batch runs.')
+        report.add_argument('-f', '--report-format', type=str.lower, default='html', choices=['html', 'md'], dest='report_format', help='Output format for the report file.')
+        report.add_argument('--report-suffix', type=str, default='_comp', dest='report_suffix', help='Suffix for the report filename.')
+        report.add_argument('--open-report', type=str2bool, default=True, metavar='BOOL', dest='open_report', help='Open the report automatically after generation.')
+
+        p.add_argument('--show-defaults', action=ShowDefaultsAction, metavar='TYPE',
+                       choices=['all'] + list(ch.PRODUCT_TYPES),
+                       help='Print every setting that would be used, and where each one comes '
+                            'from, then exit. Give a product type or omit it for all of them.')
         p.add_argument('-v', '--verbose', action='store_true', dest='verbose', help='Enable verbose logging.')
 
     # --- Optimize Compression (CLI) Tool ---
     optimize_parser = subparsers.add_parser(
         'optimize',
         help='Optimize a GeoTIFF using command-line tools.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=GttkHelpFormatter,
+        epilog=ch.profile_table()
     )
     add_optimize_args(optimize_parser)
 
@@ -158,61 +215,63 @@ def main():
     optimize_arc_parser = subparsers.add_parser(
         'optimize-arc',
         help='Optimize a GeoTIFF from an ArcGIS toolbox using standalone GDAL.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=GttkHelpFormatter,
+        epilog=ch.profile_table()
     )
     add_optimize_args(optimize_arc_parser)
-    optimize_arc_parser.add_argument('--arc-mode', type=str2bool, default=True, dest='arc_mode', help='Flag to indicate ArcGIS Pro execution mode.')
+    optimize_arc_parser.add_argument('--arc-mode', type=str2bool, default=True, metavar='BOOL', dest='arc_mode', help='Flag to indicate ArcGIS Pro execution mode.')
 
     # --- Test Compression Tool ---
     test_compression_parser = subparsers.add_parser(
         'test',
         help='Test various compression settings on a GeoTIFF and generate a performance report.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=GttkHelpFormatter
     )
-    test_compression_parser.add_argument('-i', '--input', required=True, type=Path, dest='input_path', help='The source GeoTIFF file or directory to use for testing.')
-    test_compression_parser.add_argument('-o', '--output', type=Path, dest='output_path', help='Path to save the output report table in Excel format (.xlsx).')
+    test_compression_parser.add_argument('-i', '--input', required=True, type=Path, metavar='PATH', dest='input_path', help='The source GeoTIFF file or directory to use for testing.')
+    test_compression_parser.add_argument('-o', '--output', type=Path, metavar='PATH', dest='output_path', help='Path to save the output report table in Excel format (.xlsx). Default: derived from the input name, alongside the input.')
     csv_group = test_compression_parser.add_mutually_exclusive_group(required=True)
-    csv_group.add_argument('-c', '--csv-params', type=Path, dest='csv_path', help='Path to a CSV file with compression parameters to test.')
+    csv_group.add_argument('-c', '--csv-params', type=Path, metavar='PATH', dest='csv_path', help='Path to a CSV file with compression parameters to test.')
     csv_group.add_argument('-t', '--product-type', type=str.lower, choices=['dem', 'image', 'error', 'scientific', 'thematic'], dest='product_type', help='Use a preset template of compression parameters for the specified product type.')
-    test_compression_parser.add_argument('--temp-dir', type=Path, default=Path('temp'), dest='temp_dir', help='Directory to store temporary compressed GeoTIFFs.')
-    test_compression_parser.add_argument('--log-file', type=Path, dest='log_file', help='Path to a log file for debugging.')
-    test_compression_parser.add_argument('--delete-test-files', type=str2bool, default=True, dest='delete_test_files', help='Delete temporary files after the test is complete.')
-    test_compression_parser.add_argument('--open-report', type=str2bool, default=True, dest='open_report', help='Open the Excel report automatically after generation.')
-    test_compression_parser.add_argument('--arc-mode', type=str2bool, default=False, dest='arc_mode', help='Flag to indicate ArcPy execution mode.')
-    test_compression_parser.add_argument('--optimize-script', type=Path, dest='optimize_script_path', help='Path to the optimize_compression.py script.')
+    test_compression_parser.add_argument('--temp-dir', type=Path, default=Path('temp'), metavar='PATH', dest='temp_dir', help='Directory to store temporary compressed GeoTIFFs.')
+    test_compression_parser.add_argument('--log-file', type=Path, metavar='PATH', dest='log_file', help='Path to a log file for debugging. Default: no log file is written.')
+    test_compression_parser.add_argument('--delete-test-files', type=str2bool, default=True, metavar='BOOL', dest='delete_test_files', help='Delete temporary files after the test is complete.')
+    test_compression_parser.add_argument('--open-report', type=str2bool, default=True, metavar='BOOL', dest='open_report', help='Open the Excel report automatically after generation.')
+    test_compression_parser.add_argument('--arc-mode', type=str2bool, default=False, metavar='BOOL', dest='arc_mode', help='Flag to indicate ArcPy execution mode.')
+    test_compression_parser.add_argument('--optimize-script', type=Path, metavar='PATH', dest='optimize_script_path', help='Path to the optimize_compression.py script. Default: the installed gttk package is used directly.')
     test_compression_parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', help='Enable verbose logging.')
 
     # --- Read Metadata Tool ---
     read_metadata_parser = subparsers.add_parser(
         'read',
         help='Read and report metadata from a GeoTIFF file.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=GttkHelpFormatter
     )
-    read_metadata_parser.add_argument('-i', '--input', required=True, type=Path, dest='input_path', help='Path to the input GeoTIFF file.')
+    read_metadata_parser.add_argument('-i', '--input', required=True, type=Path, metavar='PATH', dest='input_path', help='Path to the input GeoTIFF file.')
     read_metadata_parser.add_argument('-p', '--page', type=int, default=0, dest='page', help='Image File Directory (IFD) page to read.')
-    read_metadata_parser.add_argument('-b', '--banner', type=str, required=False, dest='banner', help='Text for a banner at the top/bottom of the report, such as classification.')
+    read_metadata_parser.add_argument('-b', '--banner', type=str, required=False, dest='banner', help='Text for a banner at the top/bottom of the report, such as classification. Default: no banner.')
     read_group = read_metadata_parser.add_mutually_exclusive_group(required=False)
     read_group.add_argument('-r', '--reader-type', type=str.lower, default='producer',choices=['analyst', 'producer'], dest='reader_type', help='Target reader type.')
-    read_group.add_argument('-s', '--sections', type=str, nargs='*', dest='sections', help='Specific metadata sections to include in the report.')
-    read_metadata_parser.add_argument('-x', '--xml-type', type=str.lower, default='table', choices=['table', 'text'], dest='xml_type', help='Whether to present the metadata as a table or as syntax-highlightedtext.')
+    read_group.add_argument('-s', '--sections', type=str, nargs='*', dest='sections', help='Specific metadata sections to include in the report. Default: the set implied by --reader-type.')
+    read_metadata_parser.add_argument('-x', '--xml-type', type=str.lower, default='table', choices=['table', 'text'], dest='xml_type', help='Whether to present the metadata as a table or as syntax-highlighted text.')
     read_metadata_parser.add_argument('-t', '--tag-scope', type=str.lower, default='complete', choices=['complete', 'compact'], dest='tag_scope', help='Level of detail for TIFF tags.')
-    read_metadata_parser.add_argument('-w', '--write-pam-xml', type=str2bool, default=False, dest='write_pam_xml', help='Generate a .aux.xml file with statistics.')
+    read_metadata_parser.add_argument('-w', '--write-pam-xml', type=str2bool, default=False, metavar='BOOL', dest='write_pam_xml', help='Generate a .aux.xml file with statistics.')
     read_metadata_parser.add_argument('-f', '--report-format', type=str.lower, default='html', dest='report_format', choices=['html', 'md'], help='Format for the output report.')
     read_metadata_parser.add_argument('--report-suffix', type=str, default='_meta', dest='report_suffix', help='Suffix to append to the output report filename.')
-    read_metadata_parser.add_argument('--open-report', type=str2bool, default=True, dest='open_report', help='Open the report automatically after generation.')
-    read_metadata_parser.add_argument('--arc-mode', type=str2bool, default=False, dest='arc_mode', help='Flag to indicate ArcPy execution mode.')
+    read_metadata_parser.add_argument('--open-report', type=str2bool, default=True, metavar='BOOL', dest='open_report', help='Open the report automatically after generation.')
+    read_metadata_parser.add_argument('--arc-mode', type=str2bool, default=False, metavar='BOOL', dest='arc_mode', help='Flag to indicate ArcPy execution mode.')
     read_metadata_parser.add_argument('-v', '--verbose', action='store_true', dest='verbose', help='Enable verbose logging.')
 
     # --- Validate Metadata Tool ---
     validate_parser = subparsers.add_parser(
         'validate',
         help='Validate GeoTIFF metadata against product-specific requirements.',
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
+        formatter_class=GttkHelpFormatter
     )
     validate_parser.add_argument(
         '-i', '--input',
         required=True,
         type=Path,
+        metavar='PATH',
         dest='input_path',
         help='Path to GeoTIFF file or directory to validate. '
              'If directory, all .tif/.tiff files will be processed (optionally filtered by --name-filter).'
@@ -228,6 +287,7 @@ def main():
     validate_parser.add_argument(
         '-r', '--rules-dir',
         type=Path,
+        metavar='PATH',
         default=Path('gttk/resources/rules'),
         dest='rules_dir',
         help='Directory containing TOML validation rule files.'
@@ -253,6 +313,7 @@ def main():
     validate_parser.add_argument(
         '-o', '--output-dir',
         type=Path,
+        metavar='PATH',
         default=None,
         dest='output_dir',
         help='Parent directory for validation output folder. '
@@ -262,6 +323,7 @@ def main():
     validate_parser.add_argument(
         '-w', '--write-reports',
         type=str2bool,
+        metavar='BOOL',
         default=True,
         dest='write_reports',
         help='Write individual HTML/MD validation reports for each file. '
@@ -278,6 +340,7 @@ def main():
     validate_parser.add_argument(
         '--open-report',
         type=str2bool,
+        metavar='BOOL',
         default=True,
         dest='open_report',
         help='Automatically open the JSON results file after generation.'
@@ -289,6 +352,16 @@ def main():
         help='Enable verbose logging for detailed debugging information.'
     )
 
+    return parser
+
+def main():
+    # GTTK is a library: it applies GDAL's exception mode per operation rather than
+    # at import, so this application makes the choice for its own process.
+    gdal.UseExceptions()
+    """
+    Main function to parse arguments and call the appropriate tool.
+    """
+    parser = build_parser()
     args = parser.parse_args()
     tool = args.tool
     args_dict = vars(args)
