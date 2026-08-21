@@ -160,6 +160,65 @@ class TestRasterTypeNormalisation:
             OptimizeArguments(product_type='thematic', raster_type='middle')
 
 
+class TestSemanticValidation:
+    """Checks over flag combinations, none of which needs a raster.
+
+    They used to sit behind an `if self.input_path` guard, so the ArcGIS toolbox and
+    any library caller -- both of which build this dataclass directly -- slipped past
+    them entirely.
+    """
+
+    def test_rejects_lerc_on_imagery_without_a_file(self):
+        with pytest.raises(ValueError, match="not suitable for imagery"):
+            OptimizeArguments(product_type='image', algorithm='LERC')
+
+    def test_rejects_lossy_codec_on_non_imagery_without_a_file(self):
+        with pytest.raises(ValueError, match="only suitable for imagery"):
+            OptimizeArguments(product_type='dem', algorithm='JPEG',
+                              vertical_srs='EPSG:5703')
+
+    def test_requires_vertical_srs_for_dem_without_a_file(self):
+        with pytest.raises(ValueError, match="Vertical SRS"):
+            OptimizeArguments(product_type='dem')
+
+    def test_band_count_check_still_needs_a_file(self):
+        """The one rule that genuinely has to open the raster stays behind the guard."""
+        assert OptimizeArguments(product_type='thematic').product_type == 'thematic'
+
+
+class TestThematicLerc:
+    """Esri writes lossless LERC widely, so thematic LERC is supported -- but only
+    lossless.  A non-zero tolerance quantises neighbouring values together, merging
+    adjacent class codes the same way an interpolating overview kernel invents them.
+    """
+
+    def test_lossless_lerc_is_allowed(self):
+        args = OptimizeArguments(product_type='thematic', algorithm='LERC')
+        assert args.max_z_error == 0
+
+    def test_explicit_zero_is_allowed(self):
+        args = OptimizeArguments(product_type='thematic', algorithm='LERC', max_z_error=0)
+        assert args.max_z_error == 0
+
+    def test_rejects_a_lossy_tolerance(self):
+        with pytest.raises(ValueError, match="merge adjacent class codes"):
+            OptimizeArguments(product_type='thematic', algorithm='LERC', max_z_error=0.5)
+
+    def test_thematic_is_a_lerc_product_type(self):
+        assert 'thematic' in oc.LERC_PRODUCT_TYPES
+        assert 'image' not in oc.LERC_PRODUCT_TYPES
+
+    @pytest.mark.parametrize("product_type,expected", [
+        ('dem', 'Point'), ('error', 'Point'), ('scientific', 'Point'),
+        ('image', 'Area'), ('thematic', 'Area'),
+    ])
+    def test_raster_type_is_resolved_not_left_none(self, product_type, expected):
+        """Three call sites used to re-derive this inline; the resolver owns it now."""
+        args = OptimizeArguments(product_type=product_type, vertical_srs='EPSG:5703')
+        assert args.raster_type == expected
+        assert oc.default_raster_type_for(product_type) == expected
+
+
 class TestPredictorResolution:
     """PREDICTOR=3 is the floating-point predictor; libtiff rejects it on ints."""
 
