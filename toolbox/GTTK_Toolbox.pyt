@@ -23,6 +23,9 @@ GeoTIFF files. It includes tools to:
     TIFF tags, GeoKeys, and CRS information.
 4.  Test Compression: Benchmark multiple compression algorithms and settings
     to find the optimal configuration for your data.
+5.  Validate Metadata: Check GeoTIFF metadata against product-specific rules.
+
+The dialog is shown in the language ArcGIS Pro is displaying (see gttk.i18n).
 
 All tools are designed to handle complex geospatial challenges, such as vertical
 datum transformations and compound coordinate systems, while maximizing performance
@@ -102,6 +105,8 @@ try:
     # GTTK applies GDAL's exception mode per operation, not at import, so this
     # toolbox makes the choice for the ArcGIS process it runs in.
     gdal.UseExceptions()
+    import gttk.i18n as i18n
+    from gttk.i18n import _, N_, Picklist
     import gttk.tools.compare_compression as cc
     import gttk.tools.optimize_compression_arc as oc
     import gttk.tools.read_metadata as rm
@@ -120,25 +125,75 @@ except ImportError as e:
     arcpy.AddError(f"System Path: {sys.path}")
     raise e
 
+# The dialog's language: an explicit override, else what ArcGIS Pro is displaying, else
+# the Windows display language, else English.  Chosen every time Pro (re)loads the
+# toolbox, so "Refresh" in the Catalog pane is enough after editing config.toml.
+LANG = i18n.activate(i18n.detect_language(reload_config=True))
+arcpy.AddMessage(i18n.explain_detection()[0])
+
 #: Dialog group for the options that are not part of the core compression choice.
-OVERVIEW_CATEGORY = "Overview and Performance"
+OVERVIEW_CATEGORY = _("Overview and Performance")
 
-#: GDAL predictor codes as the dialog spells them.  int <-> label in one place.
-PREDICTOR_LABELS = {
-    1: "1 - None",
-    2: "2 - Horizontal differencing",
-    3: "3 - Floating-point",
-}
+# Every dialog choice below is a Picklist: the dialog shows the active language's
+# labels, the code is what the rest of the toolbox compares and passes on, and
+# Picklist.code() accepts the label in any language, so a run saved to History or
+# copied as a Python command under one language still resolves under another.
+
+#: GDAL predictor codes as the dialog spells them.  Labels keep their leading digit.
+PREDICTOR = Picklist([
+    (1, N_("1 - None")),
+    (2, N_("2 - Horizontal differencing")),
+    (3, N_("3 - Floating-point")),
+])
+
+#: Product types, shared by Optimize and Test Compression.  Optimize used to spell the
+#: error model "Generic Point-cloud Model"; the alias keeps that history runnable.
+PRODUCT_TYPE = Picklist([
+    (PT.DEM.value, N_("Digital Elevation Model")),
+    (PT.ERROR.value, N_("Error Model")),
+    (PT.IMAGE.value, N_("Orthoimage or Basemap")),
+    (PT.THEMATIC.value, N_("Thematic Data (e.g. Landcover)")),
+    (PT.SCIENTIFIC.value, N_("Scientific Data (e.g. Chemistry)")),
+], aliases={"Generic Point-cloud Model": PT.ERROR.value})
+
+INPUT_METHOD = Picklist([
+    ('presets', N_("Use Product Type Presets")),
+    ('csv', N_("Use Custom CSV File")),
+])
+
+READER_TYPE = Picklist([
+    ('producer', N_("Producer")),
+    ('analyst', N_("Analyst")),
+    ('custom', N_("Custom")),
+])
+
+TAG_SCOPE = Picklist([
+    ('complete', N_("complete")),
+    ('compact', N_("compact")),
+])
+
+XML_TYPE = Picklist([
+    ('table', N_("table")),
+    ('text', N_("text")),
+])
+
+#: Named because an error message quotes this checkbox; both come from one string.
+LABEL_MASK_ALPHA = N_("Convert Alpha Band (if one exists) to Internal Mask")
 
 
-def _predictor_label(value):
-    """A predictor code as the dialog's ValueList spells it, or None."""
-    return PREDICTOR_LABELS.get(value)
+def _settle(param, picklist):
+    """Respell a picklist value in the active language.
 
-
-def _predictor_code(label):
-    """The int behind a dialog predictor label, or None when nothing is selected."""
-    return int(label[0:1]) if label else None
+    ArcGIS validates a choice against the dialog's ValueList before ``execute`` runs
+    (ERROR 000800), so a value saved under another language -- from History, a model
+    or a copied Python command -- would be refused.  ``updateParameters`` runs first,
+    which is where this rewrites anything the picklist recognises.
+    """
+    text = param.valueAsText
+    if text:
+        label = picklist.normalize(text)
+        if label and label != text:
+            param.value = label
 
 
 def _get_report_path(input_path: str, suffix: str, format: str) -> str:
@@ -162,7 +217,7 @@ def _get_report_path(input_path: str, suffix: str, format: str) -> str:
 class Toolbox:
     def __init__(self):
         """Define the toolbox (the name of the toolbox is the name of the .pyt file)."""
-        self.label = "GTTK Toolbox"
+        self.label = _("GTTK Toolbox")
         self.alias = "gttk"
         self.icon = "icons/GTTK_Toolbox.pyt.32px.png"
         # List of tool classes associated with this toolbox
@@ -171,30 +226,30 @@ class Toolbox:
 class CompareCompression:
     def __init__(self):
         """Define the tool class."""
-        self.label = "Compare Compression"
-        self.description = "Compares two GeoTIFFs and generates a detailed compression report."
+        self.label = _("Compare Compression")
+        self.description = _("Compares two GeoTIFFs and generates a detailed compression report.")
         self.icon = "icons/compare.png"
         self.canRunInBackground = True
-        self.category = "Compression Tools"
+        self.category = _("Compression Tools")
 
     def getParameterInfo(self):
         """Define parameter definitions"""
         param_baseline = arcpy.Parameter(
-            displayName="Baseline or Input GeoTIFF 1 (e.g., Original)",
+            displayName=_("Baseline or Input GeoTIFF 1 (e.g., Original)"),
             name="baseline_path",
             datatype=["DEFile", "GPRasterLayer"],
             parameterType="Required",
             direction="Input")
 
         param_comparison = arcpy.Parameter(
-            displayName="Comparison or Output GeoTIFF 2 (e.g., Processed)",
+            displayName=_("Comparison or Output GeoTIFF 2 (e.g., Processed)"),
             name="comparison_path",
             datatype=["DEFile", "GPRasterLayer"],
             parameterType="Required",
             direction="Input")
 
         param_report_format = arcpy.Parameter(
-            displayName="Report File Format",
+            displayName=_("Report File Format"),
             name="report_format",
             datatype="GPString",
             parameterType="Required",
@@ -204,7 +259,7 @@ class CompareCompression:
         param_report_format.value = "HTML (.html)"
 
         param_report_suffix = arcpy.Parameter(
-            displayName="Report Filename Suffix",
+            displayName=_("Report Filename Suffix"),
             name="report_suffix",
             datatype="GPString",
             parameterType="Optional",
@@ -212,7 +267,7 @@ class CompareCompression:
         param_report_suffix.value = "_comp"
 
         param_report_file = arcpy.Parameter(
-            displayName="Report File Path",
+            displayName=_("Report File Path"),
             name="report_file",
             datatype="DEFile",
             parameterType="Derived",
@@ -221,7 +276,7 @@ class CompareCompression:
         # in the updateParameters method.
 
         param_open_report = arcpy.Parameter(
-            displayName="Open Report on Completion",
+            displayName=_("Open Report on Completion"),
             name="open_report",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -264,6 +319,7 @@ class CompareCompression:
         return
 
     def execute(self, parameters, messages):
+        messages.addMessage(i18n.explain_detection()[0])
         baseline_param = parameters[0].value
         if hasattr(baseline_param, 'dataSource'):
             baseline_path = baseline_param.dataSource
@@ -293,15 +349,15 @@ class CompareCompression:
         try:
             report_path = cc.compare_compression(args)
             if not report_path:
-                raise Exception("The compare_compression script failed to generate a report. See messages above for details.")
+                raise Exception(_("The compare_compression script failed to generate a report. See messages above for details."))
 
             # Set derived output parameter for ModelBuilder
             parameters[4].value = str(report_path)
 
-            messages.addMessage(f"Report generated successfully: {report_path}")
+            messages.addMessage(_("Report generated successfully: {path}").format(path=report_path))
 
         except Exception as e:
-            messages.addErrorMessage(f"An error occurred: {e}")
+            messages.addErrorMessage(_("An error occurred: {error}").format(error=e))
             import traceback
             messages.addErrorMessage(traceback.format_exc())
 
@@ -312,33 +368,25 @@ class OptimizeCompression:
 
     def __init__(self):
         """Define the tool class."""
-        self.label = "Optimize Compression"
-        self.description = "Optimizes and compresses a GeoTIFF into a Cloud Optimized GeoTIFF (COG) with advanced options."
+        self.label = _("Optimize Compression")
+        self.description = _("Optimizes and compresses a GeoTIFF into a Cloud Optimized GeoTIFF (COG) with advanced options.")
         self.icon = "icons/optimize.png"
         self.canRunInBackground = False
-        self.category = "Compression Tools"
-        
-        self.PRODUCT_TYPE_MAP = {
-            "Digital Elevation Model": PT.DEM.value,
-            "Generic Point-cloud Model": PT.ERROR.value,
-            "Orthoimage or Basemap": PT.IMAGE.value,
-            "Thematic Data (e.g. Landcover)": PT.THEMATIC.value,
-            "Scientific Data (e.g. Chemistry)": PT.SCIENTIFIC.value
-        }
+        self.category = _("Compression Tools")
 
     def getParameterInfo(self):
         """Define parameter definitions"""
         
         # --- Input and Output ---
         param_input = arcpy.Parameter(
-            displayName="Input GeoTIFF, Raster Layer, or Folder",
+            displayName=_("Input GeoTIFF, Raster Layer, or Folder"),
             name="input_path",
             datatype=["GPRasterLayer", "DEFile", "DEFolder"],
             parameterType="Required",
             direction="Input")
 
         param_output = arcpy.Parameter(
-            displayName="Output GeoTIFF or Folder",
+            displayName=_("Output GeoTIFF or Folder"),
             name="output_path",
             datatype=["DEFile", "DEFolder"],
             parameterType="Required",
@@ -346,21 +394,21 @@ class OptimizeCompression:
 
         # --- Core Settings ---
         param_product_type = arcpy.Parameter(
-            displayName="Product Type",
+            displayName=_("Product Type"),
             name="product_type",
             datatype="GPString",
             parameterType="Required",
             direction="Input")
         param_product_type.filter.type = "ValueList"
-        param_product_type.filter.list = list(self.PRODUCT_TYPE_MAP.keys())
-        param_product_type.value = "Digital Elevation Model"
+        param_product_type.filter.list = PRODUCT_TYPE.labels()
+        param_product_type.value = PRODUCT_TYPE.label(PT.DEM.value)
         # The dialog opens on DEM/DEFLATE, so every static value below is that pair's
         # resolved answer.  Read it back rather than restating it; updateParameters
         # replaces the lot as soon as either selection changes.
         opening = probe_defaults(PT.DEM.value, algorithm=CA.DEFLATE.value)
 
         param_raster_type = arcpy.Parameter(
-            displayName="Raster Type",
+            displayName=_("Raster Type"),
             name="raster_type",
             datatype="GPString",
             parameterType="Optional",
@@ -371,7 +419,7 @@ class OptimizeCompression:
                                    else "PixelIsArea")
 
         param_vertical_srs = arcpy.Parameter(
-            displayName="Vertical SRS Name",
+            displayName=_("Vertical SRS Name"),
             name="vertical_srs",
             datatype="GPString",
             parameterType="Optional",
@@ -380,7 +428,7 @@ class OptimizeCompression:
         param_vertical_srs.filter.list = list(VERTICAL_SRS_NAME_MAP.keys())
         
         param_nodata = arcpy.Parameter(
-            displayName="NoData Value",
+            displayName=_("NoData Value"),
             name="nodata",
             datatype="GPString",
             parameterType="Optional",
@@ -388,7 +436,7 @@ class OptimizeCompression:
 
         # --- Compression Settings ---
         param_algorithm = arcpy.Parameter(
-            displayName="Compression Algorithm",
+            displayName=_("Compression Algorithm"),
             name="algorithm",
             datatype="GPString",
             parameterType="Optional",
@@ -407,7 +455,7 @@ class OptimizeCompression:
         param_algorithm.value = CA.DEFLATE.value
 
         param_quality = arcpy.Parameter(
-            displayName="JPEG/JXL Quality",
+            displayName=_("JPEG/JXL Quality"),
             name="quality",
             datatype="GPLong",
             parameterType="Optional",
@@ -417,21 +465,17 @@ class OptimizeCompression:
         param_quality.value = C.DEFAULT_QUALITY
 
         param_predictor = arcpy.Parameter(
-            displayName="Predictor",
+            displayName=_("Predictor"),
             name="predictor",
             datatype="GPString",
             parameterType="Optional",
             direction="Input")
         param_predictor.filter.type = "ValueList"
-        param_predictor.filter.list = [
-            "1 - None",
-            "2 - Horizontal differencing",
-            "3 - Floating-point"
-        ]
-        param_predictor.value = _predictor_label(opening.predictor)
+        param_predictor.filter.list = PREDICTOR.labels()
+        param_predictor.value = PREDICTOR.label(opening.predictor)
 
         param_level = arcpy.Parameter(
-            displayName="Compression Level",
+            displayName=_("Compression Level"),
             name="level",
             datatype="GPLong",
             parameterType="Optional",
@@ -440,7 +484,7 @@ class OptimizeCompression:
 
         # --- LERC Settings ---
         param_max_z_error = arcpy.Parameter(
-            displayName="Max Z Error (LERC)",
+            displayName=_("Max Z Error (LERC)"),
             name="max_z_error",
             datatype="GPDouble",
             parameterType="Optional",
@@ -449,7 +493,7 @@ class OptimizeCompression:
 
         # --- Rounding Settings ---
         param_decimals = arcpy.Parameter(
-            displayName="Decimal Places for Rounding",
+            displayName=_("Decimal Places for Rounding"),
             name="decimals",
             datatype="GPLong",
             parameterType="Optional",
@@ -458,7 +502,7 @@ class OptimizeCompression:
 
        # --- Block or Tile Size ---
         param_tile_size = arcpy.Parameter(
-            displayName="Tile Size (in pixels)",
+            displayName=_("Tile Size (in pixels)"),
             name="tile_size",
             datatype="GPLong",
             parameterType="Optional",
@@ -467,7 +511,7 @@ class OptimizeCompression:
 
         # --- GEO_METADATA Tag ---
         param_geo_metadata = arcpy.Parameter(
-            displayName="Write External XML to GEO_METADATA Tag",
+            displayName=_("Write External XML to GEO_METADATA Tag"),
             name="geo_metadata",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -476,7 +520,7 @@ class OptimizeCompression:
 
         # --- Precision Auxiliary Metadata (.aux.xml) ---
         param_write_pam_xml = arcpy.Parameter(
-            displayName="Write Statistics XML (.aux.xml)",
+            displayName=_("Write Statistics XML (.aux.xml)"),
             name="write_pam_xml",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -485,7 +529,7 @@ class OptimizeCompression:
 
         # --- COG vs. GTiff Driver ---
         param_cog = arcpy.Parameter(
-            displayName="Create Cloud Optimized GeoTIFF",
+            displayName=_("Create Cloud Optimized GeoTIFF"),
             name="cog",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -493,7 +537,7 @@ class OptimizeCompression:
         param_cog.value = True
 
         param_overviews = arcpy.Parameter(
-            displayName="Generate Internal Overviews",
+            displayName=_("Generate Internal Overviews"),
             name="overviews",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -501,7 +545,7 @@ class OptimizeCompression:
         param_overviews.value = True
 
         param_mask_nodata = arcpy.Parameter(
-            displayName="Mask NoData Pixels (if any)",
+            displayName=_("Mask NoData Pixels (if any)"),
             name="mask_nodata",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -509,7 +553,7 @@ class OptimizeCompression:
         param_mask_nodata.value = opening.mask_nodata
 
         param_mask_alpha = arcpy.Parameter(
-            displayName="Convert Alpha Band (if one exists) to Internal Mask",
+            displayName=_(LABEL_MASK_ALPHA),
             name="mask_alpha",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -517,7 +561,7 @@ class OptimizeCompression:
         param_mask_alpha.value = opening.mask_alpha
 
         param_add_to_map = arcpy.Parameter(
-            displayName="Add Output to Map",
+            displayName=_("Add Output to Map"),
             name="add_to_map",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -526,7 +570,7 @@ class OptimizeCompression:
 
         # --- Report Settings ---
         param_report_format = arcpy.Parameter(
-            displayName="CompressionReport Format",
+            displayName=_("Compression Report Format"),
             name="report_format",
             datatype="GPString",
             parameterType="Optional",
@@ -536,7 +580,7 @@ class OptimizeCompression:
         param_report_format.value = "HTML (.html)"
 
         param_report_suffix = arcpy.Parameter(
-            displayName="Report Filename Suffix",
+            displayName=_("Report Filename Suffix"),
             name="report_suffix",
             datatype="GPString",
             parameterType="Optional",
@@ -544,7 +588,7 @@ class OptimizeCompression:
         param_report_suffix.value = "_comp"
 
         param_open_report = arcpy.Parameter(
-            displayName="Open Report on Completion",
+            displayName=_("Open Report on Completion"),
             name="open_report",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -557,7 +601,7 @@ class OptimizeCompression:
         # addresses parameters by position, so a new index in the middle would silently
         # shift them all.  `category` is what groups them in the dialog instead.
         param_overview_resampling = arcpy.Parameter(
-            displayName="Overview Resampling",
+            displayName=_("Overview Resampling"),
             name="overview_resampling",
             datatype="GPString",
             parameterType="Optional",
@@ -567,7 +611,7 @@ class OptimizeCompression:
         param_overview_resampling.filter.list = list(C.OVERVIEW_RESAMPLING_CHOICES)
 
         param_overview_compress = arcpy.Parameter(
-            displayName="Overview Compression",
+            displayName=_("Overview Compression"),
             name="overview_compress",
             datatype="GPString",
             parameterType="Optional",
@@ -577,17 +621,17 @@ class OptimizeCompression:
         param_overview_compress.filter.list = list(C.OVERVIEW_COMPRESS_CHOICES)
 
         param_overview_predictor = arcpy.Parameter(
-            displayName="Overview Predictor",
+            displayName=_("Overview Predictor"),
             name="overview_predictor",
             datatype="GPString",
             parameterType="Optional",
             direction="Input",
             category=OVERVIEW_CATEGORY)
         param_overview_predictor.filter.type = "ValueList"
-        param_overview_predictor.filter.list = list(PREDICTOR_LABELS.values())
+        param_overview_predictor.filter.list = PREDICTOR.labels()
 
         param_num_threads = arcpy.Parameter(
-            displayName="Worker Threads",
+            displayName=_("Worker Threads"),
             name="num_threads",
             datatype="GPString",
             parameterType="Optional",
@@ -596,7 +640,7 @@ class OptimizeCompression:
         param_num_threads.value = "ALL_CPUS"
 
         param_report = arcpy.Parameter(
-            displayName="Generate Comparison Report",
+            displayName=_("Generate Comparison Report"),
             name="report",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -625,11 +669,14 @@ class OptimizeCompression:
         validation is performed. This method is called whenever a parameter
         has been changed."""
 
+        _settle(parameters[2], PRODUCT_TYPE)
+        _settle(parameters[8], PREDICTOR)
+        _settle(parameters[25], PREDICTOR)
+
         if not parameters[2].value:
             return
 
-        product_type = parameters[2].valueAsText
-        selected_type_key = self.PRODUCT_TYPE_MAP.get(product_type)
+        selected_type_key = PRODUCT_TYPE.code(parameters[2].valueAsText)
         algorithm = parameters[6].valueAsText
 
         # --- Set valid algorithms based on product type ---
@@ -661,7 +708,7 @@ class OptimizeCompression:
 
         # --- State Change Detection using persistent class-level variables ---
         type_changed = (OptimizeCompression._previous_product_type is not None and
-                        product_type != OptimizeCompression._previous_product_type)
+                        selected_type_key != OptimizeCompression._previous_product_type)
         
         algo_changed = (OptimizeCompression._previous_algorithm is not None and
                         algorithm != OptimizeCompression._previous_algorithm)
@@ -682,7 +729,7 @@ class OptimizeCompression:
             self._reset_all_dependents(parameters, selected_type_key, new_algorithm)
             
             # Update class-level state
-            OptimizeCompression._previous_product_type = product_type
+            OptimizeCompression._previous_product_type = selected_type_key
             OptimizeCompression._previous_algorithm = new_algorithm
             OptimizeCompression._previous_raster_type = parameters[3].valueAsText
 
@@ -719,7 +766,7 @@ class OptimizeCompression:
         parameters[7].value = defaults.quality or C.DEFAULT_QUALITY
         # The predictor box stays populated even for a codec that ignores it, so fall
         # back to the product type's own value rather than blanking the dialog.
-        parameters[8].value = _predictor_label(
+        parameters[8].value = PREDICTOR.label(
             defaults.predictor or C.default_predictor_for(selected_type_key))
         parameters[17].value = defaults.mask_nodata
         parameters[18].value = defaults.mask_alpha
@@ -733,7 +780,7 @@ class OptimizeCompression:
 
         parameters[23].value = defaults.overview_resampling
         parameters[24].value = defaults.overview_compress
-        parameters[25].value = _predictor_label(defaults.overview_predictor)
+        parameters[25].value = PREDICTOR.label(defaults.overview_predictor)
         parameters[26].value = defaults.num_threads
 
         # Reset algorithm-specific parameters
@@ -774,6 +821,7 @@ class OptimizeCompression:
 
     def execute(self, parameters, messages):
         """The source code of the tool."""
+        messages.addMessage(i18n.explain_detection()[0])
         # --- Gather Parameters ---
         input_param = parameters[0].value
         if hasattr(input_param, 'dataSource'):
@@ -781,8 +829,7 @@ class OptimizeCompression:
         else:
             input_path = parameters[0].valueAsText
         output_path = parameters[1].valueAsText
-        product_type_desc = parameters[2].valueAsText
-        product_type = self.PRODUCT_TYPE_MAP.get(product_type_desc, PT.DEM.value)
+        product_type = PRODUCT_TYPE.code(parameters[2].valueAsText) or PT.DEM.value
         raster_type_desc = parameters[3].valueAsText
         raster_type = 'point' if raster_type_desc == 'PixelIsPoint' else 'area'
         vertical_srs_name = parameters[4].valueAsText
@@ -795,14 +842,14 @@ class OptimizeCompression:
             try:
                 nodata = float(nodata_str)
             except ValueError:
-                messages.addErrorMessage(f"Invalid NoData value provided: {nodata_str}")
+                messages.addErrorMessage(_("Invalid NoData value provided: {value}").format(value=nodata_str))
                 return
         else:
             nodata = None
 
         algorithm = parameters[6].valueAsText
         quality = parameters[7].value
-        predictor = _predictor_code(parameters[8].valueAsText)
+        predictor = PREDICTOR.code(parameters[8].valueAsText)
         level = parameters[9].value
         max_z_error = parameters[10].value
         decimals = parameters[11].value
@@ -820,7 +867,7 @@ class OptimizeCompression:
         open_report = parameters[22].value
         overview_resampling = parameters[23].valueAsText
         overview_compress = parameters[24].valueAsText
-        overview_predictor = _predictor_code(parameters[25].valueAsText)
+        overview_predictor = PREDICTOR.code(parameters[25].valueAsText)
         num_threads = parameters[26].valueAsText
         report = parameters[27].value
 
@@ -828,7 +875,7 @@ class OptimizeCompression:
         # If the input has an alpha band and JPEG is selected while the user disabled mask_alpha,
         # fail fast with a clear, actionable message.
         if product_type == PT.DEM.value and not vertical_srs_name:
-            messages.addErrorMessage("Vertical SRS is required for Digital Elevation Models.")
+            messages.addErrorMessage(_("Vertical SRS is required for Digital Elevation Models."))
             return
 
         # --- Lightweight check for single-band restriction ---
@@ -837,26 +884,28 @@ class OptimizeCompression:
                 # Use arcpy to check band count efficiently
                 desc = arcpy.Describe(input_path)
                 if hasattr(desc, 'bandCount') and desc.bandCount > 1:
-                    messages.addErrorMessage(
-                        f"Multi-band rasters ({desc.bandCount} bands) are not supported for '{product_type_desc}' product type. "
-                        "Use 'Orthoimage or Basemap' or 'Scientific Data' instead."
-                    )
+                    messages.addErrorMessage(_(
+                        "Multi-band rasters ({bands} bands) are not supported for the "
+                        "'{product}' product type. Use '{image}' or '{scientific}' instead."
+                    ).format(bands=desc.bandCount, product=PRODUCT_TYPE.label(product_type),
+                             image=PRODUCT_TYPE.label(PT.IMAGE.value),
+                             scientific=PRODUCT_TYPE.label(PT.SCIENTIFIC.value)))
                     return
             except Exception as e:
                 # If arcpy.Describe fails, we log a warning but proceed, letting the backend validation handle it.
-                messages.addWarningMessage(f"Could not validate band count: {e}")
+                messages.addWarningMessage(_("Could not validate band count: {error}").format(error=e))
 
         if algorithm == CA.JPEG.value and (mask_alpha is False):
             # A simplified check. The robust check is in the backend.
-            messages.addWarningMessage(
+            messages.addWarningMessage(_(
                 "If the input has an alpha band, using JPEG compression without converting it "
                 "to an internal mask may cause issues. The backend process will validate this."
-            )
-            messages.addErrorMessage(
+            ))
+            messages.addErrorMessage(_(
                 "JPEG compression does not support a preserved alpha band. Re-enable "
-                "'Convert Alpha Band (if one exists) to Internal Mask' to convert the alpha "
-                "to an internal mask, or choose a different algorithm such as JXL or DEFLATE."
-            )
+                "'{mask_alpha}' to convert the alpha to an internal mask, or choose a "
+                "different algorithm such as JXL or DEFLATE."
+            ).format(mask_alpha=_(LABEL_MASK_ALPHA)))
             return
 
         # --- Conditionally Nullify Parameters invalid for selected algorithm ---
@@ -919,7 +968,7 @@ class OptimizeCompression:
         # --- Run the optimize_compression script ---
         try:
             oc.optimize_compression(args)
-            messages.addMessage("Tool completed successfully.")
+            messages.addMessage(_("Tool completed successfully."))
 
             if add_to_map:
                 try:
@@ -928,19 +977,19 @@ class OptimizeCompression:
                     map_view = aprx.activeMap
                     if map_view:
                         map_view.addDataFromPath(output_path)
-                        messages.addMessage(f"Added {os.path.basename(output_path)} to the map.")
+                        messages.addMessage(_("Added {name} to the map.").format(name=os.path.basename(output_path)))
                     else:
-                        messages.addWarningMessage("No active map found to add the output raster.")
+                        messages.addWarningMessage(_("No active map found to add the output raster."))
                 except Exception as e:
-                    messages.addWarningMessage(f"Could not add the output raster to the map: {e}")
+                    messages.addWarningMessage(_("Could not add the output raster to the map: {error}").format(error=e))
 
         except RuntimeError as e:
             # This will catch the detailed error message propagated from the runner
             messages.addErrorMessage(str(e))
         except Exception as e:
-            messages.addErrorMessage(f"An unexpected error occurred in the toolbox script: {e}")
+            messages.addErrorMessage(_("An unexpected error occurred in the toolbox script: {error}").format(error=e))
             import traceback
-            messages.addErrorMessage("Traceback:")
+            messages.addErrorMessage(_("Traceback:"))
             messages.addErrorMessage(traceback.format_exc())
 
 class TestCompression:
@@ -948,33 +997,25 @@ class TestCompression:
 
     def __init__(self):
         """Define the tool class."""
-        self.label = "Test Compression"
-        self.description = "Tests multiple compression settings from CSV configurations and generates detailed Excel reports comparing performance and efficiency."
+        self.label = _("Test Compression")
+        self.description = _("Tests multiple compression settings from CSV configurations and generates detailed Excel reports comparing performance and efficiency.")
         self.icon = "icons/test.png"
         self.canRunInBackground = True
-        self.category = "Compression Tools"
-        
-        self.PRODUCT_TYPE_MAP = {
-            "Digital Elevation Model": PT.DEM.value,
-            "Error Model": PT.ERROR.value,
-            "Orthoimage or Basemap": PT.IMAGE.value,
-            "Thematic Data (e.g. Landcover)": PT.THEMATIC.value,
-            "Scientific Data (e.g. Chemistry)": PT.SCIENTIFIC.value
-        }
+        self.category = _("Compression Tools")
 
     def getParameterInfo(self):
         """Define parameter definitions"""
         
         # --- Input and Output ---
         param_source = arcpy.Parameter(
-            displayName="Source GeoTIFF, Raster Layer, or Folder",
+            displayName=_("Source GeoTIFF, Raster Layer, or Folder"),
             name="source_geotiff",
             datatype=["GPRasterLayer", "DEFile", "DEFolder"],
             parameterType="Required",
             direction="Input")
 
         param_output = arcpy.Parameter(
-            displayName="Output Excel Report",
+            displayName=_("Output Excel Report"),
             name="output_file",
             datatype="DEFile",
             parameterType="Required",
@@ -983,27 +1024,27 @@ class TestCompression:
 
         # --- Input Method (Product Type or custom CSV) ---
         param_input_method = arcpy.Parameter(
-            displayName="Input Method",
+            displayName=_("Input Method"),
             name="input_method",
             datatype="GPString",
             parameterType="Required",
             direction="Input")
         param_input_method.filter.type = "ValueList"
-        param_input_method.filter.list = ["Use Product Type Presets", "Use Custom CSV File"]
-        param_input_method.value = "Use Product Type Presets"
+        param_input_method.filter.list = INPUT_METHOD.labels()
+        param_input_method.value = INPUT_METHOD.label('presets')
 
         param_product_type = arcpy.Parameter(
-            displayName="Product Type (for Preset Selection)",
+            displayName=_("Product Type (for Preset Selection)"),
             name="product_type",
             datatype="GPString",
             parameterType="Optional",
             direction="Input")
         param_product_type.filter.type = "ValueList"
-        param_product_type.filter.list = list(self.PRODUCT_TYPE_MAP.keys())
-        param_product_type.value = "Digital Elevation Model"
+        param_product_type.filter.list = PRODUCT_TYPE.labels()
+        param_product_type.value = PRODUCT_TYPE.label(PT.DEM.value)
 
         param_csv_path = arcpy.Parameter(
-            displayName="Custom CSV Configuration File",
+            displayName=_("Custom CSV Configuration File"),
             name="csv_path",
             datatype="DEFile",
             parameterType="Optional",
@@ -1012,7 +1053,7 @@ class TestCompression:
 
         # --- Processing Options ---
         param_temp_dir = arcpy.Parameter(
-            displayName="Temporary Files Directory",
+            displayName=_("Temporary Files Directory"),
             name="temp_dir",
             datatype="DEFolder",
             parameterType="Optional",
@@ -1022,7 +1063,7 @@ class TestCompression:
         param_temp_dir.value = str(default_temp_path)
 
         param_delete_test_files = arcpy.Parameter(
-            displayName="Delete Temporary Test Files",
+            displayName=_("Delete Temporary Test Files"),
             name="delete_test_files",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -1031,7 +1072,7 @@ class TestCompression:
 
         # --- Report Options ---
         param_open_report = arcpy.Parameter(
-            displayName="Open Excel Report on Completion",
+            displayName=_("Open Excel Report on Completion"),
             name="open_report",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -1050,15 +1091,17 @@ class TestCompression:
 
     def updateParameters(self, parameters):
         """Modify parameter states based on input method selection."""
-        input_method = parameters[2].valueAsText
+        _settle(parameters[2], INPUT_METHOD)
+        _settle(parameters[3], PRODUCT_TYPE)
+        input_method = INPUT_METHOD.code(parameters[2].valueAsText)
         
-        if input_method == "Use Product Type Presets":
+        if input_method == 'presets':
             parameters[3].enabled = True
             parameters[3].parameterType = "Required"
             parameters[4].enabled = False
             parameters[4].parameterType = "Optional"
             parameters[4].value = None
-        elif input_method == "Use Custom CSV File":
+        elif input_method == 'csv':
             parameters[3].enabled = False
             parameters[3].parameterType = "Optional"
             parameters[4].enabled = True
@@ -1092,21 +1135,22 @@ class TestCompression:
 
     def updateMessages(self, parameters):
         """Validate parameters and show warnings/errors."""
-        input_method = parameters[2].valueAsText
+        input_method = INPUT_METHOD.code(parameters[2].valueAsText)
         
-        if input_method == "Use Product Type Presets":
+        if input_method == 'presets':
             if not parameters[3].value:
-                parameters[3].setErrorMessage("Product Type is required when using presets.")
+                parameters[3].setErrorMessage(_("Product Type is required when using presets."))
             else:
                 parameters[3].clearMessage()
-        elif input_method == "Use Custom CSV File":
+        elif input_method == 'csv':
             if not parameters[4].value:
-                parameters[4].setErrorMessage("CSV file is required when using custom configuration.")
+                parameters[4].setErrorMessage(_("CSV file is required when using custom configuration."))
             else:
                 parameters[4].clearMessage()
 
     def execute(self, parameters, messages):
         """Execute the test compression tool."""
+        messages.addMessage(i18n.explain_detection()[0])
         try:
             # --- Gather Parameters ---
             input_param = parameters[0].value
@@ -1116,7 +1160,7 @@ class TestCompression:
                 source_geotiff = parameters[0].valueAsText
 
             output = parameters[1].valueAsText
-            input_method = parameters[2].valueAsText
+            input_method = INPUT_METHOD.code(parameters[2].valueAsText)
             product_type_desc = parameters[3].valueAsText
             csv_path = parameters[4].valueAsText
             temp_dir = parameters[5].valueAsText
@@ -1124,20 +1168,20 @@ class TestCompression:
             open_report = parameters[7].value
 
             # --- Validate Input Method ---
-            if input_method == "Use Product Type Presets":
+            if input_method == 'presets':
                 if not product_type_desc:
-                    messages.addErrorMessage("Product Type must be specified when using presets.")
+                    messages.addErrorMessage(_("Product Type must be specified when using presets."))
                     return
-                product_type = self.PRODUCT_TYPE_MAP.get(product_type_desc, PT.DEM.value)
+                product_type = PRODUCT_TYPE.code(product_type_desc) or PT.DEM.value
                 csv_path = None
-            elif input_method == "Use Custom CSV File":
+            elif input_method == 'csv':
                 if not csv_path:
-                    messages.addErrorMessage("CSV file must be specified when using custom configuration.")
+                    messages.addErrorMessage(_("CSV file must be specified when using custom configuration."))
                     return
                 product_type = None
                 csv_path = csv_path
             else:
-                messages.addErrorMessage("Invalid input method specified.")
+                messages.addErrorMessage(_("Invalid input method specified."))
                 return
 
             # --- Build Arguments for test_compression.main ---
@@ -1152,7 +1196,7 @@ class TestCompression:
                 open_report=open_report,
             )
 
-            messages.addMessage(f"Starting compression testing with arguments: {args}")
+            messages.addMessage(_("Starting compression testing with arguments: {args}").format(args=args))
 
             # --- Execute Test Compression Script ---
             try:
@@ -1170,24 +1214,24 @@ class TestCompression:
 
                 if status_code != 0:
                     # If failed, we might want to ensure the user knows where the full log is
-                    messages.addErrorMessage(f"The test_compression script failed (Exit Code {status_code}).")
+                    messages.addErrorMessage(_("The test_compression script failed (Exit Code {code}).").format(code=status_code))
                     if log_file:
-                        messages.addErrorMessage(f"Full debug log available at: {log_file}")
-                    raise Exception("Compression testing failed. See messages above or log file for details.")
+                        messages.addErrorMessage(_("Full debug log available at: {path}").format(path=log_file))
+                    raise Exception(_("Compression testing failed. See messages above or log file for details."))
                 
-                messages.addMessage("\nCompression testing completed successfully.")
-                messages.addMessage(f"Results saved to: {output}")
+                messages.addMessage("\n" + _("Compression testing completed successfully."))
+                messages.addMessage(_("Results saved to: {path}").format(path=output))
 
             except Exception as e:
-                messages.addErrorMessage(f"Test Compression script failed: {e}")
+                messages.addErrorMessage(_("Test Compression script failed: {error}").format(error=e))
                 import traceback
-                messages.addErrorMessage("Traceback:")
+                messages.addErrorMessage(_("Traceback:"))
                 messages.addErrorMessage(traceback.format_exc())
 
         except Exception as e:
-            messages.addErrorMessage(f"A critical error occurred: {e}")
+            messages.addErrorMessage(_("A critical error occurred: {error}").format(error=e))
             import traceback
-            messages.addErrorMessage("Traceback:")
+            messages.addErrorMessage(_("Traceback:"))
             messages.addErrorMessage(traceback.format_exc())
 
 class ReadMetadata:
@@ -1197,35 +1241,31 @@ class ReadMetadata:
     _previous_xml_type = None
     _previous_tag_scope = None
 
-    READER_TYPE_PRODUCER = "Producer"
-    READER_TYPE_ANALYST = "Analyst"
-    READER_TYPE_CUSTOM = "Custom"
-
     def __init__(self):
         """Define the tool class."""
-        self.label = "Read Metadata"
-        self.description = "Reads the metadata in a GeoTIFF header and generates a report in Markdown or HTML format."
+        self.label = _("Read Metadata")
+        self.description = _("Reads the metadata in a GeoTIFF header and generates a report in Markdown or HTML format.")
         self.icon = "icons/read.png"
         self.canRunInBackground = True
-        self.category = "Metadata Tools"
+        self.category = _("Metadata Tools")
         
         # --- Define Reader Type Presets ---
         self.READER_TYPE_PRESETS = {
-            self.READER_TYPE_PRODUCER: PRODUCER_SECTIONS,
-            self.READER_TYPE_ANALYST: ANALYST_SECTIONS
+            'producer': PRODUCER_SECTIONS,
+            'analyst': ANALYST_SECTIONS
         }
 
     def getParameterInfo(self):
         """Define parameter definitions"""
         param_input = arcpy.Parameter(
-            displayName="Input GeoTIFF or Raster Layer",
+            displayName=_("Input GeoTIFF or Raster Layer"),
             name="input_geotiff",
             datatype=["DEFile", "GPRasterLayer"],
             parameterType="Required",
             direction="Input")
 
         param_format = arcpy.Parameter(
-            displayName="Output Format",
+            displayName=_("Output Format"),
             name="output_format",
             datatype="GPString",
             parameterType="Required",
@@ -1235,7 +1275,7 @@ class ReadMetadata:
         param_format.value = "HTML (.html)"
 
         param_suffix = arcpy.Parameter(
-            displayName="Output Filename Suffix",
+            displayName=_("Output Filename Suffix"),
             name="output_suffix",
             datatype="GPString",
             parameterType="Optional",
@@ -1243,14 +1283,14 @@ class ReadMetadata:
         param_suffix.value = "_meta"
 
         param_output = arcpy.Parameter(
-            displayName="Output Report File",
+            displayName=_("Output Report File"),
             name="output_file",
             datatype="DEFile",
             parameterType="Derived",
             direction="Output")
 
         param_open_report = arcpy.Parameter(
-            displayName="Open Report on Completion",
+            displayName=_("Open Report on Completion"),
             name="open_report",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -1258,7 +1298,7 @@ class ReadMetadata:
         param_open_report.value = True
 
         param_write_pam_xml = arcpy.Parameter(
-            displayName="Write Statistics XML (.aux.xml)",
+            displayName=_("Write Statistics XML (.aux.xml)"),
             name="write_pam_xml",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -1266,7 +1306,7 @@ class ReadMetadata:
         param_write_pam_xml.value = True
 
         param_page = arcpy.Parameter(
-            displayName="Image File Directory (IFD)",
+            displayName=_("Image File Directory (IFD)"),
             name="page",
             datatype="GPLong",
             parameterType="Optional",
@@ -1275,41 +1315,41 @@ class ReadMetadata:
 
         # --- Report Sections ---
         param_banner = arcpy.Parameter(
-            displayName="Banner Text",
+            displayName=_("Banner Text"),
             name="banner",
             datatype="GPString",
             parameterType="Optional",
             direction="Input")
 
         param_reader_type = arcpy.Parameter(
-            displayName="Reader Type",
+            displayName=_("Reader Type"),
             name="reader_type",
             datatype="GPString",
             parameterType="Optional",
             direction="Input")
         param_reader_type.filter.type = "ValueList"
-        param_reader_type.filter.list = [self.READER_TYPE_PRODUCER, self.READER_TYPE_ANALYST, self.READER_TYPE_CUSTOM]
-        param_reader_type.value = self.READER_TYPE_ANALYST
+        param_reader_type.filter.list = READER_TYPE.labels()
+        param_reader_type.value = READER_TYPE.label('analyst')
 
         param_tag_scope = arcpy.Parameter(
-            displayName="Tag Scope",
+            displayName=_("Tag Scope"),
             name="tag_scope",
             datatype="GPString",
             parameterType="Optional",
             direction="Input")
         param_tag_scope.filter.type = "ValueList"
-        param_tag_scope.filter.list = ["complete", "compact"]
-        param_tag_scope.value = "compact"
+        param_tag_scope.filter.list = TAG_SCOPE.labels()
+        param_tag_scope.value = TAG_SCOPE.label('compact')
 
         param_xml_type = arcpy.Parameter(
-            displayName="XML Format",
+            displayName=_("XML Format"),
             name="xml_type",
             datatype="GPString",
             parameterType="Optional",
             direction="Input")
         param_xml_type.filter.type = "ValueList"
-        param_xml_type.filter.list = ["table", "text"]
-        param_xml_type.value = "table"
+        param_xml_type.filter.list = XML_TYPE.labels()
+        param_xml_type.value = XML_TYPE.label('table')
 
         params = [
             param_input, param_format, param_suffix, param_output,
@@ -1319,14 +1359,14 @@ class ReadMetadata:
 
         for section_key in ALL_SECTIONS:
             config = get_config(section_key)
-            display_name = getattr(config, 'title', section_key)
+            display_name = _(getattr(config, 'title', section_key))
             param = arcpy.Parameter(
                 displayName=display_name,
                 name=f"section_{section_key}",
                 datatype="GPBoolean",
                 parameterType="Optional",
                 direction="Input")
-            param.value = True if section_key in self.READER_TYPE_PRESETS[self.READER_TYPE_ANALYST] else False
+            param.value = True if section_key in self.READER_TYPE_PRESETS['analyst'] else False
             params.append(param)
 
         return params
@@ -1337,7 +1377,9 @@ class ReadMetadata:
 
     def updateParameters(self, parameters):
         """Modify the values and properties of parameters before internal validation is performed."""
-        # arcpy.AddMessage("--- ReadMetadata: updateParameters triggered ---")
+        _settle(parameters[8], READER_TYPE)
+        _settle(parameters[9], TAG_SCOPE)
+        _settle(parameters[10], XML_TYPE)
 
         # --- Handle derived output path ---
         input_param = parameters[0].value
@@ -1361,9 +1403,9 @@ class ReadMetadata:
         xml_type_param_index = 10
         sections_start_index = 11
         
-        xml_type = parameters[xml_type_param_index].valueAsText
-        tag_scope = parameters[tag_scope_param_index].valueAsText
-        reader_type = parameters[reader_type_param_index].valueAsText
+        xml_type = XML_TYPE.code(parameters[xml_type_param_index].valueAsText)
+        tag_scope = TAG_SCOPE.code(parameters[tag_scope_param_index].valueAsText)
+        reader_type = READER_TYPE.code(parameters[reader_type_param_index].valueAsText)
         current_sections = tuple(p.value for p in parameters[sections_start_index:])
         
         # Robustness Check: If section count changed (code update), force re-init
@@ -1386,12 +1428,12 @@ class ReadMetadata:
         tag_scope_changed = tag_scope != ReadMetadata._previous_tag_scope
 
         if reader_type_changed:
-            if reader_type == self.READER_TYPE_PRODUCER:
-                parameters[xml_type_param_index].value = "Text"
-                parameters[tag_scope_param_index].value = "complete"
-            elif reader_type == self.READER_TYPE_ANALYST:
-                parameters[xml_type_param_index].value = "Table"
-                parameters[tag_scope_param_index].value = "compact"
+            if reader_type == 'producer':
+                parameters[xml_type_param_index].value = XML_TYPE.label('text')
+                parameters[tag_scope_param_index].value = TAG_SCOPE.label('complete')
+            elif reader_type == 'analyst':
+                parameters[xml_type_param_index].value = XML_TYPE.label('table')
+                parameters[tag_scope_param_index].value = TAG_SCOPE.label('compact')
 
             if reader_type in self.READER_TYPE_PRESETS:
                 preset_sections = self.READER_TYPE_PRESETS[reader_type]
@@ -1404,14 +1446,14 @@ class ReadMetadata:
             ReadMetadata._previous_sections = current_sections
 
         elif sections_changed or tag_scope_changed:
-            parameters[reader_type_param_index].value = self.READER_TYPE_CUSTOM
+            parameters[reader_type_param_index].value = READER_TYPE.label('custom')
             ReadMetadata._previous_sections = current_sections
             ReadMetadata._previous_tag_scope = tag_scope
 
         # Update the previous states for the next change detection
-        ReadMetadata._previous_reader_type = parameters[reader_type_param_index].valueAsText
-        ReadMetadata._previous_xml_type = parameters[xml_type_param_index].valueAsText
-        ReadMetadata._previous_tag_scope = parameters[tag_scope_param_index].valueAsText
+        ReadMetadata._previous_reader_type = READER_TYPE.code(parameters[reader_type_param_index].valueAsText)
+        ReadMetadata._previous_xml_type = XML_TYPE.code(parameters[xml_type_param_index].valueAsText)
+        ReadMetadata._previous_tag_scope = TAG_SCOPE.code(parameters[tag_scope_param_index].valueAsText)
 
     def updateMessages(self, parameters):
         """Modify the messages created by internal validation for each tool
@@ -1420,7 +1462,8 @@ class ReadMetadata:
 
     def execute(self, parameters, messages):
         """The source code of the tool."""
-        messages.addMessage("--- ReadMetadata: execute method started ---")
+        messages.addMessage(_("--- ReadMetadata: execute method started ---"))
+        messages.addMessage(i18n.explain_detection()[0])
         try:
             input_param = parameters[0].value
             if hasattr(input_param, 'dataSource'):
@@ -1434,9 +1477,9 @@ class ReadMetadata:
             write_pam_xml = parameters[5].value
             page = parameters[6].value
             banner = parameters[7].valueAsText
-            reader_type = parameters[8].valueAsText
-            tag_scope = parameters[9].valueAsText
-            xml_type = parameters[10].valueAsText
+            reader_type = READER_TYPE.code(parameters[8].valueAsText)
+            tag_scope = TAG_SCOPE.code(parameters[9].valueAsText)
+            xml_type = XML_TYPE.code(parameters[10].valueAsText)
             
             sections = []
             # The sections checkboxes start at index 11
@@ -1472,42 +1515,42 @@ class ReadMetadata:
             )
             
             # Handle mutually exclusive reader_type and sections parameters
-            if reader_type in [self.READER_TYPE_PRODUCER, self.READER_TYPE_ANALYST]:
+            if reader_type in ('producer', 'analyst'):
                 # Use preset reader type, don't pass custom sections
-                args.reader_type = reader_type.lower()  # Convert to lowercase for consistency
+                args.reader_type = reader_type
                 args.sections = None
-                messages.addMessage(f"Mode: Preset ({args.reader_type})")
+                messages.addMessage(_("Mode: Preset ({mode})").format(mode=args.reader_type))
             else:
                 # Custom sections selected, don't pass reader_type
                 args.reader_type = None
                 args.sections = sections
-                messages.addMessage(f"Mode: Custom (Selected Sections: {', '.join(sections)})")
+                messages.addMessage(_("Mode: Custom (Selected Sections: {sections})").format(sections=', '.join(sections)))
             
-            messages.addMessage(f"Arguments passed to read_metadata.py: {args}")
+            messages.addMessage(_("Arguments passed to read_metadata.py: {args}").format(args=args))
 
             try:
                 status_code = rm.read_metadata(args)
                 if status_code != 0:
-                    raise Exception(f"The read_metadata.py script exited with a non-zero status code: {status_code}. This indicates an error occurred. Please check the script's logs if available.")
+                    raise Exception(_("The read_metadata.py script exited with a non-zero status code: {code}. This indicates an error occurred. Please check the script's logs if available.").format(code=status_code))
 
                 output_filename = _get_report_path(input_tiff, suffix, output_format)
                 
                 # Set derived output parameter
                 parameters[3].value = str(output_filename)
 
-                messages.addMessage(f"Report generated successfully: {output_filename}")
+                messages.addMessage(_("Report generated successfully: {path}").format(path=output_filename))
 
             except Exception as e:
-                messages.addErrorMessage(f"Read Metadata script failed with error: {e}")
+                messages.addErrorMessage(_("Read Metadata script failed with error: {error}").format(error=e))
                 import traceback
-                messages.addErrorMessage("Traceback:")
+                messages.addErrorMessage(_("Traceback:"))
                 messages.addErrorMessage(traceback.format_exc())
 
         except Exception as e:
-            messages.addErrorMessage(f"A critical error occurred in the tool's execute method: {e}")
+            messages.addErrorMessage(_("A critical error occurred in the tool's execute method: {error}").format(error=e))
             import traceback
             messages.addErrorMessage(traceback.format_exc())
-        messages.addMessage("--- ReadMetadata: execute method finished ---")
+        messages.addMessage(_("--- ReadMetadata: execute method finished ---"))
 
 
 class ValidateMetadata:
@@ -1521,17 +1564,17 @@ class ValidateMetadata:
 
     def __init__(self):
         """Define the tool class."""
-        self.label = "Validate Metadata"
-        self.description = "Validates GeoTIFF files against product-specific requirements defined in TOML rule files."
+        self.label = _("Validate Metadata")
+        self.description = _("Validates GeoTIFF files against product-specific requirements defined in TOML rule files.")
         self.icon = "icons/validate.png"
         self.canRunInBackground = False
-        self.category = "Metadata Tools"
+        self.category = _("Metadata Tools")
 
     def getParameterInfo(self):
         """Define parameter definitions."""
         # --- Parameter 0: Input GeoTIFF(s) ---
         param_input = arcpy.Parameter(
-            displayName="Input GeoTIFF(s)",
+            displayName=_("Input GeoTIFF(s)"),
             name="input_path",
             datatype=["DEFile", "DEFolder", "GPRasterLayer"],
             parameterType="Required",
@@ -1539,7 +1582,7 @@ class ValidateMetadata:
 
         # --- Parameter 1: Rules Directory ---
         param_rules_dir = arcpy.Parameter(
-            displayName="Rules Directory",
+            displayName=_("Rules Directory"),
             name="rules_dir",
             datatype="DEFolder",
             parameterType="Optional",
@@ -1552,7 +1595,7 @@ class ValidateMetadata:
 
         # --- Parameter 2: Product ---
         param_product = arcpy.Parameter(
-            displayName="Product",
+            displayName=_("Product"),
             name="product",
             datatype="GPString",
             parameterType="Required",
@@ -1563,7 +1606,7 @@ class ValidateMetadata:
 
         # --- Parameter 3: Sections (multivalue) ---
         param_sections = arcpy.Parameter(
-            displayName="Sections to Validate",
+            displayName=_("Sections to Validate"),
             name="sections",
             datatype="GPString",
             parameterType="Optional",
@@ -1576,7 +1619,7 @@ class ValidateMetadata:
 
         # --- Parameter 4: Name Filter ---
         param_name_filter = arcpy.Parameter(
-            displayName="Name Filter",
+            displayName=_("Name Filter"),
             name="name_filter",
             datatype="GPString",
             parameterType="Optional",
@@ -1585,7 +1628,7 @@ class ValidateMetadata:
 
         # --- Parameter 5: Output Directory ---
         param_output_dir = arcpy.Parameter(
-            displayName="Output Directory",
+            displayName=_("Output Directory"),
             name="output_dir",
             datatype="DEFolder",
             parameterType="Optional",
@@ -1593,7 +1636,7 @@ class ValidateMetadata:
 
         # --- Parameter 6: Write Individual Reports ---
         param_write_reports = arcpy.Parameter(
-            displayName="Write Individual Reports",
+            displayName=_("Write Individual Reports"),
             name="write_reports",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -1602,7 +1645,7 @@ class ValidateMetadata:
 
         # --- Parameter 7: Report Format ---
         param_report_format = arcpy.Parameter(
-            displayName="Report Format",
+            displayName=_("Report Format"),
             name="report_format",
             datatype="GPString",
             parameterType="Optional",
@@ -1613,7 +1656,7 @@ class ValidateMetadata:
 
         # --- Parameter 8: Open Report on Completion ---
         param_open_report = arcpy.Parameter(
-            displayName="Open Report on Completion",
+            displayName=_("Open Report on Completion"),
             name="open_report",
             datatype="GPBoolean",
             parameterType="Optional",
@@ -1622,7 +1665,7 @@ class ValidateMetadata:
 
         # --- Parameter 9: Output Folder (Derived) ---
         param_output_folder = arcpy.Parameter(
-            displayName="Output Folder",
+            displayName=_("Output Folder"),
             name="output_folder",
             datatype="DEFolder",
             parameterType="Derived",
@@ -1630,7 +1673,7 @@ class ValidateMetadata:
 
         # --- Parameter 10: JSON Summary Path (Derived) ---
         param_json_path = arcpy.Parameter(
-            displayName="JSON Summary Path",
+            displayName=_("JSON Summary Path"),
             name="json_output_path",
             datatype="DEFile",
             parameterType="Derived",
@@ -1668,7 +1711,7 @@ class ValidateMetadata:
                     ValidateMetadata._available_products = sorted(products.keys())
                     parameters[2].filter.list = ValidateMetadata._available_products
                 except Exception as e:
-                    arcpy.AddWarning(f"Could not load products: {e}")
+                    arcpy.AddWarning(_("Could not load products: {error}").format(error=e))
                     parameters[2].filter.list = []
                     ValidateMetadata._available_products = []
             else:
@@ -1701,32 +1744,33 @@ class ValidateMetadata:
             if input_path_str:
                 input_path = Path(input_path_str)
                 if not input_path.exists():
-                    parameters[0].setErrorMessage(f"Input path does not exist: {input_path}")
+                    parameters[0].setErrorMessage(_("Input path does not exist: {path}").format(path=input_path))
                 elif input_path.is_file() and input_path.suffix.lower() not in ['.tif', '.tiff']:
-                    parameters[0].setErrorMessage("Input file must be a GeoTIFF (.tif or .tiff)")
+                    parameters[0].setErrorMessage(_("Input file must be a GeoTIFF (.tif or .tiff)"))
                 else:
                     parameters[0].clearMessage()
 
         # Validate product selection
         if parameters[1].value and not parameters[2].value:
-            parameters[1].setWarningMessage("Select a product from the dropdown after loading the rules directory")
+            parameters[1].setWarningMessage(_("Select a product from the dropdown after loading the rules directory"))
 
         # Validate rules directory
         rules_dir = parameters[1].valueAsText
         if rules_dir:
             rules_path = Path(rules_dir)
             if not rules_path.exists():
-                parameters[1].setErrorMessage(f"Rules directory does not exist: {rules_dir}")
+                parameters[1].setErrorMessage(_("Rules directory does not exist: {path}").format(path=rules_dir))
             elif not rules_path.is_dir():
-                parameters[1].setErrorMessage("Path must be a directory")
+                parameters[1].setErrorMessage(_("Path must be a directory"))
             elif not list(rules_path.glob('*.toml')):
-                parameters[1].setErrorMessage("No TOML rule files found in directory")
+                parameters[1].setErrorMessage(_("No TOML rule files found in directory"))
             else:
                 parameters[1].clearMessage()
 
     def execute(self, parameters, messages):
         """Execute the validation tool."""
-        messages.addMessage("--- ValidateMetadata: execute method started ---")
+        messages.addMessage(_("--- ValidateMetadata: execute method started ---"))
+        messages.addMessage(i18n.explain_detection()[0])
 
         try:
             # --- Extract Parameters ---
@@ -1768,11 +1812,11 @@ class ValidateMetadata:
                 arc_mode=True
             )
 
-            messages.addMessage(f"Input: {args.input_path}")
-            messages.addMessage(f"Rules Directory: {args.rules_dir}")
-            messages.addMessage(f"Product: {args.product}")
-            messages.addMessage(f"Sections: {args.sections or 'All'}")
-            messages.addMessage(f"Output Folder: {args.output_folder}")
+            messages.addMessage(_("Input: {path}").format(path=args.input_path))
+            messages.addMessage(_("Rules Directory: {path}").format(path=args.rules_dir))
+            messages.addMessage(_("Product: {product}").format(product=args.product))
+            messages.addMessage(_("Sections: {sections}").format(sections=args.sections or _("All")))
+            messages.addMessage(_("Output Folder: {path}").format(path=args.output_folder))
 
             # --- Run Validation ---
             try:
@@ -1782,18 +1826,18 @@ class ValidateMetadata:
                 parameters[9].value = str(args.output_folder)
                 parameters[10].value = str(args.json_output_path)
 
-                messages.addMessage(f"Validation complete. Results saved to: {args.json_output_path}")
+                messages.addMessage(_("Validation complete. Results saved to: {path}").format(path=args.json_output_path))
 
             except Exception as e:
-                messages.addErrorMessage(f"Validation failed: {e}")
+                messages.addErrorMessage(_("Validation failed: {error}").format(error=e))
                 import traceback
-                messages.addErrorMessage("Traceback:")
+                messages.addErrorMessage(_("Traceback:"))
                 messages.addErrorMessage(traceback.format_exc())
 
         except Exception as e:
-            messages.addErrorMessage(f"A critical error occurred: {e}")
+            messages.addErrorMessage(_("A critical error occurred: {error}").format(error=e))
             import traceback
-            messages.addErrorMessage("Traceback:")
+            messages.addErrorMessage(_("Traceback:"))
             messages.addErrorMessage(traceback.format_exc())
 
-        messages.addMessage("--- ValidateMetadata: execute method finished ---")
+        messages.addMessage(_("--- ValidateMetadata: execute method finished ---"))
