@@ -80,6 +80,9 @@ input/
 output/
 temp/
 
+# Local notes, drafts and diagnostics (never packaged; MANIFEST.in prunes docs)
+docs/
+
 # Custom TOML validation rules
 # Keep example file only as a template
 gttk/resources/rules/*.toml

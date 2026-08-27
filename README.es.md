@@ -59,9 +59,11 @@ prácticas en un solo flujo de trabajo.
 - **Resuelve el problema del datum vertical.** Para datos de elevación, GTTK construye
   sistemas de coordenadas compuestos (horizontal + vertical) de forma nativa, y evita errores
   que pueden producir desplazamientos verticales de varios metros. El datum vertical se elige
-  por nombre; la lista incluye el **Geoide Gravimétrico Mexicano 2010 (GGM10)**, además de
-  EGM2008, EGM96, NAVD88 y otros. Sobre el caso del GGM10 en GeoTIFF hay una nota técnica en
-  español en [`docs/ggm10_epsg_code_proposal/`](docs/ggm10_epsg_code_proposal/CRS_vertical_personalizado_en_GeoTIFF.md).
+  por nombre: NAVD88, EGM2008, EGM96, CGVD2013 y otros. Para datos de México elija
+  **NAVD88 (EPSG:5703)**, el datum vertical que establece la Norma Técnica para el Sistema
+  Geodésico Nacional del INEGI; los modelos geoidales GGM10 y GGM25 son transformaciones
+  entre alturas elipsoidales y ortométricas, no datums, y por eso no figuran en la lista
+  (véase el [informe de ejemplo](example_reports/INEGI_f13a35e4_ms_NEW_meta.html)).
 - **Rápido y eficiente.** Las operaciones se realizan en memoria con el sistema de archivos
   virtual de GDAL, sin escribir archivos intermedios.
 - **Automatización de nivel experto.** Los valores predeterminados dependen del tipo de
@@ -101,8 +103,8 @@ Convierte un GeoTIFF —o todos los de una carpeta— en un COG comprimido y val
    el algoritmo, el predictor, los decimales de redondeo, las máscaras y el remuestreo de las
    pirámides con el perfil de ese tipo (véase [Perfiles por tipo de producto](#perfiles-por-tipo-de-producto)).
    Puede cambiar cualquier valor.
-3. Para un MDE es obligatorio el **Nombre del SRS vertical** (p. ej., GGM10, EGM2008,
-   NAVD88): con él se escribe el sistema de coordenadas compuesto.
+3. Para un MDE es obligatorio el **Nombre del SRS vertical** (p. ej., NAVD88, EGM2008,
+   CGVD2013): con él se escribe el sistema de coordenadas compuesto.
 4. Ejecute. Al terminar, la herramienta valida que la salida sea un COG correcto, genera un
    **informe de comparación** antes/después y, si lo desea, agrega el resultado al mapa.
 
