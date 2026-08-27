@@ -37,6 +37,7 @@ from gttk.utils.preprocessor import (
 from gttk.utils.script_arguments import OptimizeArguments
 from gttk.utils.data_models import GeoTiffInfo
 from gttk.utils.exceptions import ProcessingStepFailedError
+from tests.fixtures.custom_vertical_crs import CUSTOM_VERTICAL_WKT
 
 
 # ==============================================================================
@@ -758,7 +759,7 @@ class TestMainPreprocessingPipeline:
         assert area_or_point_image == 'Area'
     
     def test_preprocess_geotiff_compound_srs_handling(self, mock_geotiff_info):
-        """Compound CRS with custom vertical datum preserved in metadata."""
+        """A compound CRS whose vertical datum has no EPSG code is preserved in metadata."""
         args = Mock(spec=OptimizeArguments)
         args.algorithm = 'DEFLATE'
         args.product_type = 'dem'
@@ -766,7 +767,7 @@ class TestMainPreprocessingPipeline:
         args.nodata = None
         args.mask_nodata = None
         args.mask_alpha = False
-        args.vertical_srs = 'GGM10'  # Custom vertical (no EPSG)
+        args.vertical_srs = CUSTOM_VERTICAL_WKT  # Custom vertical (no EPSG), as WKT
         args.raster_type = None
         args.geo_metadata = False
         args.discard_lsb = False
@@ -777,7 +778,7 @@ class TestMainPreprocessingPipeline:
         # Create compound CRS
         from gttk.utils.srs_logic import get_srs_from_user_input, create_compound_srs
         horiz_srs = get_srs_from_user_input('EPSG:32610')
-        vert_srs = get_srs_from_user_input('GGM10')
+        vert_srs = get_srs_from_user_input(CUSTOM_VERTICAL_WKT)
         
         # Ensure SRS were created successfully
         assert horiz_srs is not None, "Failed to create horizontal SRS"
@@ -792,7 +793,7 @@ class TestMainPreprocessingPipeline:
             compound_wkt2 = result_ds.GetMetadataItem('COMPOUND_CRS_WKT2')
             
             assert compound_wkt2 is not None
-            assert 'GGM10' in compound_wkt2 or 'Gravimétrico' in compound_wkt2
+            assert 'Test Local' in compound_wkt2
     
     def test_preprocess_geotiff_statistics_embedded(self, mock_geotiff_info):
         """Band statistics calculated and embedded in output."""

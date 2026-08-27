@@ -1,3 +1,5 @@
+**English** | [Español](README.es.md)
+
 # GeoTIFF ToolKit (GTTK): GeoTIFF Analysis and Optimization Tools
 
 <p align="left">
@@ -24,6 +26,7 @@ A Python toolkit for analyzing, optimizing, and compressing GeoTIFF files. GTTK 
   - [Tool: Read Metadata](#tool-read-metadata-gttk-read)
   - [Tool: Validate Metadata](#tool-validate-metadata-gttk-validate)
 - [ArcGIS Pro Toolbox](#arcgis-pro-toolbox)
+  - [Toolbox Language](#toolbox-language)
 - [Configuration](#configuration)
 - [Advanced Tools: `gttk optimize-arc`](#advanced-tools-gttk-optimize-arc)
 - [User Recommendations & Best Practices](#user-recommendations--best-practices)
@@ -50,7 +53,7 @@ All tools feature automated report generation, intelligent data-aware processing
 
 GTTK is more than a compression script—it's an optimization engine that combines multiple best practices into a cohesive, easy-to-use toolkit.
 
-**Solves the Vertical Datum Problem**: For elevation data, GTTK handles compound coordinate systems natively, preventing common errors that can lead to vertical shifts of several meters. Assign vertical datums by name (e.g., `EGM2008`), EPSG code (e.g. `EPSG:5703`), or WKT string.
+**Solves the Vertical Datum Problem**: For elevation data, GTTK handles compound coordinate systems natively, preventing common errors that can lead to vertical shifts of several meters. Assign vertical datums by name (e.g., `NAVD88`, `EGM2008`, `CGVD2013`), EPSG code (e.g. `EPSG:5703`), or WKT string. For Mexican data choose **NAVD88 (EPSG:5703)**, the vertical datum established by INEGI's *Norma Técnica para el Sistema Geodésico Nacional*; the GGM10 and GGM25 geoid models are transformations between ellipsoidal and orthometric heights, not datums, which is why they are not on the list (see the [example report](example_reports/INEGI_f13a35e4_ms_NEW_meta.html)).
 
 **Fast and Efficient**: All operations are performed in-memory using GDAL's virtual file system, avoiding intermediate file writes. This significantly improves performance, especially for large files or complex processing chains.
 
@@ -321,8 +324,8 @@ gttk optimize -i scientific.tif -o scientific_lerc.tif -t scientific -a LERC \
 - For comparison, the OLD report shows the XML in `text` format and the NEW report shows it in `table` format.
 - GTTK translated the ISO-8859-1 (Latin-1) character encoding to UTF-8, preserving the special characters.
 - The input NoData value (-3.402823466385289e+38) is problematic because it is read as `-inf` by software, causing calculation errors; mapping those pixels to NaN solved the problem.
-- The NEW file assigns the vertical datum required by the Geoide Gravimétrico Mexicano 2010 (GGM10), which lacks an EPSG code. Because GeoTIFF only stores EPSG codes in GeoKeys, the full compound CRS is stored in the GDAL metadata item `COMPOUND_CRS_WKT2` so the information is not lost.
-- The Esri Projection Engine (PE) String in the OLD header was removed from the NEW header because the 2D Projected CS was replaced with the 3D Compound CRS with GGM10 height.
+- The NEW file carries the vertical datum that INEGI's *Norma Técnica para el Sistema Geodésico Nacional* defines for Mexico, NAVD88 height (EPSG:5703), in the compound CRS "Mexico ITRF2008 / UTM zone 13N + NAVD88 height". GeoTIFF 1.1 stores it as `ProjectedCRSGeoKey` 6368 and `VerticalGeoKey` 5703, so it reads back intact in every GIS. INEGI's geoid model GGM10 is the *transformation* between ITRF2008 ellipsoidal heights and NAVD88 orthometric heights, not a datum, and is not written into the file: PROJ and Esri both already apply it when asked to move between the two.
+- The Esri Projection Engine (PE) String in the OLD header was removed from the NEW header because the 2D Projected CS was replaced with the 3D Compound CRS with NAVD88 height.
 - Updating from GeoTIFF v1.0 to v1.1 ([OGC GeoTIFF Standard](https://www.ogc.org/standards/geotiff/)) reduced the GeoKey Directory complexity, dropping GeoKey count from 17 to 4 for the *horizontal components* and removing the "User-Defined" `GeographicCSTypeGeoKey`/`ProjectedCSTypeGeoKey` types assigned by Esri for the "Mexico ITRF2008 / UTM zone 13N" projected CRS.
 - The `Tiling and Overviews` section includes pyramids in the external `.ovr` file as the only IFD is the main image. (Note: The `.ovr` files are NOT factored into the file size or space savings calculations).
 
@@ -582,9 +585,31 @@ The GTTK ArcGIS Pro Toolbox stored in `toolbox/GTTK_Toolbox.pyt` provides a comp
 
 The ArcGIS Pro Toolbox requires:
 1. **OSGeo4W with GDAL** - A standalone GDAL environment isolated from ArcGIS Pro's internal GDAL
-2. **Python environment with tifffile** - A cloned ArcGIS Pro conda environment with the `tifffile` package installed
+2. **Python environment with tifffile** - A cloned ArcGIS Pro conda environment with the `tifffile` and `jsonpath-ng` packages installed, made the active environment
 
 For detailed installation and configuration instructions, see the **[Toolbox Setup Guide](toolbox/README.md)**.
+
+### Toolbox Language
+
+The toolbox displays in English or Spanish. When ArcGIS Pro loads it, the toolbox picks
+the language in this order and says so in the first line of every run's messages
+(`Language: es (source: ...)`):
+
+1. The `GTTK_LANG` environment variable (`en` or `es`).
+2. `config.toml` -- `[gui] language = "auto"` (default), `"en"` or `"es"`.
+3. The display language chosen in ArcGIS Pro's **Options > Language** (only offered once
+   an Esri language pack is installed).
+4. The Windows display language.
+
+Labels, choices, validation messages, run messages and the parameter help panel follow
+the language; reports, GDAL's own output and the CLI stay in English. To force a
+language, set `language = "es"` in `config.toml` and right-click the toolbox in the
+Catalog pane → **Refresh** -- no restart needed. ArcGIS Pro's own interface needs Esri's
+language pack to change language; the toolbox does not.
+
+Translations live in `gttk/resources/i18n/` (strings) and `toolbox/i18n/` (help
+sidecars); see [DEVELOPER.md](DEVELOPER.md#translating-the-toolbox) to edit or add one.
+There is also a Spanish guide: [README.es.md](README.es.md).
 
 ---
 
@@ -599,6 +624,10 @@ GTTK uses a `config.toml` file for system-specific settings. This is primarily r
 # Path to OSGeo4W installation (required for ArcGIS Toolbox)
 osgeo4w = "C:/OSGeo4W"
 
+[gui]
+# Language of the ArcGIS Pro toolbox: "auto" (follow ArcGIS Pro, then Windows), "en" or "es"
+language = "auto"
+
 [logging]
 # Logging Configuration
 level = "INFO"
@@ -607,7 +636,7 @@ file = "gttk.log"
 
 ### When to Edit
 
-- **ArcGIS Pro Users**: Update `osgeo4w` path in `config.toml` to match your OSGeo4W installation
+- **ArcGIS Pro Users**: Update `osgeo4w` path in `config.toml` to match your OSGeo4W installation; set `language` to force the toolbox's language
 - **CLI Users**: Generally no configuration needed; all settings can be passed as command-line arguments
 - **Batch Processing**: Customize defaults in `config.toml` to streamline repetitive tasks
 

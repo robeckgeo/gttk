@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **The ArcGIS Pro toolbox now speaks Spanish.** When Pro loads it, the toolbox picks
+  its language -- `GTTK_LANG`, then `config.toml` `[gui] language`, then the display
+  language chosen in Pro's Options, then the Windows display language -- and shows its
+  labels, choices, validation messages, run messages and the parameter help panel in that
+  language. Strings live in a reviewable TOML catalog keyed by the English text
+  (`gttk/resources/i18n/es.toml`); the help sidecars live per language under
+  `toolbox/i18n/` and are copied beside the toolbox on load. Dialog choices are now codes
+  behind translated labels, so a run saved to History under one language still runs under
+  another. A Spanish guide (`README.es.md`) and setup guide (`toolbox/README.es.md`)
+  accompany it, and tests pin the catalog and every sidecar to the dialog.
+
 - **Every run now logs the settings it resolved, and where each one came from** --
   a profile value, a codec default, an inherited flag, a caller's explicit choice, or a
   clamp forced by the raster's data type. It replaces a single-line dump of the
@@ -28,6 +39,33 @@ All notable changes to this project will be documented in this file.
   little on 8-bit RGB and its lossy mode is beaten by JPEG/JXL at every quality. The
   `thematic` benchmark preset already carried a `LERC` row at `max_z_error=0`; until now
   that row could never run.
+
+### Fixed
+
+- **`Optimize Compression` from the ArcGIS toolbox failed on every run** with
+  `NameError: name 'gdal_env' is not defined`: the entry point applied
+  `gdal_env(GDAL_OPTIONS_ARC)` without importing either name. Its log lines -- the
+  resolved-settings block included -- also had no handler when called from the toolbox,
+  so they never reached the geoprocessing pane; they do now, for the duration of the call.
+- **The Optimize help side panel documented 23 of the dialog's 28 parameters** and
+  described the raster-type default backwards. It now covers every parameter, and a test
+  keeps each language's sidecar in step with the dialog.
+- The toolbox's "CompressionReport Format" label gets its missing space; Read Metadata no
+  longer pre-fills `Text`/`Table` into a lowercase value list; Optimize and Test
+  Compression share one product-type list (`Error Model`, with the old
+  `Generic Point-cloud Model` still accepted).
+
+- **`gttk optimize` and `gttk read` could hang at the histogram step wherever a display
+  is advertised.** The histogram generator imported pyplot without choosing a backend, so
+  matplotlib took a GUI one (QtAgg under WSLg, which sets `DISPLAY` for every shell) and
+  then blocked on the compositor socket; a headless run sat at 1% CPU until its timeout.
+  The module now selects the Agg backend before pyplot loads -- the histogram is a PNG for
+  the report, never a window -- and a test imports it with a display advertised and checks
+  the backend it got.
+- **The vertical-datum list offered "European Vertical Reference Frame 2020 (EVRF2020)"
+  for `EPSG:5730`, which is EVRF2000 height** -- no EVRF2020 exists. The entry and its
+  `EVRF2020` abbreviation now say EVRF2000, and a test pins every name in both maps to
+  the name PROJ returns for its code, so a label can no longer drift from what it writes.
 
 ### Changed
 
@@ -60,6 +98,31 @@ All notable changes to this project will be documented in this file.
   legible failure. Importing GTTK without GDAL now raises an `ImportError` naming that
   exact error and the conda-forge command that fixes it. Use `pip install ".[gdal]"`
   only where the GDAL library and its headers are already present.
+
+- **The INEGI example reports were regenerated with NAVD88 height (EPSG:5703)**, the
+  vertical datum INEGI's Norma Técnica defines for Mexico, in place of the invented GGM10
+  vertical CRS they used to show. The NEW report now carries a compound CRS that the
+  GeoKeys hold on their own (`ProjectedCRSGeoKey` 6368, `VerticalGeoKey` 5703) and no
+  `COMPOUND_CRS_WKT2` fallback; the README's description of the example changes with it.
+
+### Removed
+
+- **The "Geoide Gravimétrico Mexicano 2010 (GGM10)" vertical datum.** A geoid model is
+  the *transformation* between ellipsoidal heights (h) and orthometric heights (H); it is
+  not a datum, and offering it as one was the wrong tool. GTTK shipped GGM10 as a
+  hand-written vertical CRS with no EPSG code, and that cost twice over: the name did
+  not survive the GeoTIFF GeoKeys (`VerticalDatumGeoKey` 32767, `VDATUM["unknown"]`),
+  and no software can transform *from* an invented datum -- PROJ falls back to a
+  "ballpark" `+proj=noop`, a silent zero. Mexico's vertical datum is NAVD88 (INEGI,
+  Norma Técnica para el Sistema Geodésico Nacional, DOF 23-Dec-2010, art. 15), and both
+  Esri (WKID 110232, `Mexico_ITRF2008_To_NAVD88_Height_GGM10`) and PROJ
+  (`PROJ:EPSG_6364_TO_EPSG_5703`, via the grid `mx_inegi_ggm10.tif`) already model GGM10
+  as the transformation onto it. Choose `NAVD88` / `EPSG:5703` instead; the ArcGIS
+  dropdown loses the entry with it, and the custom-WKT registry that existed only to
+  serve it is gone. What remains is the generic path: a vertical CRS supplied as a WKT
+  string still builds a compound CRS, and because the GeoKeys cannot carry a datum
+  without an EPSG code, its full WKT2 is still stored in the `COMPOUND_CRS_WKT2`
+  metadata item and read back from there.
 
 ### Fixed
 
@@ -137,6 +200,11 @@ All notable changes to this project will be documented in this file.
   is now re-asserted on the final write (`-a_srs`, an assignment -- pixels and the geotransform are
   untouched). Verified on a real TREx cell: the output now reports compound `EPSG:9518` and vertical
   `EPSG:3855`, where before both were absent.
+- **`AHD`, `NZVD2016` and `JGD2000` could not be typed as vertical-datum abbreviations.**
+  Their keys in the abbreviation map carried a stray closing parenthesis (`"AHD)"`), which
+  no upper-cased input could ever match, so the three were reachable only by their full
+  dropdown name or by EPSG code. A test now checks that every key is typeable and that
+  every value is an EPSG code the PROJ database resolves.
 - **Categorical overviews were interpolated.** On the COG path GTTK never emitted
   `OVERVIEW_RESAMPLING`, so the driver fell back to its own default (`CUBIC` for any band without a
   colour table) and blended class codes together in the pyramids of `thematic` products. Measured on

@@ -78,6 +78,7 @@ gttk = [
     "resources/**/*.qml",
     "resources/**/*.ui",
     "resources/**/*.txt",
+    "resources/i18n/*.toml",
 ]
 
 [tool.setuptools.exclude-package-data]

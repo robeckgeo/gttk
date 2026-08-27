@@ -1,0 +1,204 @@
+# Spanish catalog for the ArcGIS Pro toolbox (toolbox/GTTK_Toolbox.pyt).
+#
+# Keys are the English source strings exactly as written in the toolbox (section
+# titles come from gttk/utils/section_registry.py); values are what a Spanish ArcGIS
+# Pro shows.  The tables only organise the file for review -- lookups are flat, so no
+# key may appear twice anywhere in the file.  Keep every {placeholder} from the key.
+# tests/unit/test_i18n_catalog.py checks all of that.
+#
+# Style:
+#   - Neutral Latin-American Spanish with Mexican conventions (archivo, carpeta, equipo).
+#   - Esri's ArcGIS Pro Spanish glossary for interface terms, so the toolbox reads like
+#     the rest of a Spanish Pro: ráster, capa ráster, pirámides (overviews), teselas
+#     (tiles), máscara, banda alfa, informe, referencia espacial, geoprocesamiento,
+#     caja de herramientas, cuadro de diálogo.
+#   - Messages address the user as "usted"; labels use nouns or infinitives.
+#   - Untranslated: GeoTIFF, COG, GDAL, codec names (DEFLATE, LERC, JPEG XL...), NoData,
+#     PROJJSON, WKT, IFD, PAM, XMP, XML, TIFF tag numbers, file extensions.
+#   - Predictor labels keep their leading digit ("2 - ...").
+
+[toolbox]
+"GTTK Toolbox" = "Caja de herramientas GTTK"
+"Compression Tools" = "Herramientas de compresión"
+"Metadata Tools" = "Herramientas de metadatos"
+"Overview and Performance" = "Pirámides y rendimiento"
+"Compare Compression" = "Comparar compresión"
+"Compares two GeoTIFFs and generates a detailed compression report." = "Compara dos GeoTIFF y genera un informe detallado de la compresión."
+"Optimize Compression" = "Optimizar compresión"
+"Optimizes and compresses a GeoTIFF into a Cloud Optimized GeoTIFF (COG) with advanced options." = "Optimiza y comprime un GeoTIFF en un GeoTIFF optimizado para la nube (COG) con opciones avanzadas."
+"Test Compression" = "Probar compresión"
+"Tests multiple compression settings from CSV configurations and generates detailed Excel reports comparing performance and efficiency." = "Prueba múltiples configuraciones de compresión definidas en archivos CSV y genera informes detallados en Excel que comparan rendimiento y eficiencia."
+"Read Metadata" = "Leer metadatos"
+"Reads the metadata in a GeoTIFF header and generates a report in Markdown or HTML format." = "Lee los metadatos del encabezado de un GeoTIFF y genera un informe en formato Markdown o HTML."
+"Validate Metadata" = "Validar metadatos"
+"Validates GeoTIFF files against product-specific requirements defined in TOML rule files." = "Valida archivos GeoTIFF contra los requisitos propios de cada producto definidos en archivos de reglas TOML."
+
+[toolbox.picklists]
+"1 - None" = "1 - Ninguno"
+"2 - Horizontal differencing" = "2 - Diferenciación horizontal"
+"3 - Floating-point" = "3 - Punto flotante"
+"Digital Elevation Model" = "Modelo digital de elevación (MDE)"
+"Error Model" = "Modelo de error"
+"Orthoimage or Basemap" = "Ortoimagen o mapa base"
+"Thematic Data (e.g. Landcover)" = "Datos temáticos (p. ej., cobertura del suelo)"
+"Scientific Data (e.g. Chemistry)" = "Datos científicos (p. ej., química)"
+"Use Product Type Presets" = "Usar preajustes por tipo de producto"
+"Use Custom CSV File" = "Usar archivo CSV personalizado"
+"Producer" = "Productor"
+"Analyst" = "Analista"
+"Custom" = "Personalizado"
+"complete" = "completo"
+"compact" = "compacto"
+"table" = "tabla"
+"text" = "texto"
+
+[toolbox.parameters]
+# Compare Compression
+"Baseline or Input GeoTIFF 1 (e.g., Original)" = "GeoTIFF 1 de referencia o de entrada (p. ej., el original)"
+"Comparison or Output GeoTIFF 2 (e.g., Processed)" = "GeoTIFF 2 de comparación o de salida (p. ej., el procesado)"
+"Report File Format" = "Formato del archivo de informe"
+"Report Filename Suffix" = "Sufijo del nombre del informe"
+"Report File Path" = "Ruta del archivo de informe"
+"Open Report on Completion" = "Abrir el informe al terminar"
+# Optimize Compression
+"Input GeoTIFF, Raster Layer, or Folder" = "GeoTIFF, capa ráster o carpeta de entrada"
+"Output GeoTIFF or Folder" = "GeoTIFF o carpeta de salida"
+"Product Type" = "Tipo de producto"
+"Raster Type" = "Tipo de ráster"
+"Vertical SRS Name" = "Nombre del SRS vertical"
+"NoData Value" = "Valor NoData"
+"Compression Algorithm" = "Algoritmo de compresión"
+"JPEG/JXL Quality" = "Calidad JPEG/JXL"
+"Predictor" = "Predictor"
+"Compression Level" = "Nivel de compresión"
+"Max Z Error (LERC)" = "Error Z máximo (LERC)"
+"Decimal Places for Rounding" = "Decimales para el redondeo"
+"Tile Size (in pixels)" = "Tamaño de tesela (en píxeles)"
+"Write External XML to GEO_METADATA Tag" = "Escribir el XML externo en la etiqueta GEO_METADATA"
+"Write Statistics XML (.aux.xml)" = "Escribir el XML de estadísticas (.aux.xml)"
+"Create Cloud Optimized GeoTIFF" = "Crear GeoTIFF optimizado para la nube (COG)"
+"Generate Internal Overviews" = "Generar pirámides internas"
+"Mask NoData Pixels (if any)" = "Enmascarar los píxeles NoData (si los hay)"
+"Convert Alpha Band (if one exists) to Internal Mask" = "Convertir la banda alfa (si existe) en máscara interna"
+"Add Output to Map" = "Agregar la salida al mapa"
+"Compression Report Format" = "Formato del informe de compresión"
+"Overview Resampling" = "Remuestreo de las pirámides"
+"Overview Compression" = "Compresión de las pirámides"
+"Overview Predictor" = "Predictor de las pirámides"
+"Worker Threads" = "Hilos de trabajo"
+"Generate Comparison Report" = "Generar informe de comparación"
+# Test Compression
+"Source GeoTIFF, Raster Layer, or Folder" = "GeoTIFF, capa ráster o carpeta de origen"
+"Output Excel Report" = "Informe Excel de salida"
+"Input Method" = "Método de entrada"
+"Product Type (for Preset Selection)" = "Tipo de producto (para elegir el preajuste)"
+"Custom CSV Configuration File" = "Archivo CSV de configuración personalizado"
+"Temporary Files Directory" = "Directorio de archivos temporales"
+"Delete Temporary Test Files" = "Eliminar los archivos temporales de prueba"
+"Open Excel Report on Completion" = "Abrir el informe Excel al terminar"
+# Read Metadata
+"Input GeoTIFF or Raster Layer" = "GeoTIFF o capa ráster de entrada"
+"Output Format" = "Formato de salida"
+"Output Filename Suffix" = "Sufijo del nombre de salida"
+"Output Report File" = "Archivo de informe de salida"
+"Image File Directory (IFD)" = "Directorio de archivo de imagen (IFD)"
+"Banner Text" = "Texto del encabezado"
+"Reader Type" = "Tipo de lector"
+"Tag Scope" = "Alcance de las etiquetas"
+"XML Format" = "Formato del XML"
+# Validate Metadata
+"Input GeoTIFF(s)" = "GeoTIFF de entrada (uno o varios)"
+"Rules Directory" = "Directorio de reglas"
+"Product" = "Producto"
+"Sections to Validate" = "Secciones a validar"
+"Name Filter" = "Filtro por nombre"
+"Output Directory" = "Directorio de salida"
+"Write Individual Reports" = "Escribir informes individuales"
+"Report Format" = "Formato del informe"
+"Output Folder" = "Carpeta de salida"
+"JSON Summary Path" = "Ruta del resumen JSON"
+
+[toolbox.sections]
+# Report sections of Read Metadata (titles from gttk/utils/section_registry.py)
+"TIFF Tags" = "Etiquetas TIFF"
+"GDAL_METADATA (Tag 42112)" = "GDAL_METADATA (etiqueta 42112)"
+"Extensible Metadata Platform (XMP)" = "Plataforma de metadatos extensible (XMP)"
+"GeoKey Directory" = "Directorio de GeoKeys"
+"Spatial Reference" = "Referencia espacial"
+"GeoTransform" = "GeoTransform (transformación afín)"
+"Bounding Box" = "Cuadro delimitador"
+"Geographic Extent" = "Extensión geográfica"
+"Statistics" = "Estadísticas"
+"Histogram" = "Histograma"
+"ESRI Projection Engine (PE) String" = "Cadena del Projection Engine (PE) de Esri"
+"Well Known Text 2 String" = "Cadena Well Known Text 2 (WKT2)"
+"PROJJSON String" = "Cadena PROJJSON"
+"Tiling and Overviews" = "Teselado y pirámides"
+"Image File Directory (IFD) List" = "Lista de directorios de archivo de imagen (IFD)"
+"COG Validation" = "Validación COG"
+"GEO_METADATA (Tag 50909)" = "GEO_METADATA (etiqueta 50909)"
+"External XML Metadata File" = "Archivo XML externo de metadatos"
+"Precision Auxiliary Metadata (PAM)" = "Metadatos auxiliares de precisión (PAM)"
+
+[toolbox.messages]
+"Language: {lang} (source: {source})" = "Idioma: {lang} (origen: {source})"
+# Parameter validation
+"Product Type is required when using presets." = "El tipo de producto es obligatorio al usar preajustes."
+"CSV file is required when using custom configuration." = "El archivo CSV es obligatorio al usar una configuración personalizada."
+"Input path does not exist: {path}" = "La ruta de entrada no existe: {path}"
+"Input file must be a GeoTIFF (.tif or .tiff)" = "El archivo de entrada debe ser un GeoTIFF (.tif o .tiff)"
+"Select a product from the dropdown after loading the rules directory" = "Seleccione un producto de la lista después de cargar el directorio de reglas"
+"Rules directory does not exist: {path}" = "El directorio de reglas no existe: {path}"
+"Path must be a directory" = "La ruta debe ser un directorio"
+"No TOML rule files found in directory" = "No se encontraron archivos de reglas TOML en el directorio"
+"Could not load products: {error}" = "No se pudieron cargar los productos: {error}"
+# Shared
+"Traceback:" = "Rastreo de la pila (traceback):"
+"Report generated successfully: {path}" = "Informe generado correctamente: {path}"
+"An error occurred: {error}" = "Ocurrió un error: {error}"
+"A critical error occurred: {error}" = "Ocurrió un error crítico: {error}"
+# Compare Compression
+"The compare_compression script failed to generate a report. See messages above for details." = "El script compare_compression no pudo generar el informe. Consulte los mensajes anteriores para más detalles."
+# Optimize Compression
+"Invalid NoData value provided: {value}" = "El valor NoData indicado no es válido: {value}"
+"Vertical SRS is required for Digital Elevation Models." = "Los modelos digitales de elevación requieren un SRS vertical."
+"Multi-band rasters ({bands} bands) are not supported for the '{product}' product type. Use '{image}' or '{scientific}' instead." = "Los rásteres multibanda ({bands} bandas) no son compatibles con el tipo de producto '{product}'. Use '{image}' o '{scientific}' en su lugar."
+"Could not validate band count: {error}" = "No se pudo comprobar el número de bandas: {error}"
+"If the input has an alpha band, using JPEG compression without converting it to an internal mask may cause issues. The backend process will validate this." = "Si la entrada tiene una banda alfa, usar compresión JPEG sin convertirla en máscara interna puede causar problemas. El proceso de fondo lo verificará."
+"JPEG compression does not support a preserved alpha band. Re-enable '{mask_alpha}' to convert the alpha to an internal mask, or choose a different algorithm such as JXL or DEFLATE." = "La compresión JPEG no admite conservar la banda alfa. Vuelva a activar '{mask_alpha}' para convertir la banda alfa en máscara interna, o elija otro algoritmo como JXL o DEFLATE."
+"Tool completed successfully." = "La herramienta terminó correctamente."
+"Added {name} to the map." = "Se agregó {name} al mapa."
+"No active map found to add the output raster." = "No se encontró un mapa activo al que agregar el ráster de salida."
+"Could not add the output raster to the map: {error}" = "No se pudo agregar el ráster de salida al mapa: {error}"
+"An unexpected error occurred in the toolbox script: {error}" = "Ocurrió un error inesperado en el script de la caja de herramientas: {error}"
+# Test Compression
+"Product Type must be specified when using presets." = "Debe indicar el tipo de producto al usar preajustes."
+"CSV file must be specified when using custom configuration." = "Debe indicar el archivo CSV al usar una configuración personalizada."
+"Invalid input method specified." = "El método de entrada indicado no es válido."
+"Starting compression testing with arguments: {args}" = "Iniciando las pruebas de compresión con los argumentos: {args}"
+"The test_compression script failed (Exit Code {code})." = "El script test_compression falló (código de salida {code})."
+"Full debug log available at: {path}" = "Registro de depuración completo disponible en: {path}"
+"Compression testing failed. See messages above or log file for details." = "Las pruebas de compresión fallaron. Consulte los mensajes anteriores o el archivo de registro para más detalles."
+"Compression testing completed successfully." = "Las pruebas de compresión terminaron correctamente."
+"Results saved to: {path}" = "Resultados guardados en: {path}"
+"Test Compression script failed: {error}" = "El script de Probar compresión falló: {error}"
+# Read Metadata
+"--- ReadMetadata: execute method started ---" = "--- ReadMetadata: inicio de la ejecución ---"
+"--- ReadMetadata: execute method finished ---" = "--- ReadMetadata: fin de la ejecución ---"
+"Mode: Preset ({mode})" = "Modo: preajuste ({mode})"
+"Mode: Custom (Selected Sections: {sections})" = "Modo: personalizado (secciones seleccionadas: {sections})"
+"Arguments passed to read_metadata.py: {args}" = "Argumentos pasados a read_metadata.py: {args}"
+"The read_metadata.py script exited with a non-zero status code: {code}. This indicates an error occurred. Please check the script's logs if available." = "El script read_metadata.py terminó con un código de salida distinto de cero: {code}. Esto indica que ocurrió un error. Revise los registros del script si están disponibles."
+"Read Metadata script failed with error: {error}" = "El script de Leer metadatos falló con el error: {error}"
+"A critical error occurred in the tool's execute method: {error}" = "Ocurrió un error crítico en el método execute de la herramienta: {error}"
+# Validate Metadata
+"--- ValidateMetadata: execute method started ---" = "--- ValidateMetadata: inicio de la ejecución ---"
+"--- ValidateMetadata: execute method finished ---" = "--- ValidateMetadata: fin de la ejecución ---"
+"Input: {path}" = "Entrada: {path}"
+"Rules Directory: {path}" = "Directorio de reglas: {path}"
+"Product: {product}" = "Producto: {product}"
+"Sections: {sections}" = "Secciones: {sections}"
+"All" = "Todas"
+"Output Folder: {path}" = "Carpeta de salida: {path}"
+"Validation complete. Results saved to: {path}" = "Validación completada. Resultados guardados en: {path}"
+"Validation failed: {error}" = "La validación falló: {error}"

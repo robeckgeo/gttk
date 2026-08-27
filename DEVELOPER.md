@@ -255,6 +255,47 @@ as they are on purpose:
 `OptimizeCompression.write_pam_xml` used to diverge too (`False` against the CLI's
 `True`); that one was a plain bug and now matches.
 
+## Translating the toolbox
+
+The ArcGIS toolbox chooses its language when ArcGIS Pro loads it
+(`gttk/i18n.py`, `detect_language()`): `GTTK_LANG`, then `config.toml`
+`[gui] language`, then the `ARCGISPRO_UILANGID` registry value Pro writes when a display
+language is chosen in its Options, then the Windows display language. `arcpy` exposes no
+language API, and Python's `locale` reflects the Windows *region format* rather than the
+display language, so it is only a last resort off Windows. Esri's documented alternative
+-- shipping the toolbox as an installed Python module with an `esri/help/<lang>/gp` tree
+-- was not used: the toolbox is delivered by cloning the repository, and that route still
+leaves the `.pyt` labels in English.
+
+Three surfaces carry the strings:
+
+| Surface | Where it lives | Pinned by |
+|---|---|---|
+| labels, choices and messages in `toolbox/GTTK_Toolbox.pyt` | `gttk/resources/i18n/<lang>.toml`, keyed by the English string | `tests/unit/test_i18n_catalog.py` |
+| the parameter help panel (`.pyt.xml` sidecars) | `toolbox/i18n/<lang>/`, copied beside the `.pyt` when it loads (the copies are gitignored) | `tests/unit/test_toolbox_sidecars.py` |
+| detection, catalogs and `Picklist` | `gttk/i18n.py` | `tests/unit/test_i18n.py` |
+
+Rules that keep it honest:
+
+- Wrap every user-visible literal in `_()`. Use named placeholders and `.format()` after
+  translating -- never an f-string inside `_()`.
+- Dialog choices are `Picklist`s: the toolbox compares *codes*, `N_()` marks the English
+  label, and `Picklist.code()` accepts the label in any language, so a run saved to History
+  or copied as a Python command under one language still runs under another.
+- A new string needs an entry in every catalog and a removed one must leave them; a
+  sidecar must document exactly the dialog's parameters under that language's labels. The
+  tests above fail otherwise.
+- A sidecar's `dialogReference` must be rich text (`<DIV><DIV><P><SPAN>…`), the form
+  Esri's metadata editor writes: Pro's item-description stylesheet drops plain text and
+  shows "no reference for this parameter" instead. The sidecar test enforces it.
+- After editing anything -- a catalog, a sidecar, `gttk/i18n.py` or any other `gttk`
+  module -- right-click the toolbox in the Catalog pane and **Refresh**. Pro re-executes
+  only the `.pyt`, so the toolbox re-imports the whole `gttk` package itself on every
+  load; only packages outside `gttk` still need a Pro restart.
+- To add a language, add its code to `SUPPORTED`, a `<code>.toml` catalog and a
+  `toolbox/i18n/<code>/` directory of sidecars; the tests parametrise over every
+  language they find there.
+
 ## Third-Party Code
 
 This project includes code from the following external source:

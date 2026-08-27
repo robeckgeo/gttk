@@ -19,6 +19,12 @@ environments like ArcGIS Pro.
 import base64
 import io
 import logging
+import matplotlib
+# Histograms are rendered to PNG bytes for the report; no window is ever shown.
+# Select the headless backend before pyplot is imported, because matplotlib
+# otherwise picks a GUI backend wherever a display is advertised (WSLg sets
+# DISPLAY, and QtAgg then blocks on the compositor socket in a headless run).
+matplotlib.use("Agg")
 from matplotlib.axes import Axes
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt

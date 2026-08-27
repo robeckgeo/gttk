@@ -29,6 +29,8 @@ from pathlib import Path
 from osgeo import gdal, osr
 
 from gttk.utils.srs_logic import (
+    VERTICAL_SRS_NAME_MAP,
+    VERTICAL_SRS_ABBREV_MAP,
     get_srs_from_user_input,
     standardize_srs,
     get_horizontal_srs,
@@ -38,6 +40,10 @@ from gttk.utils.srs_logic import (
     handle_srs_logic
 )
 from gttk.utils.exceptions import ProcessingStepFailedError
+from tests.fixtures.custom_vertical_crs import (
+    CUSTOM_VERTICAL_WKT,
+    CUSTOM_VERTICAL_WKT_NO_AUTHORITY,
+)
 
 
 # ==============================================================================
@@ -173,15 +179,33 @@ class TestGetSrsFromUserInput:
         assert srs.GetAuthorityCode(None) == "3855"
         assert srs.IsVertical() == 1  # OSR returns 1 for True
     
-    def test_parse_custom_ggm10(self):
-        """Test parsing custom GGM10 (no EPSG code, uses custom WKT registry)."""
-        srs = get_srs_from_user_input("GGM10")
+    def test_parse_vertical_wkt_input(self):
+        """A vertical CRS with no EPSG code arrives as WKT and is used verbatim."""
+        srs = get_srs_from_user_input(CUSTOM_VERTICAL_WKT)
         
         assert srs is not None
         assert srs.IsVertical() == 1  # OSR returns 1 for True
-        # GGM10 name should be in the SRS
-        name = srs.GetName()
-        assert "GGM10" in name or "Gravimétrico" in name or "Mexicano" in name
+        assert "Test Local" in srs.GetName()
+    
+    def test_unregistered_vertical_name_returns_none(self):
+        """GGM10 is a geoid model -- the transformation onto NAVD88, Mexico's datum -- not
+        a datum, so it left the maps and the WKT registry that served it is gone. The
+        bare name reaches GDAL's SetFromUserInput, which fails on it (verified on
+        GDAL 3.12: 'OGR Error: Corrupt data'), so the function returns None rather
+        than inventing a CRS. The old dropdown label fails the same way."""
+        assert get_srs_from_user_input("GGM10") is None
+        assert get_srs_from_user_input("Geoide Gravimétrico Mexicano 2010 (GGM10)") is None
+    
+    def test_parse_ahd_nzvd2016_jgd2000(self):
+        """The AHD, NZVD2016 and JGD2000 abbreviations resolve. Their map keys used to
+        carry a stray closing parenthesis ("AHD)"), which no upper-cased input could
+        ever match, so the three were reachable only by full name or EPSG code."""
+        for abbrev, code in (("AHD", "5711"), ("NZVD2016", "7839"), ("JGD2000", "6694")):
+            srs = get_srs_from_user_input(abbrev)
+            
+            assert srs is not None, abbrev
+            assert srs.GetAuthorityCode(None) == code, abbrev
+            assert srs.IsVertical() == 1, abbrev  # OSR returns 1 for True
     
     def test_parse_vertical_name_cgvd2013(self):
         """Test parsing CGVD2013 Canadian vertical datum."""
@@ -258,6 +282,81 @@ class TestGetSrsFromUserInput:
         srs_mixed = get_srs_from_user_input("Egm96")
         assert srs_mixed is not None
         assert srs_mixed.GetAuthorityCode(None) == "5773"
+
+
+class TestVerticalSrsMaps:
+    """The name and abbreviation maps must hold only real EPSG vertical CRS codes."""
+    
+    def test_vertical_maps_contain_only_epsg_codes(self):
+        """A value of 0 once flagged a 'custom' entry (GGM10) that was resolved from a
+        WKT registry instead of the EPSG database. Geoid models are transformations,
+        not datums, so that mechanism is gone: every value must be a code PROJ
+        resolves, and it must be a vertical CRS (or a 3D geographic one)."""
+        for key, code in {**VERTICAL_SRS_NAME_MAP, **VERTICAL_SRS_ABBREV_MAP}.items():
+            assert code != 0, f"{key!r} carries no EPSG code"
+            srs = osr.SpatialReference()
+            assert srs.ImportFromEPSG(code) == 0, f"{key!r}: EPSG:{code} does not resolve"
+            is_3d_geographic = srs.IsGeographic() == 1 and srs.GetAxesCount() == 3
+            assert srs.IsVertical() == 1 or is_3d_geographic, f"{key!r}: EPSG:{code}"
+    
+    # What PROJ calls each code. A dropdown label that names a different frame than
+    # its code resolves to would send every file written with it to the wrong datum
+    # -- EPSG:5730 was offered as "EVRF2020", a frame that does not exist, when it is
+    # EVRF2000 height. Adding an entry to either map means adding it here too.
+    EPSG_NAMES = {
+        "Earth Gravitational Model 2008 (EGM2008)": "EGM2008 height",
+        "Earth Gravitational Model 1996 (EGM96)": "EGM96 height",
+        "North America Vertical Datum 1988 (NAVD88)": "NAVD88 height",
+        "Canadian Geodetic Vertical Datum 2013 (CGVD2013/CGG2013)": "CGVD2013(CGG2013) height",
+        "European Vertical Reference Frame 2007 (EVRF2007)": "EVRF2007 height",
+        "European Vertical Reference Frame 2019 (EVRF2019)": "EVRF2019 height",
+        "European Vertical Reference Frame 2000 (EVRF2000)": "EVRF2000 height",
+        "Australia Height Datum (AHD)": "AHD height",
+        "New Zealand Vertical Datum 2016 (NZVD2016)": "NZVD2016 height",
+        "Japanese Geodetic Datum 2000 (JGD2000)": "JGD2000 (vertical) height",
+        "World Geodetic System 1984 (Ensemble) 3D": "WGS 84",
+        "World Geodetic System 1984 (G1762) 3D": "WGS 84 (G1762)",
+        "EGM2008": "EGM2008 height",
+        "EGM96": "EGM96 height",
+        "NAVD88": "NAVD88 height",
+        "CGVD2013": "CGVD2013(CGG2013) height",
+        "CGG2013": "CGVD2013(CGG2013) height",
+        "EVRF2007": "EVRF2007 height",
+        "EVRF2019": "EVRF2019 height",
+        "EVRF2000": "EVRF2000 height",
+        "AHD": "AHD height",
+        "NZVD2016": "NZVD2016 height",
+        "JGD2000": "JGD2000 (vertical) height",
+        "WGS84": "WGS 84",
+        "WGS 84": "WGS 84",
+        "G1762": "WGS 84 (G1762)",
+    }
+    
+    def test_each_name_matches_what_proj_calls_its_code(self):
+        """Every key in both maps names the CRS its EPSG code actually is."""
+        entries = {**VERTICAL_SRS_NAME_MAP, **VERTICAL_SRS_ABBREV_MAP}
+        assert set(entries) == set(self.EPSG_NAMES), (
+            "an entry was added or removed without updating EPSG_NAMES: "
+            f"{set(entries) ^ set(self.EPSG_NAMES)}")
+        for key, code in entries.items():
+            srs = osr.SpatialReference()
+            srs.ImportFromEPSG(code)
+            assert srs.GetName() == self.EPSG_NAMES[key], (
+                f"{key!r} maps to EPSG:{code}, which PROJ calls {srs.GetName()!r}")
+    
+    def test_abbrev_keys_have_no_parentheses(self):
+        """The abbreviation map is matched against the upper-cased input, so a key can
+        contain neither a parenthesis nor a lowercase letter and still be reachable."""
+        for key in VERTICAL_SRS_ABBREV_MAP:
+            assert "(" not in key and ")" not in key, f"{key!r} could never be typed"
+            assert key == key.upper(), f"{key!r} could never match an upper-cased input"
+    
+    def test_geoid_models_are_not_offered_as_datums(self):
+        """No key names GGM10 or any other geoid model; users choose the datum it
+        transforms onto (NAVD88 for Mexico)."""
+        for key in list(VERTICAL_SRS_NAME_MAP) + list(VERTICAL_SRS_ABBREV_MAP):
+            assert "GGM" not in key.upper(), key
+            assert "GEOID" not in key.upper(), key
 
 
 # ==============================================================================
@@ -387,14 +486,15 @@ class TestGetHorizontalSrs:
         assert extracted_horiz.IsGeographic() == 1  # OSR returns 1 for True
     
     def test_extract_compound_custom_vertical(self):
-        """Extract horizontal from compound with custom vertical (GGM10)."""
-        # Create UTM 10N + GGM10
+        """Extract horizontal from compound with a custom vertical (WKT, no EPSG code)."""
+        # Create UTM 10N + Test Local height
         horiz_srs = osr.SpatialReference()
         horiz_srs.ImportFromEPSG(32610)
-        vert_srs = get_srs_from_user_input("GGM10")
+        vert_srs = get_srs_from_user_input(CUSTOM_VERTICAL_WKT)
+        assert vert_srs is not None
         
         compound = osr.SpatialReference()
-        compound.SetCompoundCS("UTM 10N + GGM10", horiz_srs, vert_srs)
+        compound.SetCompoundCS("UTM 10N + Test Local height", horiz_srs, vert_srs)
         
         extracted_horiz = get_horizontal_srs(compound)
         
@@ -550,15 +650,15 @@ class TestGetVerticalSrs:
     # Test Group 4C: Custom Vertical CRS (1 test)
     # =========================================================================
     
-    def test_extract_vertical_custom_ggm10(self, tmp_path):
-        """Extract custom GGM10 vertical CRS from compound."""
-        filepath = tmp_path / "compound_ggm10.tif"
+    def test_extract_vertical_custom_wkt(self, tmp_path):
+        """A custom (WKT, no EPSG code) vertical CRS cannot be extracted from the file."""
+        filepath = tmp_path / "compound_custom.tif"
         
-        # Create test GeoTIFF with compound CRS (UTM 10N + GGM10)
+        # Create test GeoTIFF with compound CRS (UTM 10N + Test Local height)
         horiz = osr.SpatialReference()
         horiz.ImportFromEPSG(32610)
-        vert = get_srs_from_user_input("GGM10")
-        assert vert is not None, "Failed to parse GGM10"
+        vert = get_srs_from_user_input(CUSTOM_VERTICAL_WKT)
+        assert vert is not None, "Failed to parse the custom vertical CRS WKT"
         
         # Use manual WKT construction for custom vertical CRS
         compound = create_compound_srs(horiz, vert)
@@ -581,10 +681,11 @@ class TestGetVerticalSrs:
         extracted_vert = get_vertical_srs(ds)
         ds = None
         
-        # For custom vertical CRS, extraction may be limited since there's no EPSG code
-        # The function will try to use Esri name lookup, which won't find GGM10
-        # This test documents the current behavior
-        # In a real workflow, the compound SRS is created correctly and preserved in the output
+        # There is no EPSG code to read back and the Esri name lookup does not know
+        # "Test Local height", so extraction returns None. This documents the limitation
+        # that COMPOUND_CRS_WKT2 exists to work around: in a real workflow the writer
+        # stores the full WKT2 in that metadata item and the reader recovers it.
+        assert extracted_vert is None
 
 
 # ==============================================================================
@@ -740,20 +841,55 @@ class TestCreateCompoundSrs:
     # Test Group 6B: Custom Vertical (1 test)
     # =========================================================================
     
-    def test_create_compound_custom_vertical_ggm10(self):
-        """Create compound CRS with GGM10 (no EPSG)."""
+    def test_create_compound_custom_vertical_wkt(self):
+        """Create compound CRS with a vertical CRS that has no EPSG code (WKT input)."""
         horiz = osr.SpatialReference()
         horiz.ImportFromEPSG(32610)
         
-        # Get GGM10 from user input (uses custom WKT registry)
-        vert = get_srs_from_user_input("GGM10")
+        # The WKT carries a non-EPSG ID[], so create_compound_srs() goes through
+        # SetCompoundCS(); the names must still come out the other side.
+        vert = get_srs_from_user_input(CUSTOM_VERTICAL_WKT)
         assert vert is not None
         
         compound = create_compound_srs(horiz, vert)
         
         assert compound.IsCompound() == 1
         compound_name = compound.GetName()
-        assert "GGM10" in compound_name or "Gravimétrico" in compound_name
+        assert "Test Local" in compound_name
+        wkt2 = compound.ExportToWkt(['FORMAT=WKT2_2019'])
+        assert 'VDATUM["Test Local Vertical Datum 2000"]' in wkt2
+    
+    def test_create_compound_vertical_without_authority_is_stitched_by_hand(self):
+        """A vertical CRS with no ID[] at all takes the manual COMPOUNDCRS path, which
+        exists because SetCompoundCS() can downgrade such a datum to "unknown"."""
+        horiz = osr.SpatialReference()
+        horiz.ImportFromEPSG(32610)
+        vert = osr.SpatialReference()
+        assert vert.ImportFromWkt(CUSTOM_VERTICAL_WKT_NO_AUTHORITY) == 0
+        assert not vert.GetAuthorityCode(None)
+        
+        compound = create_compound_srs(horiz, vert)
+        wkt2 = compound.ExportToWkt(['FORMAT=WKT2_2019'])
+        
+        assert compound.IsCompound() == 1
+        assert 'VDATUM["Test Local Vertical Datum 2000"]' in wkt2
+        assert "unknown" not in wkt2.lower()
+    
+    def test_create_compound_mexico_itrf2008_navd88(self):
+        """Mexico ITRF2008 / UTM zone 13N + NAVD88 height: what INEGI data should carry.
+        NAVD88 is the datum INEGI's Norma Técnica names for Mexico; GGM10 is the
+        transformation onto it and never appears in the CRS."""
+        horiz = osr.SpatialReference()
+        horiz.ImportFromEPSG(6368)
+        vert = osr.SpatialReference()
+        vert.ImportFromEPSG(5703)  # NAVD88
+        
+        compound = create_compound_srs(horiz, vert)
+        
+        assert compound.IsCompound() == 1
+        assert "NAVD88 height" in compound.GetName()
+        assert compound.GetAuthorityCode('COMPD_CS|VERT_CS') == '5703'
+        assert "GGM" not in compound.ExportToWkt(['FORMAT=WKT2_2019'])
     
     # =========================================================================
     # Test Group 6C: Geographic Horizontal (1 test)

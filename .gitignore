@@ -63,6 +63,8 @@ tmp/
 gttk/logs/
 
 # ArcGIS Pro auxiliary files
+# Help sidecars copied beside the toolbox from toolbox/i18n/<lang>/ when it loads
+/toolbox/GTTK_Toolbox*.pyt.xml
 .backups/
 *.gdb
 *.aprx
@@ -77,6 +79,9 @@ RasterFunctionTemplates/
 input/
 output/
 temp/
+
+# Local notes, drafts and diagnostics (never packaged; MANIFEST.in prunes docs)
+docs/
 
 # Custom TOML validation rules
 # Keep example file only as a template

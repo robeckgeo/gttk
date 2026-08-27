@@ -1,3 +1,5 @@
+**English** | [Español](README.es.md)
+
 # GTTK ArcGIS Pro Toolbox Setup Guide
 
 This guide provides detailed installation and configuration instructions for the GTTK ArcGIS Pro Python Toolbox.
@@ -13,6 +15,8 @@ This guide provides detailed installation and configuration instructions for the
   - [Troubleshooting](#troubleshooting)
 - [Python Environment Setup](#python-environment-setup)
 - [Toolbox Setup Instructions](#toolbox-setup-instructions)
+- [Toolbox Language](#toolbox-language)
+- [Quick Reference](#quick-reference)
 
 ---
 
@@ -190,6 +194,11 @@ While QGIS is an excellent tool and valuable for GIS workflows, standalone QGIS 
    - Do NOT add OSGeo4W to system PATH if you have other GDAL installations
    - GTTK will use the path specified in `config.toml`
 
+5. **`ModuleNotFoundError: No module named 'tifffile'` when the toolbox loads**:
+   - ArcGIS Pro is running its default `arcgispro-py3` environment; the toolbox's error message names the interpreter in use
+   - Open the **Package Manager**, activate your cloned environment and restart ArcGIS Pro
+   - After an ArcGIS Pro upgrade, clone the environment again and reinstall the packages
+
 **Getting Help:**
 
 - OSGeo4W User Guide: [https://trac.osgeo.org/osgeo4w/wiki/TracGuide](https://trac.osgeo.org/osgeo4w/wiki/TracGuide)
@@ -200,7 +209,7 @@ While QGIS is an excellent tool and valuable for GIS workflows, standalone QGIS 
 
 ## Python Environment Setup
 
-**CRITICAL DEPENDENCY**: The `tifffile` module is required for GTTK to function properly. This package is **not** included in the default ArcGIS Pro `arcgispro-py3` conda environment and must be installed in a custom environment.
+**CRITICAL DEPENDENCY**: The `tifffile` module is required for GTTK to load at all, and `jsonpath-ng` is needed by Validate Metadata's PROJJSON rules. Neither is included in the default ArcGIS Pro `arcgispro-py3` conda environment, which cannot be modified, so they must be installed in a cloned environment.
 
 ### Setting Up Your Environment
 
@@ -210,9 +219,9 @@ While QGIS is an excellent tool and valuable for GIS workflows, standalone QGIS 
 
 3. **Make the cloned environment active**, then click on the `Add Packages` tab in the ArcGIS Pro Package Manager.
 
-4. **Search for "tifffile"** and install it. The package is available in the default conda channels.
+4. **Search for "tifffile"** and install it, then do the same for **"jsonpath-ng"**. Both are available in the default conda channels.
 
-5. **Ensure that the same environment is active** when running GTTK tools from the toolbox.
+5. **Ensure that the same environment is active** when running GTTK tools from the toolbox. After upgrading ArcGIS Pro, clone the environment again: a clone made under an older release is not carried over, and Pro silently falls back to the default environment.
 
 ---
 
@@ -226,6 +235,25 @@ While QGIS is an excellent tool and valuable for GIS workflows, standalone QGIS 
 
 ---
 
+## Toolbox Language
+
+The toolbox displays in English or Spanish. When ArcGIS Pro loads it, the toolbox picks
+the language in this order and says so in the first line of every run's messages:
+
+1. The `GTTK_LANG` environment variable (`en` or `es`).
+2. `config.toml` -- `[gui] language = "auto"` (default), `"en"` or `"es"`.
+3. The display language chosen in ArcGIS Pro's **Options > Language** (only offered once
+   an Esri language pack is installed).
+4. The Windows display language.
+
+To force a language, set `language = "es"` (or `"en"`) in `config.toml`, then right-click
+the toolbox in the Catalog pane and choose **Refresh**. Labels, choices, messages and the
+parameter help panel follow the language; reports and GDAL's own output stay in English.
+ArcGIS Pro's own interface needs Esri's language pack (My Esri) to change language; the
+toolbox does not.
+
+---
+
 ## Quick Reference
 
 | Step | Action |
@@ -233,5 +261,6 @@ While QGIS is an excellent tool and valuable for GIS workflows, standalone QGIS 
 | 1 | Install OSGeo4W with GDAL |
 | 2 | Configure `config.toml` with OSGeo4W path |
 | 3 | Clone ArcGIS Pro Python environment |
-| 4 | Install `tifffile` in cloned environment |
+| 4 | Install `tifffile` and `jsonpath-ng` in the cloned environment |
 | 5 | Add toolbox to ArcGIS Pro project |
+| 6 | (Optional) Force the toolbox language with `[gui] language` in `config.toml` |
