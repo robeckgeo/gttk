@@ -35,6 +35,7 @@ from gttk.utils.log_helpers import PACKAGE_LOGGER, setup_logger, shutdown_logger
 
 GTTK_MODULES = [
     "gttk",
+    "gttk.i18n",
     "gttk.tools.optimize_compression",
     "gttk.tools.optimize_compression_arc",
     "gttk.tools.compare_compression",

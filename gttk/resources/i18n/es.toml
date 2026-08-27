@@ -1,0 +1,27 @@
+# Spanish catalog for the ArcGIS Pro toolbox (toolbox/GTTK_Toolbox.pyt).
+#
+# Keys are the English source strings exactly as written in the toolbox (section
+# titles come from gttk/utils/section_registry.py); values are what a Spanish ArcGIS
+# Pro shows.  The tables only organise the file for review -- lookups are flat, so no
+# key may appear twice anywhere in the file.  Keep every {placeholder} from the key.
+# tests/unit/test_i18n_catalog.py checks all of that.
+#
+# Style:
+#   - Neutral Latin-American Spanish with Mexican conventions (archivo, carpeta, equipo).
+#   - Esri's ArcGIS Pro Spanish glossary for interface terms, so the toolbox reads like
+#     the rest of a Spanish Pro: ráster, capa ráster, pirámides (overviews), teselas
+#     (tiles), máscara, banda alfa, informe, referencia espacial, geoprocesamiento,
+#     caja de herramientas, cuadro de diálogo.
+#   - Messages address the user as "usted"; labels use nouns or infinitives.
+#   - Untranslated: GeoTIFF, COG, GDAL, codec names (DEFLATE, LERC, JPEG XL...), NoData,
+#     PROJJSON, WKT, IFD, PAM, XMP, XML, TIFF tag numbers, file extensions.
+#   - Predictor labels keep their leading digit ("2 - ...").
+
+[toolbox]
+"GTTK Toolbox" = "Caja de herramientas GTTK"
+"Compression Tools" = "Herramientas de compresión"
+"Metadata Tools" = "Herramientas de metadatos"
+"Overview and Performance" = "Pirámides y rendimiento"
+
+[toolbox.parameters]
+"Product Type" = "Tipo de producto"

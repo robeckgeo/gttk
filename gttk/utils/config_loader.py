@@ -68,7 +68,8 @@ class Config:
                 "default_layout": "analyst",
                 "default_theme": "material_light",
                 "window_size": [1200, 900],
-                "enable_dark_mode": True
+                "enable_dark_mode": True,
+                "language": "auto"
             },
             "api": {
                 "host": "0.0.0.0",

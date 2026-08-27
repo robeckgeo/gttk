@@ -10,6 +10,9 @@ default_layout = "analyst"
 default_theme = "material_light"
 window_size = [1200, 900]
 enable_dark_mode = true
+# Language of the ArcGIS Pro toolbox.  "auto" follows ArcGIS Pro's display language, then
+# Windows'; "en" or "es" forces one.  The GTTK_LANG environment variable overrides this.
+language = "auto"
 
 [api]
 # REST API Configuration
