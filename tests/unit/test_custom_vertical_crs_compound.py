@@ -1,9 +1,25 @@
-import re
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# ******************************************************************************
+# Project: GeoTIFF ToolKit (GTTK)
+# Author: Eric Robeck <robeckgeo@gmail.com>
+#
+# Copyright (c) 2026, Eric Robeck
+# Licensed under the MIT License
+# ******************************************************************************
+
+"""
+A vertical CRS supplied as WKT must survive into the compound CRS, and onto disk.
+
+The two functions at the top validate that a custom vertical CRS WKT -- one with no
+EPSG code, from ``tests/fixtures/custom_vertical_crs.py`` -- is preserved when
+building a COMPOUNDCRS, and that GDAL/OSR does not downgrade the vertical datum to
+"unknown" in WKT2_2019 output.  The class below writes real files and reads them
+back, for EPSG vertical CRSs and for the custom one.
+"""
 from osgeo import osr
 from gttk.utils.srs_logic import get_srs_from_user_input, create_compound_srs
-
-# This test validates that a custom vertical CRS WKT (GGM10) is preserved when building a COMPOUNDCRS
-# and that GDAL/OSR does not downgrade the vertical datum to "unknown" in WKT2_2019 output.
+from tests.fixtures.custom_vertical_crs import CUSTOM_VERTICAL_WKT
 
 
 def test_compound_with_custom_vertical_preserves_vdatum_and_units():
@@ -11,21 +27,21 @@ def test_compound_with_custom_vertical_preserves_vdatum_and_units():
     horiz = osr.SpatialReference()
     assert horiz.ImportFromEPSG(6368) == 0
 
-    # Vertical: custom registry entry "GGM10" provided by get_srs_from_user_input()
-    vert = get_srs_from_user_input("GGM10")
-    assert vert is not None, "Failed to parse custom vertical CRS 'GGM10' from registry"
-    assert vert.IsVertical(), "Custom vertical CRS 'GGM10' should be recognized as vertical"
+    # Vertical: a datum no registry knows, supplied as WKT to get_srs_from_user_input()
+    vert = get_srs_from_user_input(CUSTOM_VERTICAL_WKT)
+    assert vert is not None, "Failed to parse the custom vertical CRS from its WKT"
+    assert vert.IsVertical(), "The custom vertical CRS should be recognized as vertical"
 
     # Check vertical WKT2 (standalone) preserves datum name and unit at CS level
     wkt2_vert = vert.ExportToWkt(["FORMAT=WKT2_2019"])
-    assert 'VDATUM["Geoide Gravimétrico Mexicano 2010"]' in wkt2_vert, \
+    assert 'VDATUM["Test Local Vertical Datum 2000"]' in wkt2_vert, \
         f"Expected VDATUM name in vertical WKT2, got: {wkt2_vert}"
     assert 'LENGTHUNIT["metre",1]' in wkt2_vert, \
         f"Expected LENGTHUNIT at CS level in vertical WKT2, got: {wkt2_vert}"
     # Axis name is likely preserved in WKT2 (allow any whitespace variants)
     assert "gravity-related height (H)" in wkt2_vert
 
-    # Build compound using the library helper (which now prefers manual WKT2 for custom vertical CRS)
+    # Build compound using the library helper
     compound = create_compound_srs(horiz, vert)
 
     # Validate the compound WKT2_2019 keeps the VERTCRS with VDATUM and unit
@@ -35,9 +51,9 @@ def test_compound_with_custom_vertical_preserves_vdatum_and_units():
         f"Expected WKT2 COMPOUNDCRS, got: {wkt2_compound[:80]}..."
 
     # Confirm vertical branch name and datum are preserved
-    assert 'VERTCRS["GGM10 height"' in wkt2_compound, \
-        "Expected VERTCRS name 'GGM10 height' in compound WKT2"
-    assert 'VDATUM["Geoide Gravimétrico Mexicano 2010"]' in wkt2_compound, \
+    assert 'VERTCRS["Test Local height"' in wkt2_compound, \
+        "Expected VERTCRS name 'Test Local height' in compound WKT2"
+    assert 'VDATUM["Test Local Vertical Datum 2000"]' in wkt2_compound, \
         "Expected VDATUM name to be preserved in compound WKT2"
 
     # Confirm CS-level LENGTHUNIT survives
@@ -53,12 +69,12 @@ def test_compound_with_custom_vertical_preserves_vdatum_and_units():
 
 
 def test_compound_manual_contains_vertical_wkt2_when_custom_crs():
-    # Additional guard: for custom vertical CRS with no authority codes, the compound should
+    # Additional guard: for a custom vertical CRS with no EPSG code, the compound should
     # still be importable and exportable as valid WKT2_2019.
     horiz = osr.SpatialReference()
     assert horiz.ImportFromEPSG(6368) == 0
 
-    vert = get_srs_from_user_input("GGM10")
+    vert = get_srs_from_user_input(CUSTOM_VERTICAL_WKT)
     assert vert is not None and vert.IsVertical()
 
     compound = create_compound_srs(horiz, vert)
@@ -111,11 +127,11 @@ def _module_gdal_config():
         gdal.SetConfigOption(key, value)
 
 
-def _write_dem_cog(tmp_path, vertical_srs, decimals=2):
+def _write_dem_cog(tmp_path, vertical_srs, decimals=2, crs='EPSG:4326'):
     src = tmp_path / "dem.tif"
     out = tmp_path / "dem_cog.tif"
     data = (np.random.default_rng(0).random((1, 600, 600)) * 100).astype(np.float32)
-    MockGeoTIFF(width=600, height=600, data_type=gdal.GDT_Float32, crs='EPSG:4326',
+    MockGeoTIFF(width=600, height=600, data_type=gdal.GDT_Float32, crs=crs,
                 nodata_value=-32767.0, pixel_data=data).save_to_file(src)
     prior, ocmp.arcMode = ocmp.arcMode, True
     try:
@@ -163,11 +179,33 @@ class TestCompoundCrsSurvivesTheWrite:
         source = result = None
 
     def test_a_custom_vertical_crs_still_falls_back_to_metadata(self, tmp_path):
-        """GGM10 has no EPSG code, so the GeoTIFF keys cannot carry it; the full WKT2
-        goes into COMPOUND_CRS_WKT2 instead. That path must keep working."""
-        _, out = _write_dem_cog(tmp_path, "GGM10")
+        """A vertical CRS with no EPSG code cannot ride in the GeoTIFF keys, so the full
+        WKT2 goes into COMPOUND_CRS_WKT2 instead. GTTK no longer ships such a CRS (the
+        GGM10 entry it once had was a geoid model, not a datum), but a user can still
+        pass one as WKT, and that path must keep working."""
+        _, out = _write_dem_cog(tmp_path, CUSTOM_VERTICAL_WKT)
         ds = gdal.Open(str(out))
         stored = ds.GetMetadataItem('COMPOUND_CRS_WKT2') or ''
         name = ds.GetSpatialRef().GetName()
-        assert 'GGM10' in stored or 'GGM10' in name, (
+        assert 'Test Local' in stored or 'Test Local' in name, (
             f"custom vertical datum lost: name={name!r}, COMPOUND_CRS_WKT2={stored[:120]!r}")
+
+    def test_navd88_compound_reads_back_intact(self, tmp_path):
+        """The case the GGM10 entry was invented for. INEGI distributes 2D
+        'Mexico ITRF2008 / UTM zone 13N' (EPSG:6368) rasters, and the vertical datum its
+        Norma Técnica defines for Mexico is NAVD88, so the file should come out as
+        'Mexico ITRF2008 / UTM zone 13N + NAVD88 height' (EPSG:6368+5703) -- and it needs
+        no metadata fallback: the vertical code and the datum name both come back from
+        the GeoKeys alone.  (The vertical SRS is given as the datum, not as a ready-made
+        compound: handle_srs_logic() joins it to the source's horizontal CRS.)"""
+        _, out = _write_dem_cog(tmp_path, "NAVD88", crs='EPSG:6368')
+        ds = gdal.Open(str(out))
+        srs = ds.GetSpatialRef()
+        wkt2 = srs.ExportToWkt(['FORMAT=WKT2_2019'])
+        assert srs.IsCompound(), wkt2
+        assert srs.GetAuthorityCode('COMPD_CS|PROJCS') == '6368', wkt2
+        assert srs.GetAuthorityCode('COMPD_CS|VERT_CS') == '5703', wkt2
+        assert 'North American Vertical Datum 1988' in wkt2, wkt2
+        assert 'GGM' not in wkt2
+        assert ds.GetMetadataItem('COMPOUND_CRS_WKT2') is None, (
+            "an EPSG vertical CRS must not trigger the COMPOUND_CRS_WKT2 fallback")

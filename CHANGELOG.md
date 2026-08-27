@@ -95,6 +95,31 @@ All notable changes to this project will be documented in this file.
   exact error and the conda-forge command that fixes it. Use `pip install ".[gdal]"`
   only where the GDAL library and its headers are already present.
 
+- **The INEGI example reports were regenerated with NAVD88 height (EPSG:5703)**, the
+  vertical datum INEGI's Norma Técnica defines for Mexico, in place of the invented GGM10
+  vertical CRS they used to show. The NEW report now carries a compound CRS that the
+  GeoKeys hold on their own (`ProjectedCRSGeoKey` 6368, `VerticalGeoKey` 5703) and no
+  `COMPOUND_CRS_WKT2` fallback; the README's description of the example changes with it.
+
+### Removed
+
+- **The "Geoide Gravimétrico Mexicano 2010 (GGM10)" vertical datum.** A geoid model is
+  the *transformation* between ellipsoidal heights (h) and orthometric heights (H); it is
+  not a datum, and offering it as one was the wrong tool. GTTK shipped GGM10 as a
+  hand-written vertical CRS with no EPSG code, and that cost twice over: the name did
+  not survive the GeoTIFF GeoKeys (`VerticalDatumGeoKey` 32767, `VDATUM["unknown"]`),
+  and no software can transform *from* an invented datum -- PROJ falls back to a
+  "ballpark" `+proj=noop`, a silent zero. Mexico's vertical datum is NAVD88 (INEGI,
+  Norma Técnica para el Sistema Geodésico Nacional, DOF 23-Dec-2010, art. 15), and both
+  Esri (WKID 110232, `Mexico_ITRF2008_To_NAVD88_Height_GGM10`) and PROJ
+  (`PROJ:EPSG_6364_TO_EPSG_5703`, via the grid `mx_inegi_ggm10.tif`) already model GGM10
+  as the transformation onto it. Choose `NAVD88` / `EPSG:5703` instead; the ArcGIS
+  dropdown loses the entry with it, and the custom-WKT registry that existed only to
+  serve it is gone. What remains is the generic path: a vertical CRS supplied as a WKT
+  string still builds a compound CRS, and because the GeoKeys cannot carry a datum
+  without an EPSG code, its full WKT2 is still stored in the `COMPOUND_CRS_WKT2`
+  metadata item and read back from there.
+
 ### Fixed
 
 - **Flag-combination checks were skipped whenever no input file was set.** The rules
@@ -171,6 +196,11 @@ All notable changes to this project will be documented in this file.
   is now re-asserted on the final write (`-a_srs`, an assignment -- pixels and the geotransform are
   untouched). Verified on a real TREx cell: the output now reports compound `EPSG:9518` and vertical
   `EPSG:3855`, where before both were absent.
+- **`AHD`, `NZVD2016` and `JGD2000` could not be typed as vertical-datum abbreviations.**
+  Their keys in the abbreviation map carried a stray closing parenthesis (`"AHD)"`), which
+  no upper-cased input could ever match, so the three were reachable only by their full
+  dropdown name or by EPSG code. A test now checks that every key is typeable and that
+  every value is an EPSG code the PROJ database resolves.
 - **Categorical overviews were interpolated.** On the COG path GTTK never emitted
   `OVERVIEW_RESAMPLING`, so the driver fell back to its own default (`CUBIC` for any band without a
   colour table) and blended class codes together in the pyramids of `thematic` products. Measured on

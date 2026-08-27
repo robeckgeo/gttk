@@ -26,13 +26,44 @@ from gttk.utils.esri_epsg_lookup import get_epsg_from_esri_name
 
 logger = logging.getLogger(__name__)
 
+# ------------------------------------------------------------------------------
+# Vertical CRS choices offered by name.
+#
+# Every value is an EPSG code for a *vertical CRS* -- a datum plus an axis and a
+# unit -- which is what a GeoTIFF can carry in its GeoKeys and what every reader
+# downstream can resolve.  The ArcGIS toolbox builds its dropdown from the keys of
+# VERTICAL_SRS_NAME_MAP, so adding or removing an entry here changes the dialog.
+#
+# Geoid models do not belong here.  A geoid model is the *transformation* between
+# ellipsoidal heights (h) and orthometric heights (H) on some datum; it is not a
+# datum of its own.  EGM2008 and EGM96 appear below only because EPSG registered
+# vertical CRSs for those global models (3855, 5773).  A regional model such as
+# GGM10 or GGM25 (Mexico) or GEOID18 (USA) has no such code, and the code it is
+# missing is not the problem: it is a transformation *onto* a datum that already
+# has one.  GTTK once shipped "GGM10 height" as an invented vertical CRS, and the
+# result was the worst of both worlds -- the name did not survive the GeoKeys
+# (VerticalDatumGeoKey 32767, VDATUM["unknown"]), and no software could transform
+# from it because nothing knows what it is, so PROJ fell back to a "ballpark"
+# +proj=noop.  Mexico's vertical datum is NAVD88 (INEGI, Norma Técnica para el
+# Sistema Geodésico Nacional, DOF 23-Dec-2010, art. 15); Esri (WKID 110232,
+# Mexico_ITRF2008_To_NAVD88_Height_GGM10) and PROJ (PROJ:EPSG_6364_TO_EPSG_5703
+# via the grid mx_inegi_ggm10.tif) already model GGM10 as the transformation onto
+# it.  Choose the datum -- NAVD88, EPSG:5703 -- and the transformation stays where
+# it belongs.  Never add a geoid model to these maps.
+#
+# A vertical datum that genuinely has no EPSG code is still supported: pass its
+# WKT as the vertical SRS.  get_srs_from_user_input() hands it to GDAL,
+# create_compound_srs() stitches it into a compound CRS by hand, and because the
+# GeoKeys cannot carry it the writers store the full WKT2 in the
+# COMPOUND_CRS_WKT2 metadata item for the reader to recover.
+# ------------------------------------------------------------------------------
+
 # Vertical SRS Name to EPSG Code
 VERTICAL_SRS_NAME_MAP: Dict[str, int] = {
     "Earth Gravitational Model 2008 (EGM2008)": 3855,
     "Earth Gravitational Model 1996 (EGM96)": 5773,
     "North America Vertical Datum 1988 (NAVD88)": 5703,
     "Canadian Geodetic Vertical Datum 2013 (CGVD2013/CGG2013)": 6647,
-    "Geoide Gravimétrico Mexicano 2010 (GGM10)": 0,
     "European Vertical Reference Frame 2007 (EVRF2007)": 5621,
     "European Vertical Reference Frame 2019 (EVRF2019)": 9389,
     "European Vertical Reference Frame 2020 (EVRF2020)": 5730,
@@ -43,48 +74,44 @@ VERTICAL_SRS_NAME_MAP: Dict[str, int] = {
     "World Geodetic System 1984 (G1762) 3D": 7665,
 }
 
-# Vertical SRS Abbrev. to EPSG Code
+# Vertical SRS Abbrev. to EPSG Code (matched case-insensitively on the upper-cased input)
 VERTICAL_SRS_ABBREV_MAP: Dict[str, int] = {
     "EGM2008": 3855,
     "EGM96": 5773,
     "NAVD88": 5703,
     "CGVD2013": 6647,
     "CGG2013": 6647,  # alternate spelling
-    "GGM10": 0,
     "EVRF2007": 5621,
     "EVRF2019": 9389,
     "EVRF2020": 5730,
-    "AHD)": 5711,
-    "NZVD2016)": 7839,
-    "JGD2000)": 6694,
+    "AHD": 5711,
+    "NZVD2016": 7839,
+    "JGD2000": 6694,
     "WGS84": 4979,
     "WGS 84": 4979,
     "G1762": 7665,
 }
 
-# Registry for Custom Vertical CRS WKTs (where EPSG code does not exist)
-CUSTOM_VERTICAL_WKT_REGISTRY: Dict[str, str] = {
-    "GGM10": """
-    VERTCRS["GGM10 height",
-        VDATUM["Geoide Gravimétrico Mexicano 2010"],
-        CS[vertical,1],
-        AXIS["gravity-related height (H)",up],
-        LENGTHUNIT["metre",1],
-        USAGE[
-            SCOPE["Geodesy, engineering survey, topographic mapping."],
-            AREA["Mexico - onshore and offshore."],
-            BBOX[14.02,-118.98,32.98,-86.02]],
-        ID["INEGI","GGM2010"]]
-    """
-}
-
 def get_srs_from_user_input(srs_input: str) -> Optional[osr.SpatialReference]:
     """
-    Creates an osr.SpatialReference object from various user inputs.
+    Creates an osr.SpatialReference object from the SRS text a user supplied.
+
+    Accepted forms, tried in this order:
+
+    1. A full name from ``VERTICAL_SRS_NAME_MAP`` -- what the ArcGIS dropdown submits.
+    2. An abbreviation from ``VERTICAL_SRS_ABBREV_MAP``, case-insensitively:
+       ``NAVD88``, ``egm2008``, ``CGVD2013`` ...
+    3. ``EPSG:n`` for a single code, or ``EPSG:h+v`` for a compound CRS.
+    4. A bare integer, taken as an EPSG code.
+    5. Anything else GDAL's ``SetFromUserInput`` understands: WKT1 or WKT2, PROJJSON,
+       a PROJ string, an OGC URN, and so on.  This is the route for a vertical datum
+       that has no EPSG code -- pass its ``VERTCRS[...]`` WKT and it is used verbatim.
+
+    A name GDAL cannot resolve (``"GGM10"``, ``"INVALID_DATUM"``) is not an error at
+    this level: the function logs it and returns None, and the caller decides.
 
     Args:
-        srs_input (str): The user input, which can be an EPSG code (e.g., "4326", "EPSG:4326"),
-                         a WKT string, or other formats recognized by GDAL.
+        srs_input (str): The user input.
 
     Returns:
         Optional[osr.SpatialReference]: A spatial reference object, or None if parsing fails.
@@ -94,32 +121,6 @@ def get_srs_from_user_input(srs_input: str) -> Optional[osr.SpatialReference]:
     logger.info(f"Parsing user input SRS: {srs_input}")
 
     try:
-        # Check for Custom WKT Registry matches first
-        # Extract abbreviation if input matches Name Map or Abbrev Map keys
-        abbrev = None
-        if srs_input in VERTICAL_SRS_NAME_MAP:
-            # Reverse lookup name to abbreviation isn't direct, but we can check the EPSG code
-            # Check if the mapped EPSG is 0, which signals a custom lookup needed.
-            epsg_code = VERTICAL_SRS_NAME_MAP[srs_input]
-            if epsg_code == 0:
-                # Infer abbreviation from the name string (hacky but effective for GGM10)
-                if "GGM10" in srs_input:
-                    abbrev = "GGM10"
-        elif srs_upper in VERTICAL_SRS_ABBREV_MAP:
-            if VERTICAL_SRS_ABBREV_MAP[srs_upper] == 0:
-                abbrev = srs_upper
-
-        if abbrev and abbrev in CUSTOM_VERTICAL_WKT_REGISTRY:
-            logger.info(f"Custom Vertical CRS detected for '{srs_input}'. Injecting WKT.")
-            custom_wkt = CUSTOM_VERTICAL_WKT_REGISTRY[abbrev]
-            
-            if srs.ImportFromWkt(custom_wkt) != 0:
-                logger.error(f"Failed to import custom WKT for {abbrev}")
-                return None
-            
-            return srs
-
-        # Standard EPSG Lookups
         if srs_input in VERTICAL_SRS_NAME_MAP:  # Direct match for full names (in GUI dropdown)
             epsg_code = VERTICAL_SRS_NAME_MAP[srs_input]
             logger.debug(f"Importing from EPSG:{epsg_code} for '{srs_input}'")
@@ -145,7 +146,7 @@ def get_srs_from_user_input(srs_input: str) -> Optional[osr.SpatialReference]:
             epsg_code = int(srs_input)
             logger.debug(f"Importing from EPSG:{epsg_code}")
             srs.ImportFromEPSG(epsg_code)
-        else:
+        else:  # WKT, PROJJSON, PROJ string, URN ... anything GDAL can make sense of
             if srs.SetFromUserInput(srs_input) != 0:
                 logger.error(f"SetFromUserInput failed for: {srs_input}")
                 return None
