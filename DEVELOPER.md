@@ -288,9 +288,10 @@ Rules that keep it honest:
 - A sidecar's `dialogReference` must be rich text (`<DIV><DIV><P><SPAN>…`), the form
   Esri's metadata editor writes: Pro's item-description stylesheet drops plain text and
   shows "no reference for this parameter" instead. The sidecar test enforces it.
-- After editing a catalog or a sidecar, right-click the toolbox in the Catalog pane and
-  **Refresh**. Edits to `gttk/i18n.py` or any other module need a Pro restart: Pro
-  re-executes only the `.pyt`.
+- After editing anything -- a catalog, a sidecar, `gttk/i18n.py` or any other `gttk`
+  module -- right-click the toolbox in the Catalog pane and **Refresh**. Pro re-executes
+  only the `.pyt`, so the toolbox re-imports the whole `gttk` package itself on every
+  load; only packages outside `gttk` still need a Pro restart.
 - To add a language, add its code to `SUPPORTED`, a `<code>.toml` catalog and a
   `toolbox/i18n/<code>/` directory of sidecars; the tests parametrise over every
   language they find there.

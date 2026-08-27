@@ -85,7 +85,9 @@ def _arc_pane_logging(enabled: bool):
     left behind for the next tool run in the same ArcGIS process.
     """
     package_logger = logging.getLogger(PACKAGE_LOGGER)
-    if not enabled or any(isinstance(h, ArcpyLogHandler) for h in package_logger.handlers):
+    # By name, not isinstance: the ArcGIS toolbox re-imports gttk on every load, so a
+    # handler another tool installed may be an instance of an earlier ArcpyLogHandler.
+    if not enabled or any(type(h).__name__ == 'ArcpyLogHandler' for h in package_logger.handlers):
         yield
         return
     handler = ArcpyLogHandler()

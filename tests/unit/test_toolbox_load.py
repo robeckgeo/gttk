@@ -156,6 +156,21 @@ class TestThisCheckoutWins:
         assert report['stale_child_gone']
         assert len(report['notice']) == 1
 
+    def test_a_refresh_reimports_the_package_from_disk(self):
+        """A Pro Refresh re-runs only the .pyt; the toolbox must not run against the
+        generation of gttk that an earlier load left in memory."""
+        report = run(f'''
+            module = load({str(PYT)!r})
+            first = sys.modules['gttk']
+            first.stale_marker = True
+            module = load({str(PYT)!r})
+            print(json.dumps({{"fresh": not hasattr(sys.modules['gttk'], 'stale_marker'),
+                               "same_file": sys.modules['gttk'].__file__ == first.__file__,
+                               "notices": [m for kind, m in messages if 'released a gttk' in m]}}))
+        ''')
+        assert report['fresh'] and report['same_file']
+        assert report['notices'] == []      # same checkout: nothing worth saying
+
     def test_an_installed_gttk_finder_is_unhooked(self, other_checkout):
         report = run(f'''
             import importlib.util

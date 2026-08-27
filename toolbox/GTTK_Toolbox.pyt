@@ -47,25 +47,28 @@ if str(gttk_path) not in sys.path:
 
 
 def _prefer_this_checkout():
-    """Make the `gttk` beside this toolbox the one that answers every import below.
+    """Make the `gttk` beside this toolbox -- as it is on disk now -- the one that runs.
 
     ArcGIS Pro keeps imported modules for the life of the session and re-runs only
-    this file on Refresh, so a `gttk` imported earlier -- by the same toolbox from a
-    second checkout, or before a `git switch` -- would keep answering, however old.
-    A `gttk` installed into the Pro conda environment is worse: `pip install -e`
-    registers an import finder that outranks sys.path, so even a fresh import would
-    land there.  Forget the former, unhook the latter, and say so in the messages.
+    this file on Refresh.  Left alone, a Refresh after a `git pull` runs the new
+    toolbox against the old package still in memory (this toolbox once died that way,
+    calling a function its stale `gttk.i18n` did not have yet), and a `gttk` imported
+    earlier from a second checkout, or installed into the Pro conda environment with
+    `pip install -e` (which registers an import finder that outranks sys.path), would
+    keep answering.  So: forget every loaded `gttk` module, unhook such a finder, and
+    say so when the copy that was loaded came from somewhere else.
     """
     def root_of(file):
         return Path(file).resolve().parent.parent if file else None
 
     notes = []
     loaded = sys.modules.get('gttk')
-    if loaded is not None and root_of(getattr(loaded, '__file__', None)) != gttk_path:
+    if loaded is not None:
+        loaded_root = root_of(getattr(loaded, '__file__', None))
+        if loaded_root != gttk_path:
+            notes.append(f"released a gttk loaded earlier from {loaded_root or 'an unknown location'}")
         for name in [m for m in sys.modules if m == 'gttk' or m.startswith('gttk.')]:
             del sys.modules[name]
-        notes.append(f"released a gttk loaded earlier from "
-                     f"{root_of(getattr(loaded, '__file__', None)) or 'an unknown location'}")
     for finder in list(sys.meta_path):
         try:
             spec = finder.find_spec('gttk', None)
