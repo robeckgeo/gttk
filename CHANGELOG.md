@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **The ArcGIS Pro toolbox now speaks Spanish.** When Pro loads it, the toolbox picks
+  its language -- `GTTK_LANG`, then `config.toml` `[gui] language`, then the display
+  language chosen in Pro's Options, then the Windows display language -- and shows its
+  labels, choices, validation messages, run messages and the parameter help panel in that
+  language. Strings live in a reviewable TOML catalog keyed by the English text
+  (`gttk/resources/i18n/es.toml`); the help sidecars live per language under
+  `toolbox/i18n/` and are copied beside the toolbox on load. Dialog choices are now codes
+  behind translated labels, so a run saved to History under one language still runs under
+  another. A Spanish guide (`README.es.md`) and setup guide (`toolbox/README.es.md`)
+  accompany it, and tests pin the catalog and every sidecar to the dialog.
+
 - **Every run now logs the settings it resolved, and where each one came from** --
   a profile value, a codec default, an inherited flag, a caller's explicit choice, or a
   clamp forced by the raster's data type. It replaces a single-line dump of the
@@ -28,6 +39,21 @@ All notable changes to this project will be documented in this file.
   little on 8-bit RGB and its lossy mode is beaten by JPEG/JXL at every quality. The
   `thematic` benchmark preset already carried a `LERC` row at `max_z_error=0`; until now
   that row could never run.
+
+### Fixed
+
+- **`Optimize Compression` from the ArcGIS toolbox failed on every run** with
+  `NameError: name 'gdal_env' is not defined`: the entry point applied
+  `gdal_env(GDAL_OPTIONS_ARC)` without importing either name. Its log lines -- the
+  resolved-settings block included -- also had no handler when called from the toolbox,
+  so they never reached the geoprocessing pane; they do now, for the duration of the call.
+- **The Optimize help side panel documented 23 of the dialog's 28 parameters** and
+  described the raster-type default backwards. It now covers every parameter, and a test
+  keeps each language's sidecar in step with the dialog.
+- The toolbox's "CompressionReport Format" label gets its missing space; Read Metadata no
+  longer pre-fills `Text`/`Table` into a lowercase value list; Optimize and Test
+  Compression share one product-type list (`Error Model`, with the old
+  `Generic Point-cloud Model` still accepted).
 
 ### Changed
 

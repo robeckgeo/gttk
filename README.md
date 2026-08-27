@@ -1,3 +1,5 @@
+**English** | [Español](README.es.md)
+
 # GeoTIFF ToolKit (GTTK): GeoTIFF Analysis and Optimization Tools
 
 <p align="left">
@@ -24,6 +26,7 @@ A Python toolkit for analyzing, optimizing, and compressing GeoTIFF files. GTTK 
   - [Tool: Read Metadata](#tool-read-metadata-gttk-read)
   - [Tool: Validate Metadata](#tool-validate-metadata-gttk-validate)
 - [ArcGIS Pro Toolbox](#arcgis-pro-toolbox)
+  - [Toolbox Language](#toolbox-language)
 - [Configuration](#configuration)
 - [Advanced Tools: `gttk optimize-arc`](#advanced-tools-gttk-optimize-arc)
 - [User Recommendations & Best Practices](#user-recommendations--best-practices)
@@ -586,6 +589,28 @@ The ArcGIS Pro Toolbox requires:
 
 For detailed installation and configuration instructions, see the **[Toolbox Setup Guide](toolbox/README.md)**.
 
+### Toolbox Language
+
+The toolbox displays in English or Spanish. When ArcGIS Pro loads it, the toolbox picks
+the language in this order and says so in the first line of every run's messages
+(`Language: es (source: ...)`):
+
+1. The `GTTK_LANG` environment variable (`en` or `es`).
+2. `config.toml` -- `[gui] language = "auto"` (default), `"en"` or `"es"`.
+3. The display language chosen in ArcGIS Pro's **Options > Language** (only offered once
+   an Esri language pack is installed).
+4. The Windows display language.
+
+Labels, choices, validation messages, run messages and the parameter help panel follow
+the language; reports, GDAL's own output and the CLI stay in English. To force a
+language, set `language = "es"` in `config.toml` and right-click the toolbox in the
+Catalog pane → **Refresh** -- no restart needed. ArcGIS Pro's own interface needs Esri's
+language pack to change language; the toolbox does not.
+
+Translations live in `gttk/resources/i18n/` (strings) and `toolbox/i18n/` (help
+sidecars); see [DEVELOPER.md](DEVELOPER.md#translating-the-toolbox) to edit or add one.
+There is also a Spanish guide: [README.es.md](README.es.md).
+
 ---
 
 ## Configuration
@@ -599,6 +624,10 @@ GTTK uses a `config.toml` file for system-specific settings. This is primarily r
 # Path to OSGeo4W installation (required for ArcGIS Toolbox)
 osgeo4w = "C:/OSGeo4W"
 
+[gui]
+# Language of the ArcGIS Pro toolbox: "auto" (follow ArcGIS Pro, then Windows), "en" or "es"
+language = "auto"
+
 [logging]
 # Logging Configuration
 level = "INFO"
@@ -607,7 +636,7 @@ file = "gttk.log"
 
 ### When to Edit
 
-- **ArcGIS Pro Users**: Update `osgeo4w` path in `config.toml` to match your OSGeo4W installation
+- **ArcGIS Pro Users**: Update `osgeo4w` path in `config.toml` to match your OSGeo4W installation; set `language` to force the toolbox's language
 - **CLI Users**: Generally no configuration needed; all settings can be passed as command-line arguments
 - **Batch Processing**: Customize defaults in `config.toml` to streamline repetitive tasks
 

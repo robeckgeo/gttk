@@ -1,5 +1,6 @@
 # Core metadata files
 include README.md
+include README.es.md
 include CHANGELOG.md
 include LICENSE
 include pyproject.toml

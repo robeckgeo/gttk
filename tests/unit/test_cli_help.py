@@ -294,45 +294,76 @@ class TestExplicitFieldTracking:
 # --- The README says the same thing as the code -----------------------------
 
 class TestReadmeMatchesResolver:
-    """README's profile table is written by hand, so pin it to the resolver.  It is
-    one of the four copies of this knowledge that drifted apart in the first place."""
+    """The READMEs' profile tables are written by hand, so pin them to the resolver.  The
+    English one is one of the four copies of this knowledge that drifted apart in the
+    first place; the Spanish one renders the same values in the dialog's own words."""
 
-    README = Path(__file__).resolve().parents[2] / 'README.md'
-    #: Column header -> (OptimizeArguments field, extra flags to pin)
-    COLUMNS = {
-        '`-a`': ('algorithm', {}),
-        '`-p`': ('predictor', {}),
-        '`-d`': ('decimals', {}),
-        '`-z` *': ('max_z_error', {'algorithm': 'LERC'}),
-        '`--mask-nodata`': ('mask_nodata', {}),
-        '`--mask-alpha`': ('mask_alpha', {}),
-        '`--overview-resampling`': ('overview_resampling', {}),
-        '`--raster-type`': ('raster_type', {}),
+    ROOT = Path(__file__).resolve().parents[2]
+    #: README -> the heading that opens the table, the marker that ends its section,
+    #: column header -> (OptimizeArguments field, extra flags to pin), and how that
+    #: README spells a resolved value.
+    READMES = {
+        'README.md': {
+            'heading': '#### Product-Type Profiles',
+            'section_end': '\n#### ',
+            'columns': {
+                '`-a`': ('algorithm', {}),
+                '`-p`': ('predictor', {}),
+                '`-d`': ('decimals', {}),
+                '`-z` *': ('max_z_error', {'algorithm': 'LERC'}),
+                '`--mask-nodata`': ('mask_nodata', {}),
+                '`--mask-alpha`': ('mask_alpha', {}),
+                '`--overview-resampling`': ('overview_resampling', {}),
+                '`--raster-type`': ('raster_type', {}),
+            },
+            'spelling': {},
+        },
+        'README.es.md': {
+            'heading': '## Perfiles por tipo de producto',
+            'section_end': '\n## ',
+            'columns': {
+                'Algoritmo': ('algorithm', {}),
+                'Predictor': ('predictor', {}),
+                'Decimales': ('decimals', {}),
+                'Error Z máx. (LERC) *': ('max_z_error', {'algorithm': 'LERC'}),
+                'Enmascarar NoData': ('mask_nodata', {}),
+                'Banda alfa a máscara': ('mask_alpha', {}),
+                'Remuestreo de pirámides': ('overview_resampling', {}),
+                'Tipo de ráster': ('raster_type', {}),
+            },
+            'spelling': {'True': 'Sí', 'False': 'No', 'Point': 'PixelIsPoint',
+                         'Area': 'PixelIsArea', 'none': 'ninguno'},
+        },
     }
 
-    @pytest.fixture(scope='class')
-    def table(self):
-        text = self.README.read_text(encoding='utf-8')
-        body = text.split('#### Product-Type Profiles', 1)[1].split('\n#### ', 1)[0]
+    @pytest.fixture(scope='class', params=sorted(READMES))
+    def table(self, request):
+        spec = self.READMES[request.param]
+        text = (self.ROOT / request.param).read_text(encoding='utf-8')
+        body = text.split(spec['heading'], 1)[1].split(spec['section_end'], 1)[0]
         rows = [[c.strip() for c in line.strip().strip('|').split('|')]
                 for line in body.splitlines()
                 if line.startswith('|') and '---' not in line]
         header, *data = rows
-        return header, {row[0].strip('`'): row for row in data}
+        # The first cell is the product type in backticks, optionally followed by the
+        # dialog's label for it.
+        return request.param, spec, header, {re.match(r'`([^`]+)`', row[0]).group(1): row
+                                              for row in data}
 
     def test_every_product_type_has_a_row(self, table):
-        _, rows = table
+        _, _, _, rows = table
         assert set(rows) == set(ch.PRODUCT_TYPES)
 
     @pytest.mark.parametrize('product_type', ch.PRODUCT_TYPES)
     def test_row_matches_the_resolver(self, table, product_type):
-        header, rows = table
+        readme, spec, header, rows = table
         row = rows[product_type]
-        for column, (field, overrides) in self.COLUMNS.items():
+        for column, (field, overrides) in spec['columns'].items():
             args = ch.probe_defaults(product_type, **overrides)
             expected = 'n/a' if args is None else ch.fmt_value(getattr(args, field))
+            expected = spec['spelling'].get(expected, expected)
             assert row[header.index(column)] == expected, \
-                f'README {product_type}/{column} says {row[header.index(column)]!r}, ' \
+                f'{readme} {product_type}/{column} says {row[header.index(column)]!r}, ' \
                 f'resolver says {expected!r}'
 
 

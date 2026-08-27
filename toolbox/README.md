@@ -1,3 +1,5 @@
+**English** | [Español](README.es.md)
+
 # GTTK ArcGIS Pro Toolbox Setup Guide
 
 This guide provides detailed installation and configuration instructions for the GTTK ArcGIS Pro Python Toolbox.
@@ -13,6 +15,8 @@ This guide provides detailed installation and configuration instructions for the
   - [Troubleshooting](#troubleshooting)
 - [Python Environment Setup](#python-environment-setup)
 - [Toolbox Setup Instructions](#toolbox-setup-instructions)
+- [Toolbox Language](#toolbox-language)
+- [Quick Reference](#quick-reference)
 
 ---
 
@@ -226,6 +230,25 @@ While QGIS is an excellent tool and valuable for GIS workflows, standalone QGIS 
 
 ---
 
+## Toolbox Language
+
+The toolbox displays in English or Spanish. When ArcGIS Pro loads it, the toolbox picks
+the language in this order and says so in the first line of every run's messages:
+
+1. The `GTTK_LANG` environment variable (`en` or `es`).
+2. `config.toml` -- `[gui] language = "auto"` (default), `"en"` or `"es"`.
+3. The display language chosen in ArcGIS Pro's **Options > Language** (only offered once
+   an Esri language pack is installed).
+4. The Windows display language.
+
+To force a language, set `language = "es"` (or `"en"`) in `config.toml`, then right-click
+the toolbox in the Catalog pane and choose **Refresh**. Labels, choices, messages and the
+parameter help panel follow the language; reports and GDAL's own output stay in English.
+ArcGIS Pro's own interface needs Esri's language pack (My Esri) to change language; the
+toolbox does not.
+
+---
+
 ## Quick Reference
 
 | Step | Action |
@@ -235,3 +258,4 @@ While QGIS is an excellent tool and valuable for GIS workflows, standalone QGIS 
 | 3 | Clone ArcGIS Pro Python environment |
 | 4 | Install `tifffile` in cloned environment |
 | 5 | Add toolbox to ArcGIS Pro project |
+| 6 | (Optional) Force the toolbox language with `[gui] language` in `config.toml` |

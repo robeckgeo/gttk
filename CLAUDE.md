@@ -90,6 +90,7 @@ Located in `gttk/utils/validation/`:
 - `gttk/tools/optimize_compression_arc.py` - Uses OSGeo4W GDAL via subprocess to avoid ArcGIS GDAL conflicts
 - `toolbox/GTTK_Toolbox.pyt` - ArcGIS Pro Python Toolbox
 - OSGeo4W path configured in `config.toml`
+- `gttk/i18n.py` - Toolbox language: detection (`GTTK_LANG` → `config.toml` `[gui] language` → Pro's `ARCGISPRO_UILANGID` registry value → Windows display language), `_()` over TOML catalogs in `gttk/resources/i18n/<lang>.toml` (keyed by the English string), `Picklist` for translated dialog choices that stay codes internally, and `sync_sidecars()` which copies `toolbox/i18n/<lang>/*.pyt.xml` beside the toolbox on load (copies are gitignored). Spanish user docs: `README.es.md`, `toolbox/README.es.md`
 
 ## Configuration Files
 - `config.toml` - Runtime configuration (OSGeo4W path, logging, statistics tuning)
@@ -115,6 +116,12 @@ Validation test coverage:
 - `test_validation_phase5.py` - JSONPath, extended data types
 - `test_validation_report.py` - Report generation
 - `test_validation_integration.py` - End-to-end validation workflows
+
+Toolbox language coverage:
+- `test_i18n.py` - detection precedence, catalogs, `Picklist`, sidecar sync
+- `test_i18n_catalog.py` - every `_()` string in the `.pyt` has a Spanish entry, no orphans, placeholders intact
+- `test_toolbox_sidecars.py` - each language's `.pyt.xml` documents exactly the dialog's parameters and labels
+- `test_optimize_arc_wiring.py` - the ArcGIS optimize path binds its GDAL options and logs to the GP pane
 
 ## Key Dependencies
 - **GDAL** (>=3.11) - Core geospatial operations
