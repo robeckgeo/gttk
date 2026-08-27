@@ -157,8 +157,18 @@ try:
     from gttk.utils.validation import get_available_products
     from gttk.utils.validation.loader import VALID_SECTIONS as VALIDATION_SECTIONS
 except ImportError as e:
-    arcpy.AddError(f"Failed to import a required module. Ensure the tool scripts are in the correct directory: {gttk_path}")
-    arcpy.AddError(f"gttk was imported from: {getattr(sys.modules.get('gttk'), '__file__', None)}")
+    missing = getattr(e, 'name', None)
+    if isinstance(e, ModuleNotFoundError) and missing and not missing.startswith('gttk'):
+        # The usual cause: ArcGIS Pro is running its default conda environment, which
+        # lacks the packages GTTK needs (tifffile, jsonpath-ng).  Naming the interpreter
+        # shows which environment Pro is actually using.
+        arcpy.AddError(f"The Python environment ArcGIS Pro is using has no '{missing}' package: {sys.executable}")
+        arcpy.AddError("Clone the default environment in the Package Manager, add 'tifffile' and 'jsonpath-ng' to "
+                       "the clone, make it the active environment and restart ArcGIS Pro (see toolbox/README.md).")
+    else:
+        arcpy.AddError(f"Failed to import a required module. Ensure the tool scripts are in the correct directory: {gttk_path}")
+        arcpy.AddError(f"gttk was imported from: {getattr(sys.modules.get('gttk'), '__file__', None)}")
+    arcpy.AddError(f"Python: {sys.executable}")
     arcpy.AddError(f"System Path: {sys.path}")
     raise e
 

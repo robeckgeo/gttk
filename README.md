@@ -585,7 +585,7 @@ The GTTK ArcGIS Pro Toolbox stored in `toolbox/GTTK_Toolbox.pyt` provides a comp
 
 The ArcGIS Pro Toolbox requires:
 1. **OSGeo4W with GDAL** - A standalone GDAL environment isolated from ArcGIS Pro's internal GDAL
-2. **Python environment with tifffile** - A cloned ArcGIS Pro conda environment with the `tifffile` package installed
+2. **Python environment with tifffile** - A cloned ArcGIS Pro conda environment with the `tifffile` and `jsonpath-ng` packages installed, made the active environment
 
 For detailed installation and configuration instructions, see the **[Toolbox Setup Guide](toolbox/README.md)**.
 

@@ -194,6 +194,11 @@ While QGIS is an excellent tool and valuable for GIS workflows, standalone QGIS 
    - Do NOT add OSGeo4W to system PATH if you have other GDAL installations
    - GTTK will use the path specified in `config.toml`
 
+5. **`ModuleNotFoundError: No module named 'tifffile'` when the toolbox loads**:
+   - ArcGIS Pro is running its default `arcgispro-py3` environment; the toolbox's error message names the interpreter in use
+   - Open the **Package Manager**, activate your cloned environment and restart ArcGIS Pro
+   - After an ArcGIS Pro upgrade, clone the environment again and reinstall the packages
+
 **Getting Help:**
 
 - OSGeo4W User Guide: [https://trac.osgeo.org/osgeo4w/wiki/TracGuide](https://trac.osgeo.org/osgeo4w/wiki/TracGuide)
@@ -204,7 +209,7 @@ While QGIS is an excellent tool and valuable for GIS workflows, standalone QGIS 
 
 ## Python Environment Setup
 
-**CRITICAL DEPENDENCY**: The `tifffile` module is required for GTTK to function properly. This package is **not** included in the default ArcGIS Pro `arcgispro-py3` conda environment and must be installed in a custom environment.
+**CRITICAL DEPENDENCY**: The `tifffile` module is required for GTTK to load at all, and `jsonpath-ng` is needed by Validate Metadata's PROJJSON rules. Neither is included in the default ArcGIS Pro `arcgispro-py3` conda environment, which cannot be modified, so they must be installed in a cloned environment.
 
 ### Setting Up Your Environment
 
@@ -214,9 +219,9 @@ While QGIS is an excellent tool and valuable for GIS workflows, standalone QGIS 
 
 3. **Make the cloned environment active**, then click on the `Add Packages` tab in the ArcGIS Pro Package Manager.
 
-4. **Search for "tifffile"** and install it. The package is available in the default conda channels.
+4. **Search for "tifffile"** and install it, then do the same for **"jsonpath-ng"**. Both are available in the default conda channels.
 
-5. **Ensure that the same environment is active** when running GTTK tools from the toolbox.
+5. **Ensure that the same environment is active** when running GTTK tools from the toolbox. After upgrading ArcGIS Pro, clone the environment again: a clone made under an older release is not carried over, and Pro silently falls back to the default environment.
 
 ---
 
@@ -256,6 +261,6 @@ toolbox does not.
 | 1 | Install OSGeo4W with GDAL |
 | 2 | Configure `config.toml` with OSGeo4W path |
 | 3 | Clone ArcGIS Pro Python environment |
-| 4 | Install `tifffile` in cloned environment |
+| 4 | Install `tifffile` and `jsonpath-ng` in the cloned environment |
 | 5 | Add toolbox to ArcGIS Pro project |
 | 6 | (Optional) Force the toolbox language with `[gui] language` in `config.toml` |

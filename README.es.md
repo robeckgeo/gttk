@@ -150,7 +150,7 @@ En resumen:
 | 1 | Instale **OSGeo4W** con GDAL (un GDAL independiente del que incluye ArcGIS Pro) |
 | 2 | Indique la ruta de OSGeo4W en `config.toml` (`[paths] osgeo4w`) |
 | 3 | Clone el entorno de Python de ArcGIS Pro desde el **Administrador de paquetes** |
-| 4 | Instale el paquete `tifffile` en el entorno clonado y actívelo |
+| 4 | Instale los paquetes `tifffile` y `jsonpath-ng` en el entorno clonado y actívelo |
 | 5 | En el panel **Catálogo**, agregue la carpeta `toolbox` como caja de herramientas |
 
 Los detalles, la verificación y la solución de problemas están en la

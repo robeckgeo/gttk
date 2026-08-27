@@ -216,6 +216,12 @@ que GTTK necesita. El instalador de OSGeo4W ofrece:
    - NO agregue OSGeo4W al PATH del sistema si tiene otras instalaciones de GDAL
    - GTTK usará la ruta indicada en `config.toml`
 
+5. **`ModuleNotFoundError: No module named 'tifffile'` al cargar la caja de herramientas**:
+   - ArcGIS Pro está usando su entorno predeterminado `arcgispro-py3`; el mensaje de error de la
+     caja de herramientas indica qué intérprete está en uso
+   - Abra el **Administrador de paquetes**, active el entorno clonado y reinicie ArcGIS Pro
+   - Tras una actualización de ArcGIS Pro, vuelva a clonar el entorno y reinstale los paquetes
+
 **Ayuda adicional:**
 
 - Guía de usuario de OSGeo4W: [https://trac.osgeo.org/osgeo4w/wiki/TracGuide](https://trac.osgeo.org/osgeo4w/wiki/TracGuide)
@@ -226,9 +232,10 @@ que GTTK necesita. El instalador de OSGeo4W ofrece:
 
 ## Configuración del entorno de Python
 
-**DEPENDENCIA CRÍTICA**: GTTK necesita el módulo `tifffile`, que **no** está incluido en el
-entorno conda predeterminado de ArcGIS Pro (`arcgispro-py3`) y debe instalarse en un entorno
-personalizado.
+**DEPENDENCIA CRÍTICA**: GTTK necesita el módulo `tifffile` para cargarse, y *Validar
+metadatos* necesita `jsonpath-ng` para las reglas PROJJSON. Ninguno de los dos está incluido en
+el entorno conda predeterminado de ArcGIS Pro (`arcgispro-py3`), que no se puede modificar, así
+que deben instalarse en un entorno clonado.
 
 ### Preparar el entorno
 
@@ -243,11 +250,13 @@ personalizado.
 3. **Active el entorno clonado** y abra la pestaña **Agregar paquetes** del Administrador de
    paquetes.
 
-4. **Busque "tifffile"** e instálelo. El paquete está disponible en los canales de conda
-   predeterminados.
+4. **Busque "tifffile"** e instálelo; después haga lo mismo con **"jsonpath-ng"**. Ambos
+   están disponibles en los canales de conda predeterminados.
 
 5. **Asegúrese de que ese mismo entorno esté activo** cuando ejecute las herramientas de GTTK
-   desde la caja de herramientas.
+   desde la caja de herramientas. Tras actualizar ArcGIS Pro, vuelva a clonar el entorno: un
+   clon creado con una versión anterior no se conserva, y Pro vuelve en silencio al entorno
+   predeterminado.
 
 ---
 
@@ -291,6 +300,6 @@ requiere el paquete de idioma de Esri (My Esri), que GTTK no necesita.
 | 1 | Instalar OSGeo4W con GDAL |
 | 2 | Configurar la ruta de OSGeo4W en `config.toml` |
 | 3 | Clonar el entorno de Python de ArcGIS Pro |
-| 4 | Instalar `tifffile` en el entorno clonado |
+| 4 | Instalar `tifffile` y `jsonpath-ng` en el entorno clonado |
 | 5 | Agregar la caja de herramientas al proyecto de ArcGIS Pro |
 | 6 | (Opcional) Fijar el idioma con `[gui] language` en `config.toml` |
