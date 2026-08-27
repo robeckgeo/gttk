@@ -130,6 +130,10 @@ except ImportError as e:
 # toolbox, so "Refresh" in the Catalog pane is enough after editing config.toml.
 LANG = i18n.activate(i18n.detect_language(reload_config=True))
 arcpy.AddMessage(i18n.explain_detection()[0])
+# Pro reads the help side panel from static .pyt.xml files beside this toolbox and has
+# no per-language lookup, so the active language's copies are put in place here.
+for _warning in i18n.sync_sidecars(script_path, LANG).warnings:
+    arcpy.AddWarning(_warning)
 
 #: Dialog group for the options that are not part of the core compression choice.
 OVERVIEW_CATEGORY = _("Overview and Performance")
