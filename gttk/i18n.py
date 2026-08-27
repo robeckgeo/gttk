@@ -81,6 +81,7 @@ _language: str = DEFAULT_LANGUAGE
 _catalog: dict[str, str] = {}
 _catalogs: dict[str, dict[str, str]] = {}
 _detection: list[str] = [f'Language: {DEFAULT_LANGUAGE} (source: built-in default)']
+_source: str = 'built-in default'
 _catalog_notes: list[str] = []
 
 
@@ -182,7 +183,7 @@ def detect_language(*, reload_config: bool = False) -> str:
     ``reload_config`` re-reads ``config.toml`` first, so a Pro "Refresh" honours an
     edit to the file.
     """
-    global _detection
+    global _detection, _source
     notes: list[str] = []
     winner: Optional[str] = None
     source = 'built-in default'
@@ -211,6 +212,7 @@ def detect_language(*, reload_config: bool = False) -> str:
             winner, source = lang, name
             break
     winner = winner or DEFAULT_LANGUAGE
+    _source = source
     _detection = [f'Language: {winner} (source: {source})', *notes]
     return winner
 
@@ -218,6 +220,11 @@ def detect_language(*, reload_config: bool = False) -> str:
 def explain_detection() -> list[str]:
     """One summary line (``Language: es (source: ...)``) followed by the signals seen."""
     return [*_detection, *_catalog_notes]
+
+
+def detection() -> tuple[str, str]:
+    """The active language and the signal that chose it, for callers that word it themselves."""
+    return _language, _source
 
 
 # --- Catalogs -----------------------------------------------------------------------

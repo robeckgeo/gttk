@@ -141,6 +141,7 @@
 "Precision Auxiliary Metadata (PAM)" = "Metadatos auxiliares de precisión (PAM)"
 
 [toolbox.messages]
+"Language: {lang} (source: {source})" = "Idioma: {lang} (origen: {source})"
 # Parameter validation
 "Product Type is required when using presets." = "El tipo de producto es obligatorio al usar preajustes."
 "CSV file is required when using custom configuration." = "El archivo CSV es obligatorio al usar una configuración personalizada."

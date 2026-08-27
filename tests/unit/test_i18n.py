@@ -124,6 +124,11 @@ class TestDetectLanguage:
         assert explanation[0] == 'Language: en (source: built-in default)'
         assert len(explanation) == 6  # summary + one line per signal consulted
 
+    def test_detection_names_the_language_and_its_source(self, signals):
+        signals(_read_pro_registry='es')
+        i18n.activate(i18n.detect_language())
+        assert i18n.detection() == ('es', i18n.PRO_REGISTRY_VALUE)
+
     def test_explain_lists_only_consulted_signals(self, signals):
         signals(_read_env='es')
         i18n.detect_language()

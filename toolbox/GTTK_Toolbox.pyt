@@ -176,7 +176,15 @@ except ImportError as e:
 # the Windows display language, else English.  Chosen every time Pro (re)loads the
 # toolbox, so "Refresh" in the Catalog pane is enough after editing config.toml.
 LANG = i18n.activate(i18n.detect_language(reload_config=True))
-arcpy.AddMessage(i18n.explain_detection()[0])
+
+
+def _language_line():
+    """The language in use and what chose it, worded in that language."""
+    lang, source = i18n.detection()
+    return _("Language: {lang} (source: {source})").format(lang=lang, source=source)
+
+
+arcpy.AddMessage(_language_line())
 # Pro reads the help side panel from static .pyt.xml files beside this toolbox and has
 # no per-language lookup, so the active language's copies are put in place here.
 for _warning in i18n.sync_sidecars(script_path, LANG).warnings:
@@ -370,7 +378,7 @@ class CompareCompression:
         return
 
     def execute(self, parameters, messages):
-        messages.addMessage(i18n.explain_detection()[0])
+        messages.addMessage(_language_line())
         baseline_param = parameters[0].value
         if hasattr(baseline_param, 'dataSource'):
             baseline_path = baseline_param.dataSource
@@ -872,7 +880,7 @@ class OptimizeCompression:
 
     def execute(self, parameters, messages):
         """The source code of the tool."""
-        messages.addMessage(i18n.explain_detection()[0])
+        messages.addMessage(_language_line())
         # --- Gather Parameters ---
         input_param = parameters[0].value
         if hasattr(input_param, 'dataSource'):
@@ -1201,7 +1209,7 @@ class TestCompression:
 
     def execute(self, parameters, messages):
         """Execute the test compression tool."""
-        messages.addMessage(i18n.explain_detection()[0])
+        messages.addMessage(_language_line())
         try:
             # --- Gather Parameters ---
             input_param = parameters[0].value
@@ -1514,7 +1522,7 @@ class ReadMetadata:
     def execute(self, parameters, messages):
         """The source code of the tool."""
         messages.addMessage(_("--- ReadMetadata: execute method started ---"))
-        messages.addMessage(i18n.explain_detection()[0])
+        messages.addMessage(_language_line())
         try:
             input_param = parameters[0].value
             if hasattr(input_param, 'dataSource'):
@@ -1570,7 +1578,7 @@ class ReadMetadata:
                 # Use preset reader type, don't pass custom sections
                 args.reader_type = reader_type
                 args.sections = None
-                messages.addMessage(_("Mode: Preset ({mode})").format(mode=args.reader_type))
+                messages.addMessage(_("Mode: Preset ({mode})").format(mode=READER_TYPE.label(reader_type)))
             else:
                 # Custom sections selected, don't pass reader_type
                 args.reader_type = None
@@ -1821,7 +1829,7 @@ class ValidateMetadata:
     def execute(self, parameters, messages):
         """Execute the validation tool."""
         messages.addMessage(_("--- ValidateMetadata: execute method started ---"))
-        messages.addMessage(i18n.explain_detection()[0])
+        messages.addMessage(_language_line())
 
         try:
             # --- Extract Parameters ---
