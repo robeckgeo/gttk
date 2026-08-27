@@ -396,3 +396,10 @@ def sync_sidecars(pyt_path: Path | str, lang: Any) -> SidecarSync:
         except OSError as exc:
             result.warnings.append(f'Could not update help file {src.name}: {exc}')
     return result
+
+
+if __name__ == '__main__':
+    # ``python -m gttk.i18n``: show which signals were seen and which language won,
+    # useful on a machine where ArcGIS Pro's language setting is in doubt.
+    activate(detect_language(reload_config=True))
+    print('\n'.join(explain_detection()))
