@@ -55,6 +55,14 @@ All notable changes to this project will be documented in this file.
   Compression share one product-type list (`Error Model`, with the old
   `Generic Point-cloud Model` still accepted).
 
+- **`gttk optimize` and `gttk read` could hang at the histogram step wherever a display
+  is advertised.** The histogram generator imported pyplot without choosing a backend, so
+  matplotlib took a GUI one (QtAgg under WSLg, which sets `DISPLAY` for every shell) and
+  then blocked on the compositor socket; a headless run sat at 1% CPU until its timeout.
+  The module now selects the Agg backend before pyplot loads -- the histogram is a PNG for
+  the report, never a window -- and a test imports it with a display advertised and checks
+  the backend it got.
+
 ### Changed
 
 - **`gttk --help` no longer claims `(default: None)` for options that do have a
