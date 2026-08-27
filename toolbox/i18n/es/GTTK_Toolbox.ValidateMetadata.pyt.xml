@@ -19,37 +19,37 @@
 		</usage>
 		<parameters>
 			<param name="input_path" displayname="GeoTIFF de entrada (uno o varios)" type="Required" direction="Input" datatype="Raster Layer; Raster Dataset; File; Folder" expression="input_path">
-				<dialogReference>Seleccione un archivo GeoTIFF, una capa ráster o una carpeta con archivos GeoTIFF para validar. Si selecciona una carpeta, se validarán todos los archivos .tif y .tiff cuyo nombre contenga el filtro por nombre (si lo usa).</dialogReference>
+				<dialogReference><DIV STYLE="text-align:Left;"><DIV><P><SPAN>Seleccione un archivo GeoTIFF, una capa ráster o una carpeta con archivos GeoTIFF para validar. Si selecciona una carpeta, se validarán todos los archivos .tif y .tiff cuyo nombre contenga el filtro por nombre (si lo usa).</SPAN></P></DIV></DIV></dialogReference>
 			</param>
 			<param name="rules_dir" displayname="Directorio de reglas" type="Optional" direction="Input" datatype="Folder" expression="{rules_dir}">
-				<dialogReference>Directorio con los archivos de reglas de validación TOML. De forma predeterminada es gttk/resources/rules dentro de la instalación de la caja de herramientas. Puede crear reglas propias siguiendo el formato de example_rules.toml.</dialogReference>
+				<dialogReference><DIV STYLE="text-align:Left;"><DIV><P><SPAN>Directorio con los archivos de reglas de validación TOML. De forma predeterminada es gttk/resources/rules dentro de la instalación de la caja de herramientas. Puede crear reglas propias siguiendo el formato de example_rules.toml.</SPAN></P></DIV></DIV></dialogReference>
 			</param>
 			<param name="product" displayname="Producto" type="Required" direction="Input" datatype="String" expression="product">
-				<dialogReference>Producto contra el que se valida (p. ej., DGED5, GLO-30, NAIP). Las definiciones de producto se cargan de los archivos TOML del directorio de reglas. Cada producto define reglas específicas para etiquetas TIFF, GeoKeys, metadatos GDAL y XML incrustado.</dialogReference>
+				<dialogReference><DIV STYLE="text-align:Left;"><DIV><P><SPAN>Producto contra el que se valida (p. ej., DGED5, GLO-30, NAIP). Las definiciones de producto se cargan de los archivos TOML del directorio de reglas. Cada producto define reglas específicas para etiquetas TIFF, GeoKeys, metadatos GDAL y XML incrustado.</SPAN></P></DIV></DIV></dialogReference>
 			</param>
 			<param name="sections" displayname="Secciones a validar" type="Optional" direction="Input" datatype="String" expression="{sections}">
-				<dialogReference>Seleccione qué secciones de metadatos validar. Secciones disponibles: tag (etiquetas TIFF), geokey (GeoKeys), gdal (elementos y estadísticas de GDAL_METADATA), geo (XML incrustado en GEO_METADATA), xmp (metadatos XMP), xml (archivo XML externo), projjson (CRS en PROJJSON). De forma predeterminada se validan todas.</dialogReference>
+				<dialogReference><DIV STYLE="text-align:Left;"><DIV><P><SPAN>Seleccione qué secciones de metadatos validar. Secciones disponibles: tag (etiquetas TIFF), geokey (GeoKeys), gdal (elementos y estadísticas de GDAL_METADATA), geo (XML incrustado en GEO_METADATA), xmp (metadatos XMP), xml (archivo XML externo), projjson (CRS en PROJJSON). De forma predeterminada se validan todas.</SPAN></P></DIV></DIV></dialogReference>
 			</param>
 			<param name="name_filter" displayname="Filtro por nombre" type="Optional" direction="Input" datatype="String" expression="{name_filter}">
-				<dialogReference>Filtra los archivos por nombre al validar un directorio. Solo se validan los archivos cuyo nombre contenga este texto. Útil en directorios con productos mezclados donde la convención de nombres identifica cada producto.</dialogReference>
+				<dialogReference><DIV STYLE="text-align:Left;"><DIV><P><SPAN>Filtra los archivos por nombre al validar un directorio. Solo se validan los archivos cuyo nombre contenga este texto. Útil en directorios con productos mezclados donde la convención de nombres identifica cada producto.</SPAN></P></DIV></DIV></dialogReference>
 			</param>
 			<param name="output_dir" displayname="Directorio de salida" type="Optional" direction="Input" datatype="Folder" expression="{output_dir}">
-				<dialogReference>Directorio padre para la carpeta de resultados de la validación. Si no se indica, la carpeta se crea junto al archivo de entrada o dentro del directorio de entrada. Se crea automáticamente una subcarpeta con marca de tiempo (p. ej., validation_20260117_120000).</dialogReference>
+				<dialogReference><DIV STYLE="text-align:Left;"><DIV><P><SPAN>Directorio padre para la carpeta de resultados de la validación. Si no se indica, la carpeta se crea junto al archivo de entrada o dentro del directorio de entrada. Se crea automáticamente una subcarpeta con marca de tiempo (p. ej., validation_20260117_120000).</SPAN></P></DIV></DIV></dialogReference>
 			</param>
 			<param name="write_reports" displayname="Escribir informes individuales" type="Optional" direction="Input" datatype="Boolean" expression="{write_reports}">
-				<dialogReference>Si está marcado, además del resumen JSON se genera un informe HTML o Markdown por cada archivo validado. Los nombres de los informes incluyen el estado PASS o FAIL (p. ej., archivo_PASS.html).</dialogReference>
+				<dialogReference><DIV STYLE="text-align:Left;"><DIV><P><SPAN>Si está marcado, además del resumen JSON se genera un informe HTML o Markdown por cada archivo validado. Los nombres de los informes incluyen el estado PASS o FAIL (p. ej., archivo_PASS.html).</SPAN></P></DIV></DIV></dialogReference>
 			</param>
 			<param name="report_format" displayname="Formato del informe" type="Optional" direction="Input" datatype="String" expression="{report_format}">
-				<dialogReference>Formato de los informes individuales de validación. HTML produce informes con formato y estilo, adecuados para verse en un navegador. Markdown es texto sin formato, adecuado para la documentación y el control de versiones.</dialogReference>
+				<dialogReference><DIV STYLE="text-align:Left;"><DIV><P><SPAN>Formato de los informes individuales de validación. HTML produce informes con formato y estilo, adecuados para verse en un navegador. Markdown es texto sin formato, adecuado para la documentación y el control de versiones.</SPAN></P></DIV></DIV></dialogReference>
 			</param>
 			<param name="open_report" displayname="Abrir el informe al terminar" type="Optional" direction="Input" datatype="Boolean" expression="{open_report}">
-				<dialogReference>Si está marcado, el archivo de resumen JSON se abre automáticamente con la aplicación predeterminada del sistema al terminar la validación.</dialogReference>
+				<dialogReference><DIV STYLE="text-align:Left;"><DIV><P><SPAN>Si está marcado, el archivo de resumen JSON se abre automáticamente con la aplicación predeterminada del sistema al terminar la validación.</SPAN></P></DIV></DIV></dialogReference>
 			</param>
 			<param name="output_folder" displayname="Carpeta de salida" type="Derived" direction="Output" datatype="Folder" expression="output_folder">
-				<dialogReference>Carpeta de resultados generada, con el resumen JSON y los informes individuales. La ruta se determina automáticamente a partir de la ubicación de la entrada y la marca de tiempo.</dialogReference>
+				<dialogReference><DIV STYLE="text-align:Left;"><DIV><P><SPAN>Carpeta de resultados generada, con el resumen JSON y los informes individuales. La ruta se determina automáticamente a partir de la ubicación de la entrada y la marca de tiempo.</SPAN></P></DIV></DIV></dialogReference>
 			</param>
 			<param name="json_output_path" displayname="Ruta del resumen JSON" type="Derived" direction="Output" datatype="File" expression="json_output_path">
-				<dialogReference>Ruta del archivo de resumen JSON con los resultados completos de la validación de todos los archivos procesados: metadatos de cada archivo, estado de la validación y resultados detallados regla por regla.</dialogReference>
+				<dialogReference><DIV STYLE="text-align:Left;"><DIV><P><SPAN>Ruta del archivo de resumen JSON con los resultados completos de la validación de todos los archivos procesados: metadatos de cada archivo, estado de la validación y resultados detallados regla por regla.</SPAN></P></DIV></DIV></dialogReference>
 			</param>
 		</parameters>
 	</tool>

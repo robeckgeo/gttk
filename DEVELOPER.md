@@ -285,6 +285,9 @@ Rules that keep it honest:
 - A new string needs an entry in every catalog and a removed one must leave them; a
   sidecar must document exactly the dialog's parameters under that language's labels. The
   tests above fail otherwise.
+- A sidecar's `dialogReference` must be rich text (`<DIV><DIV><P><SPAN>…`), the form
+  Esri's metadata editor writes: Pro's item-description stylesheet drops plain text and
+  shows "no reference for this parameter" instead. The sidecar test enforces it.
 - After editing a catalog or a sidecar, right-click the toolbox in the Catalog pane and
   **Refresh**. Edits to `gttk/i18n.py` or any other module need a Pro restart: Pro
   re-executes only the `.pyt`.

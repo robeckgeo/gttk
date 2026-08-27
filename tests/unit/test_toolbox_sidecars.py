@@ -173,8 +173,19 @@ class TestToolSidecars:
         assert all(item.text.strip() for item in element.find('usage'))
         empty = [param.get('name') for param in element.find('parameters')
                  if not (param.find('dialogReference') is not None
-                         and (param.find('dialogReference').text or '').strip())]
+                         and ''.join(param.find('dialogReference').itertext()).strip())]
         assert empty == []
+
+    @pytest.mark.parametrize('lang', LANGUAGES)
+    @pytest.mark.parametrize('tool', TOOLS)
+    def test_explanations_are_rich_text(self, lang, tool):
+        """Pro's item-description stylesheet (geoprocessingPro.xslt) shows a dialogReference
+        only when it holds child elements or escaped HTML; plain text falls through to
+        the "no reference" placeholder.  Esri's editor writes DIV/P/SPAN, so we do too."""
+        element = sidecar(lang, tool).find('tool')
+        plain = [param.get('name') for param in element.find('parameters')
+                 if param.find('dialogReference/DIV') is None]
+        assert plain == []
 
     @pytest.mark.parametrize('tool', TOOLS)
     def test_languages_agree_on_structure(self, tool):
