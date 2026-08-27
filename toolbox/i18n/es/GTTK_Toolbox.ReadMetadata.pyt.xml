@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata xml:lang="es">
+	<Esri>
+		<CreaDate>20250722</CreaDate>
+		<CreaTime>22024600</CreaTime>
+		<ArcGISFormat>1.0</ArcGISFormat>
+		<SyncOnce>TRUE</SyncOnce>
+		<ModDate>20260827</ModDate>
+		<ModTime>120000</ModTime>
+	</Esri>
+	<tool name="ReadMetadata" displayname="Leer metadatos" toolboxalias="gttk">
+		<summary>Extrae y presenta los metadatos completos de un GeoTIFF en informes detallados en HTML o Markdown.</summary>
+		<usage>
+			<bullet_item>Genera un análisis detallado de las etiquetas TIFF, las GeoKeys, la información de proyección y la validación COG.</bullet_item>
+			<bullet_item>El formato HTML incluye resaltado de sintaxis y es el mejor para verlo en un navegador.</bullet_item>
+			<bullet_item>El formato Markdown es texto sin formato, útil para comparaciones en paralelo en el control de calidad.</bullet_item>
+			<bullet_item>Elija entre los preajustes Analista (compacto), Productor (completo) o Personalizado (selección manual de secciones).</bullet_item>
+		</usage>
+		<parameters>
+			<param name="input_geotiff" displayname="GeoTIFF o capa ráster de entrada" type="Required" direction="Input" datatype="Raster Layer; Raster Dataset; File" expression="input_geotiff">
+				<dialogReference>El archivo GeoTIFF o la capa ráster a analizar. Puede seleccionar una capa del mapa o buscar un archivo en disco.</dialogReference>
+			</param>
+			<param name="output_format" displayname="Formato de salida" type="Required" direction="Input" datatype="String" expression="output_format">
+				<dialogReference>Formato del informe de metadatos. HTML incluye resaltado de sintaxis y es el mejor para la lectura; Markdown es texto sin formato, adecuado para la documentación y el control de versiones.</dialogReference>
+			</param>
+			<param name="output_suffix" displayname="Sufijo del nombre de salida" type="Optional" direction="Input" datatype="String" expression="{output_suffix}">
+				<dialogReference>Sufijo que se agrega al nombre del archivo de salida antes de la extensión. El valor predeterminado para los informes de metadatos es '_meta'.</dialogReference>
+			</param>
+			<param name="output_file" displayname="Archivo de informe de salida" type="Derived" direction="Output" datatype="File" expression="output_file">
+				<dialogReference>El informe de metadatos generado. La ruta se determina automáticamente a partir del archivo de entrada, el formato y el sufijo elegidos.</dialogReference>
+			</param>
+			<param name="open_report" displayname="Abrir el informe al terminar" type="Optional" direction="Input" datatype="Boolean" expression="{open_report}">
+				<dialogReference>Si está marcado, el informe generado se abre automáticamente con la aplicación predeterminada del sistema (p. ej., un navegador para los archivos HTML).</dialogReference>
+			</param>
+			<param name="write_pam_xml" displayname="Escribir el XML de estadísticas (.aux.xml)" type="Optional" direction="Input" datatype="Boolean" expression="{write_pam_xml}">
+				<dialogReference>Si está marcado, se crea un archivo .aux.xml de metadatos auxiliares persistentes (PAM), compatible con Esri, con las estadísticas y los histogramas de cada banda. Así ArcGIS Pro puede omitir el paso 'Calcular estadísticas' al cargar el ráster. PAM es un formato estándar que GDAL y ArcGIS usan para guardar estadísticas e histogramas de rásteres, y otros programas SIG también lo leen.</dialogReference>
+			</param>
+			<param name="page" displayname="Directorio de archivo de imagen (IFD)" type="Optional" direction="Input" datatype="Long" expression="{page}">
+				<dialogReference>Número del directorio de archivo de imagen (IFD) a leer. El valor predeterminado es 0 (la imagen principal). Las pirámides y demás imágenes complementarias se guardan en los IFD siguientes. Por ejemplo, un GeoTIFF con tres pirámides y sin máscara de transparencia tiene los IFD 0 a 4: el IFD 0 es la imagen principal y los IFD 1 a 4 son las pirámides. Si existe, la máscara de transparencia interna de la imagen principal es el IFD 1.</dialogReference>
+			</param>
+			<param name="banner" displayname="Texto del encabezado" type="Optional" direction="Input" datatype="String" expression="{banner}">
+				<dialogReference>Texto personalizado que se muestra al principio y al final del informe. Útil para marcas de clasificación (p. ej., NO CLASIFICADO, dominio público), citas de la fuente o identificadores del proyecto.</dialogReference>
+			</param>
+			<param name="reader_type" displayname="Tipo de lector" type="Optional" direction="Input" datatype="String" expression="{reader_type}">
+				<dialogReference>Configuración predefinida del contenido del informe. 'Analista' se centra en los datos útiles para el análisis, con tablas compactas y las etiquetas habituales. 'Productor' se centra en los detalles de producción, con el alcance completo de etiquetas y los formatos de texto sin procesar. 'Personalizado' permite elegir manualmente las secciones del informe.</dialogReference>
+			</param>
+			<param name="tag_scope" displayname="Alcance de las etiquetas" type="Optional" direction="Input" datatype="String" expression="{tag_scope}">
+				<dialogReference>Controla el detalle de la sección de etiquetas TIFF. 'compacto' muestra solo las etiquetas más útiles. 'completo' enumera todas las etiquetas TIFF del encabezado, incluidos los metadatos estructurales (p. ej., StripOffsets, TileByteCounts) y el contenido que se presenta mejor en otras secciones (p. ej., GeoKeyDirectoryTag, ModelTiePointTag). Es redundante, pero permite a los productores de datos confirmar que el encabezado está bien formado.</dialogReference>
+			</param>
+			<param name="xml_type" displayname="Formato del XML" type="Optional" direction="Input" datatype="String" expression="{xml_type}">
+				<dialogReference>Cómo se presentan en el informe los metadatos XML (GDAL_METADATA, GEO_METADATA, PAM, XMP y archivos XML externos). 'tabla' convierte los atributos XML en pares clave-valor legibles, uno por fila. 'texto' muestra la cadena XML sin procesar con resaltado de sintaxis, útil para copiarla o depurarla.</dialogReference>
+			</param>
+			<param name="section_tags" displayname="Etiquetas TIFF" type="Optional" direction="Input" datatype="Boolean" expression="{section_tags}">
+				<dialogReference>Lista detallada de todas las etiquetas TIFF del encabezado, con identificador, nombre, tipo de dato, recuento y valor. Esencial para entender la estructura del archivo e identificar etiquetas no estándar.</dialogReference>
+			</param>
+			<param name="section_gdal-metadata" displayname="GDAL_METADATA (etiqueta 42112)" type="Optional" direction="Input" datatype="Boolean" expression="{section_gdal-metadata}">
+				<dialogReference>Metadatos del dominio GDAL guardados en la etiqueta TIFF 42112: estadísticas por banda, interpretación de color, información del software y elementos de metadatos personalizados. Fundamentales para entender cómo se interpreta el ráster.</dialogReference>
+			</param>
+			<param name="section_xmp-metadata" displayname="Plataforma de metadatos extensible (XMP)" type="Optional" direction="Input" datatype="Boolean" expression="{section_xmp-metadata}">
+				<dialogReference>Metadatos XMP de Adobe guardados en la etiqueta TIFF 700, habituales en los flujos de trabajo de imágenes para la procedencia, los derechos de autor y la descripción. En datos geoespaciales se usan menos que los metadatos GDAL.</dialogReference>
+			</param>
+			<param name="section_geokeys" displayname="Directorio de GeoKeys" type="Optional" direction="Input" datatype="Boolean" expression="{section_geokeys}">
+				<dialogReference>Claves GeoTIFF (en su mayoría códigos del registro EPSG) que definen el sistema de referencia de coordenadas: proyección, datum, elipsoide y unidades. Los códigos y su significado están definidos en la especificación GeoTIFF de OGC. La misma información se presenta de forma más legible en la sección 'Referencia espacial'.</dialogReference>
+			</param>
+			<param name="section_georeference" displayname="Referencia espacial" type="Optional" direction="Input" datatype="Boolean" expression="{section_georeference}">
+				<dialogReference>Resumen legible del sistema de referencia de coordenadas derivado de las GeoKeys: nombre de la proyección, datum, elipsoide y unidades.</dialogReference>
+			</param>
+			<param name="section_geotransform" displayname="GeoTransform (transformación afín)" type="Optional" direction="Input" datatype="Boolean" expression="{section_geotransform}">
+				<dialogReference>Matriz de transformación afín de seis parámetros que convierte las coordenadas de píxel en coordenadas geográficas. Muestra el tamaño de píxel, el origen y los parámetros de sesgo (rotación).</dialogReference>
+			</param>
+			<param name="section_bbox" displayname="Cuadro delimitador" type="Optional" direction="Input" datatype="Boolean" expression="{section_bbox}">
+				<dialogReference>Coordenadas X/Y mínimas y máximas de la extensión del ráster en su sistema de coordenadas nativo, más las coordenadas del punto central. Las extensiones se calculan a partir de los parámetros de GeoTransform y tienen en cuenta el tipo de ráster (PixelIsArea o PixelIsPoint). Un ráster PixelIsArea se extiende medio píxel más allá de los centros de los píxeles del borde, mientras que la extensión de un ráster PixelIsPoint coincide con los límites exteriores del ráster. En cambio, GDAL NO tiene en cuenta el tipo de ráster al calcular el cuadro delimitador y trata todos los rásteres con la interpretación de área.</dialogReference>
+			</param>
+			<param name="section_geoextent" displayname="Extensión geográfica" type="Optional" direction="Input" datatype="Boolean" expression="{section_geoextent}">
+				<dialogReference>Extensión geográfica en latitud/longitud (WGS84), con las coordenadas de las esquinas y el punto central. Útil para ubicar rápidamente el ráster.</dialogReference>
+			</param>
+			<param name="section_statistics" displayname="Estadísticas" type="Optional" direction="Input" datatype="Boolean" expression="{section_statistics}">
+				<dialogReference>Estadísticas por banda: mínimo, máximo, media, desviación estándar y tratamiento de NoData. Muestra los rangos de valores y la calidad de los datos.</dialogReference>
+			</param>
+			<param name="section_histogram" displayname="Histograma" type="Optional" direction="Input" datatype="Boolean" expression="{section_histogram}">
+				<dialogReference>Gráfico de histograma con la distribución de los valores de píxel de cada banda. Ayuda a identificar rangos de datos, valores atípicos y problemas de calidad.</dialogReference>
+			</param>
+			<param name="section_esri" displayname="Cadena del Projection Engine (PE) de Esri" type="Optional" direction="Input" datatype="Boolean" expression="{section_esri}">
+				<dialogReference>Cadena del Projection Engine de Esri guardada en los metadatos GDAL, que el software ArcGIS usa para identificar el CRS. Puede diferir de la representación WKT estándar.</dialogReference>
+			</param>
+			<param name="section_wkt" displayname="Cadena Well Known Text 2 (WKT2)" type="Optional" direction="Input" datatype="Boolean" expression="{section_wkt}">
+				<dialogReference>Representación Well Known Text versión 2 (WKT2) del sistema de referencia de coordenadas, según el estándar OGC GeoTIFF v1.1. Es la definición autorizada del CRS.</dialogReference>
+			</param>
+			<param name="section_json" displayname="Cadena PROJJSON" type="Optional" direction="Input" datatype="Boolean" expression="{section_json}">
+				<dialogReference>Representación JSON del sistema de referencia de coordenadas según las convenciones de PROJ. Alternativa moderna al WKT para intercambiar CRS.</dialogReference>
+			</param>
+			<param name="section_tiling" displayname="Teselado y pirámides" type="Optional" direction="Input" datatype="Boolean" expression="{section_tiling}">
+				<dialogReference>Configuración del teselado interno y estructura de las pirámides. Muestra las dimensiones de las teselas, los niveles de pirámide y los métodos de remuestreo. Fundamental para analizar el rendimiento.</dialogReference>
+			</param>
+			<param name="section_ifd" displayname="Lista de directorios de archivo de imagen (IFD)" type="Optional" direction="Input" datatype="Boolean" expression="{section_ifd}">
+				<dialogReference>Lista completa de todos los directorios de archivo de imagen (IFD) del archivo: imagen principal, máscara de transparencia y páginas de pirámides. Muestra dimensiones, compresión y estructura.</dialogReference>
+			</param>
+			<param name="section_cog" displayname="Validación COG" type="Optional" direction="Input" datatype="Boolean" expression="{section_cog}">
+				<dialogReference>Resultados de la validación de GeoTIFF optimizado para la nube (COG) según su especificación. Identifica los problemas que impiden un acceso eficiente mediante solicitudes de rango HTTP.</dialogReference>
+			</param>
+			<param name="section_geo-metadata" displayname="GEO_METADATA (etiqueta 50909)" type="Optional" direction="Input" datatype="Boolean" expression="{section_geo-metadata}">
+				<dialogReference>Metadatos XML incrustados en la etiqueta TIFF 50909, que suelen contener metadatos ISO 19115/19139 o XML personalizado procedente de archivos externos.</dialogReference>
+			</param>
+			<param name="section_xml-metadata" displayname="Archivo XML externo de metadatos" type="Optional" direction="Input" datatype="Boolean" expression="{section_xml-metadata}">
+				<dialogReference>Contenido del archivo XML externo (p. ej., .tif.xml), normalmente metadatos ISO o documentación XML personalizada que acompaña al GeoTIFF.</dialogReference>
+			</param>
+			<param name="section_pam-metadata" displayname="Metadatos auxiliares de precisión (PAM)" type="Optional" direction="Input" datatype="Boolean" expression="{section_pam-metadata}">
+				<dialogReference>Metadatos auxiliares persistentes de GDAL del archivo .aux.xml: estadísticas, histogramas, tablas de color e interpretación de bandas (RAT) que usan ArcGIS y otros programas basados en GDAL.</dialogReference>
+			</param>
+		</parameters>
+	</tool>
+</metadata>

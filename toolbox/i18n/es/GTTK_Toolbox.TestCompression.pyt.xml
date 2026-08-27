@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata xml:lang="es">
+	<Esri>
+		<CreaDate>20250922</CreaDate>
+		<CreaTime>15120000</CreaTime>
+		<ArcGISFormat>1.0</ArcGISFormat>
+		<SyncOnce>TRUE</SyncOnce>
+		<ModDate>20260827</ModDate>
+		<ModTime>120000</ModTime>
+	</Esri>
+	<tool name="TestCompression" displayname="Probar compresión" toolboxalias="gttk">
+		<summary>Evalúa múltiples configuraciones de compresión para encontrar la óptima y documenta los resultados en informes Excel detallados.</summary>
+		<usage>
+			<bullet_item>Prueba automáticamente decenas de combinaciones de compresión a partir de los preajustes por tipo de producto o de un archivo CSV personalizado.</bullet_item>
+			<bullet_item>Genera informes Excel completos con la eficiencia de compresión, los tamaños de archivo, las velocidades de lectura y escritura y las relaciones de rendimiento.</bullet_item>
+			<bullet_item>Admite todos los algoritmos principales: JPEG, JXL, LZW, DEFLATE, ZSTD, LERC y una línea base sin comprimir.</bullet_item>
+			<bullet_item>Ideal para evaluar el rendimiento, elegir el algoritmo y ajustar los parámetros de optimización.</bullet_item>
+		</usage>
+		<parameters>
+			<param name="source_geotiff" displayname="GeoTIFF, capa ráster o carpeta de origen" type="Required" direction="Input" datatype="Raster Layer; Raster Dataset; File; Folder" expression="source_geotiff">
+				<dialogReference>El GeoTIFF o la capa ráster de origen que se usará como entrada en todas las pruebas de compresión. El archivo se procesa con múltiples algoritmos y combinaciones de parámetros para evaluar su rendimiento y eficiencia.</dialogReference>
+			</param>
+			<param name="output_file" displayname="Informe Excel de salida" type="Required" direction="Output" datatype="File" expression="output_file">
+				<dialogReference>Ruta y nombre del informe Excel (.xlsx) con los resultados detallados de todas las pruebas. El informe incluye métricas como tamaños de archivo, porcentajes de compresión, velocidades de lectura y escritura y comparaciones de rendimiento.</dialogReference>
+			</param>
+			<param name="input_method" displayname="Método de entrada" type="Required" direction="Input" datatype="String" expression="input_method">
+				<dialogReference>Elija cómo indicar las pruebas de compresión que se ejecutarán. 'Usar preajustes por tipo de producto' selecciona automáticamente pruebas optimizadas según el tipo de producto (MDE, imagen, etc.) a partir de archivos CSV preconfigurados. 'Usar archivo CSV personalizado' permite indicar un archivo CSV propio con sus combinaciones de parámetros de compresión.</dialogReference>
+			</param>
+			<param name="product_type" displayname="Tipo de producto (para elegir el preajuste)" type="Optional" direction="Input" datatype="String" expression="{product_type}">
+				<dialogReference>Tipo de producto GeoTIFF, usado para elegir los preajustes de prueba adecuados. Los preajustes se definen en archivos CSV separados en gttk/resources/templates/ y prueban distintas combinaciones optimizadas para cada tipo de producto.</dialogReference>
+			</param>
+			<param name="csv_path" displayname="Archivo CSV de configuración personalizado" type="Optional" direction="Input" datatype="File" expression="{csv_path}">
+				<dialogReference>Archivo CSV con las combinaciones de parámetros de compresión a probar. Debe incluir las columnas obligatorias 'type' (dem, image, error, scientific, thematic) y 'algorithm' (JPEG, JXL, LZW, DEFLATE, ZSTD, LERC, NONE). Las columnas opcionales son 'level', 'predictor', 'quality', 'decimals', 'max_z_error', 'vertical_srs', 'nodata', 'cog', 'overviews' y 'tile_size'. Cada fila representa una prueba de compresión.</dialogReference>
+			</param>
+			<param name="temp_dir" displayname="Directorio de archivos temporales" type="Optional" direction="Input" datatype="Folder" expression="{temp_dir}">
+				<dialogReference>Directorio donde se guardan los archivos temporales durante las pruebas. Cada prueba genera un COG/GeoTIFF temporal sobre el que se miden las métricas de rendimiento. Si no se indica, se crea un directorio './temp' predeterminado en la raíz del proyecto.</dialogReference>
+			</param>
+			<param name="delete_test_files" displayname="Eliminar los archivos temporales de prueba" type="Optional" direction="Input" datatype="Boolean" expression="{delete_test_files}">
+				<dialogReference>Controla si los GeoTIFF comprimidos temporales creados durante las pruebas se eliminan automáticamente al terminar. Si está marcado (predeterminado), los archivos temporales se eliminan justo después de medir las métricas de rendimiento para ahorrar espacio en disco. Desmárquelo para conservarlos y analizarlos manualmente.</dialogReference>
+			</param>
+			<param name="open_report" displayname="Abrir el informe Excel al terminar" type="Optional" direction="Input" datatype="Boolean" expression="{open_report}">
+				<dialogReference>Si está marcado, el informe Excel generado se abre automáticamente en la aplicación de hojas de cálculo predeterminada al terminar las pruebas. El informe contiene datos completos: tamaños de archivo, porcentajes de compresión, velocidades de lectura y escritura, relaciones de rendimiento y comentarios detallados sobre cada prueba.</dialogReference>
+			</param>
+		</parameters>
+	</tool>
+</metadata>

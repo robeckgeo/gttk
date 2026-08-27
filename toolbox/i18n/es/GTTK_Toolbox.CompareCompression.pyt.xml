@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata xml:lang="es">
+	<Esri>
+		<CreaDate>20251207</CreaDate>
+		<CreaTime>16184600</CreaTime>
+		<ArcGISFormat>1.0</ArcGISFormat>
+		<SyncOnce>TRUE</SyncOnce>
+		<ModDate>20260827</ModDate>
+		<ModTime>120000</ModTime>
+	</Esri>
+	<tool name="CompareCompression" displayname="Comparar compresión" toolboxalias="gttk">
+		<summary>Valida los resultados de la compresión comparando el GeoTIFF de referencia con el procesado mediante un análisis en paralelo.</summary>
+		<usage>
+			<bullet_item>El archivo de referencia suele ser el GeoTIFF original, sin procesar.</bullet_item>
+			<bullet_item>El archivo de comparación es la versión procesada o comprimida que desea validar.</bullet_item>
+			<bullet_item>La herramienta genera un informe HTML o Markdown con la reducción de tamaño, la configuración de compresión, la validación de la integridad de los datos (mín./máx./media), la validación COG, los cambios en los metadatos y las implicaciones de rendimiento.</bullet_item>
+			<bullet_item>Optimizar compresión ejecuta esta herramienta automáticamente para validar sus resultados.</bullet_item>
+		</usage>
+		<parameters>
+			<param name="baseline_path" displayname="GeoTIFF 1 de referencia o de entrada (p. ej., el original)" type="Required" direction="Input" datatype="Raster Layer; Raster Dataset; File" expression="baseline_path">
+				<dialogReference>El GeoTIFF de referencia (u original) que sirve como base de la comparación. Normalmente es el archivo original, antes de optimizarlo.</dialogReference>
+			</param>
+			<param name="comparison_path" displayname="GeoTIFF 2 de comparación o de salida (p. ej., el procesado)" type="Required" direction="Input" datatype="Raster Layer; Raster Dataset; File" expression="comparison_path">
+				<dialogReference>El GeoTIFF de comparación (o procesado) que se valida contra la referencia. Normalmente es el archivo comprimido u optimizado que desea evaluar.</dialogReference>
+			</param>
+			<param name="report_format" displayname="Formato del archivo de informe" type="Required" direction="Input" datatype="String" expression="report_format">
+				<dialogReference>Formato del informe de comparación. Elija HTML (.html) para un informe enriquecido e interactivo, con gráficos y formato, o Markdown (.md) para un informe de texto sin formato, adecuado para el control de versiones y las comparaciones en paralelo.</dialogReference>
+			</param>
+			<param name="report_suffix" displayname="Sufijo del nombre del informe" type="Optional" direction="Input" datatype="String" expression="{report_suffix}">
+				<dialogReference>Sufijo que se agrega al nombre del informe de comparación. El valor predeterminado es '_comp' (p. ej., 'salida_comp.html'). Use un sufijo propio para organizar varios informes.</dialogReference>
+			</param>
+			<param name="report_file" displayname="Ruta del archivo de informe" type="Derived" direction="Output" datatype="File" expression="report_file">
+				<dialogReference>Ruta completa donde se guardará el informe de comparación. Se deriva automáticamente de la ruta del archivo de comparación y del formato elegido.</dialogReference>
+			</param>
+			<param name="open_report" displayname="Abrir el informe al terminar" type="Optional" direction="Input" datatype="Boolean" expression="{open_report}">
+				<dialogReference>Abre automáticamente el informe de comparación en el navegador predeterminado (HTML) o en el editor de texto (Markdown) una vez generado.</dialogReference>
+			</param>
+		</parameters>
+	</tool>
+</metadata>
