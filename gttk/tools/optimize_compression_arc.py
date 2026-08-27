@@ -29,6 +29,7 @@ import os
 import sys
 import traceback
 import json
+from contextlib import contextmanager
 import subprocess
 import tomllib
 import uuid
@@ -41,10 +42,11 @@ from gttk.utils.exceptions import ProcessingStepFailedError
 from gttk.utils.optimize_constants import (CompressionAlgorithm as CA, ProductType as PT,
                                            default_raster_type_for, resolve_predictor)
 from gttk.utils.cli_help import render_resolved_settings
+from gttk.utils.gdal_env import gdal_env, GDAL_OPTIONS_ARC
 from gttk.utils.gdal_runner import create_isolated_env
 from gttk.utils.geo_metadata_writer import prepare_xml_for_gdal
 from gttk.utils.geotiff_processor import is_nodata_valid, GeoTiffInfo
-from gttk.utils.log_helpers import init_arcpy
+from gttk.utils.log_helpers import init_arcpy, ArcpyLogHandler, PACKAGE_LOGGER
 from gttk.utils.path_helpers import get_geotiff_files, prepare_output_path, copy_folder_structure
 from gttk.utils.performance_tracker import PerformanceTracker
 from gttk.utils.preprocessor import find_xml_metadata_file
@@ -69,6 +71,35 @@ logger = logging.getLogger(__name__)
 # GDAL configuration is applied per operation by gdal_env(GDAL_OPTIONS_ARC), not at
 # import.  GTIFF_SRS_SOURCE in particular changes how every GeoTIFF in the process is
 # read, which is not this module's call to make for its importer.
+
+
+@contextmanager
+def _arc_pane_logging(enabled: bool):
+    """Send GTTK's log to the geoprocessing pane for the duration of a toolbox call.
+
+    ``main()`` configures logging for the CLI, but the ArcGIS toolbox bypasses ``main()``
+    and calls :func:`optimize_compression` itself.  With no handler on the ``gttk``
+    logger, every ``logger.info`` in this module -- the resolved-settings block
+    included -- went nowhere.  The handler lives only for this call and is skipped
+    when another tool already installed one, so nothing prints twice and nothing is
+    left behind for the next tool run in the same ArcGIS process.
+    """
+    package_logger = logging.getLogger(PACKAGE_LOGGER)
+    if not enabled or any(isinstance(h, ArcpyLogHandler) for h in package_logger.handlers):
+        yield
+        return
+    handler = ArcpyLogHandler()
+    handler.setFormatter(logging.Formatter('%(message)s'))
+    previous_level = package_logger.level
+    if package_logger.getEffectiveLevel() > logging.INFO:
+        package_logger.setLevel(logging.INFO)
+    package_logger.addHandler(handler)
+    try:
+        yield
+    finally:
+        package_logger.removeHandler(handler)
+        package_logger.setLevel(previous_level)
+
 
 if TYPE_CHECKING:
     import arcpy # type: ignore
@@ -1409,7 +1440,7 @@ def optimize_compression(args: OptimizeArguments, tracker: Optional[PerformanceT
     The settings are restored afterwards, so importing this module does not
     change GDAL's behaviour for the rest of the host process.
     """
-    with gdal_env(GDAL_OPTIONS_ARC):
+    with gdal_env(GDAL_OPTIONS_ARC), _arc_pane_logging(args.arc_mode or False):
         return _optimize_compression_arc_inner(args, tracker)
 
 
