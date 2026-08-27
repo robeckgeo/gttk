@@ -45,6 +45,42 @@ gttk_path = script_path.parent.parent
 if str(gttk_path) not in sys.path:
     sys.path.insert(0, str(gttk_path))
 
+
+def _prefer_this_checkout():
+    """Make the `gttk` beside this toolbox the one that answers every import below.
+
+    ArcGIS Pro keeps imported modules for the life of the session and re-runs only
+    this file on Refresh, so a `gttk` imported earlier -- by the same toolbox from a
+    second checkout, or before a `git switch` -- would keep answering, however old.
+    A `gttk` installed into the Pro conda environment is worse: `pip install -e`
+    registers an import finder that outranks sys.path, so even a fresh import would
+    land there.  Forget the former, unhook the latter, and say so in the messages.
+    """
+    def root_of(file):
+        return Path(file).resolve().parent.parent if file else None
+
+    notes = []
+    loaded = sys.modules.get('gttk')
+    if loaded is not None and root_of(getattr(loaded, '__file__', None)) != gttk_path:
+        for name in [m for m in sys.modules if m == 'gttk' or m.startswith('gttk.')]:
+            del sys.modules[name]
+        notes.append(f"released a gttk loaded earlier from "
+                     f"{root_of(getattr(loaded, '__file__', None)) or 'an unknown location'}")
+    for finder in list(sys.meta_path):
+        try:
+            spec = finder.find_spec('gttk', None)
+        except Exception:
+            continue
+        origin = getattr(spec, 'origin', None) if spec is not None else None
+        if origin and origin != 'namespace' and root_of(origin) != gttk_path:
+            sys.meta_path.remove(finder)
+            notes.append(f"ignored a gttk installed at {root_of(origin)}")
+    if notes:
+        arcpy.AddMessage(f"Using gttk from {gttk_path} ({'; '.join(notes)}).")
+
+
+_prefer_this_checkout()
+
 # Configure PROJ_LIB for ArcGIS BEFORE importing any modules that use GDAL
 # This must happen before GDAL is imported, as GDAL only reads PROJ_LIB during initialization
 if 'PROJ_LIB' not in os.environ:
@@ -122,6 +158,7 @@ try:
     from gttk.utils.validation.loader import VALID_SECTIONS as VALIDATION_SECTIONS
 except ImportError as e:
     arcpy.AddError(f"Failed to import a required module. Ensure the tool scripts are in the correct directory: {gttk_path}")
+    arcpy.AddError(f"gttk was imported from: {getattr(sys.modules.get('gttk'), '__file__', None)}")
     arcpy.AddError(f"System Path: {sys.path}")
     raise e
 
