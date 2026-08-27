@@ -299,6 +299,51 @@ class TestVerticalSrsMaps:
             is_3d_geographic = srs.IsGeographic() == 1 and srs.GetAxesCount() == 3
             assert srs.IsVertical() == 1 or is_3d_geographic, f"{key!r}: EPSG:{code}"
     
+    # What PROJ calls each code. A dropdown label that names a different frame than
+    # its code resolves to would send every file written with it to the wrong datum
+    # -- EPSG:5730 was offered as "EVRF2020", a frame that does not exist, when it is
+    # EVRF2000 height. Adding an entry to either map means adding it here too.
+    EPSG_NAMES = {
+        "Earth Gravitational Model 2008 (EGM2008)": "EGM2008 height",
+        "Earth Gravitational Model 1996 (EGM96)": "EGM96 height",
+        "North America Vertical Datum 1988 (NAVD88)": "NAVD88 height",
+        "Canadian Geodetic Vertical Datum 2013 (CGVD2013/CGG2013)": "CGVD2013(CGG2013) height",
+        "European Vertical Reference Frame 2007 (EVRF2007)": "EVRF2007 height",
+        "European Vertical Reference Frame 2019 (EVRF2019)": "EVRF2019 height",
+        "European Vertical Reference Frame 2000 (EVRF2000)": "EVRF2000 height",
+        "Australia Height Datum (AHD)": "AHD height",
+        "New Zealand Vertical Datum 2016 (NZVD2016)": "NZVD2016 height",
+        "Japanese Geodetic Datum 2000 (JGD2000)": "JGD2000 (vertical) height",
+        "World Geodetic System 1984 (Ensemble) 3D": "WGS 84",
+        "World Geodetic System 1984 (G1762) 3D": "WGS 84 (G1762)",
+        "EGM2008": "EGM2008 height",
+        "EGM96": "EGM96 height",
+        "NAVD88": "NAVD88 height",
+        "CGVD2013": "CGVD2013(CGG2013) height",
+        "CGG2013": "CGVD2013(CGG2013) height",
+        "EVRF2007": "EVRF2007 height",
+        "EVRF2019": "EVRF2019 height",
+        "EVRF2000": "EVRF2000 height",
+        "AHD": "AHD height",
+        "NZVD2016": "NZVD2016 height",
+        "JGD2000": "JGD2000 (vertical) height",
+        "WGS84": "WGS 84",
+        "WGS 84": "WGS 84",
+        "G1762": "WGS 84 (G1762)",
+    }
+    
+    def test_each_name_matches_what_proj_calls_its_code(self):
+        """Every key in both maps names the CRS its EPSG code actually is."""
+        entries = {**VERTICAL_SRS_NAME_MAP, **VERTICAL_SRS_ABBREV_MAP}
+        assert set(entries) == set(self.EPSG_NAMES), (
+            "an entry was added or removed without updating EPSG_NAMES: "
+            f"{set(entries) ^ set(self.EPSG_NAMES)}")
+        for key, code in entries.items():
+            srs = osr.SpatialReference()
+            srs.ImportFromEPSG(code)
+            assert srs.GetName() == self.EPSG_NAMES[key], (
+                f"{key!r} maps to EPSG:{code}, which PROJ calls {srs.GetName()!r}")
+    
     def test_abbrev_keys_have_no_parentheses(self):
         """The abbreviation map is matched against the upper-cased input, so a key can
         contain neither a parenthesis nor a lowercase letter and still be reachable."""

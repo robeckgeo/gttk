@@ -66,7 +66,7 @@ VERTICAL_SRS_NAME_MAP: Dict[str, int] = {
     "Canadian Geodetic Vertical Datum 2013 (CGVD2013/CGG2013)": 6647,
     "European Vertical Reference Frame 2007 (EVRF2007)": 5621,
     "European Vertical Reference Frame 2019 (EVRF2019)": 9389,
-    "European Vertical Reference Frame 2020 (EVRF2020)": 5730,
+    "European Vertical Reference Frame 2000 (EVRF2000)": 5730,
     "Australia Height Datum (AHD)": 5711,
     "New Zealand Vertical Datum 2016 (NZVD2016)": 7839,
     "Japanese Geodetic Datum 2000 (JGD2000)": 6694,
@@ -83,7 +83,7 @@ VERTICAL_SRS_ABBREV_MAP: Dict[str, int] = {
     "CGG2013": 6647,  # alternate spelling
     "EVRF2007": 5621,
     "EVRF2019": 9389,
-    "EVRF2020": 5730,
+    "EVRF2000": 5730,
     "AHD": 5711,
     "NZVD2016": 7839,
     "JGD2000": 6694,

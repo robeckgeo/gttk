@@ -62,6 +62,10 @@ All notable changes to this project will be documented in this file.
   The module now selects the Agg backend before pyplot loads -- the histogram is a PNG for
   the report, never a window -- and a test imports it with a display advertised and checks
   the backend it got.
+- **The vertical-datum list offered "European Vertical Reference Frame 2020 (EVRF2020)"
+  for `EPSG:5730`, which is EVRF2000 height** -- no EVRF2020 exists. The entry and its
+  `EVRF2020` abbreviation now say EVRF2000, and a test pins every name in both maps to
+  the name PROJ returns for its code, so a label can no longer drift from what it writes.
 
 ### Changed
 
