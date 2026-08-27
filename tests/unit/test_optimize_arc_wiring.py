@@ -65,12 +65,13 @@ class TestArcPaneLogging:
         return [h for h in logger.handlers if isinstance(h, ArcpyLogHandler)]
 
     def test_adds_one_handler_for_the_call_only(self, bare_gttk_logger):
+        level_before = bare_gttk_logger.level
         with oc._arc_pane_logging(True):
             with oc._arc_pane_logging(True):
                 assert len(self._arc_handlers(bare_gttk_logger)) == 1
                 assert bare_gttk_logger.getEffectiveLevel() <= logging.INFO
         assert self._arc_handlers(bare_gttk_logger) == []
-        assert bare_gttk_logger.level == logging.NOTSET
+        assert bare_gttk_logger.level == level_before
 
     def test_keeps_a_handler_another_tool_installed(self, bare_gttk_logger):
         setup_logger(is_arc_mode=True)
