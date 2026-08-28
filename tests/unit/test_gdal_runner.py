@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# ******************************************************************************
+# Project: GeoTIFF ToolKit (GTTK)
+# Author: Eric Robeck <robeckgeo@gmail.com>
+#
+# Copyright (c) 2026, Eric Robeck
+# Licensed under the MIT License
+# ******************************************************************************
+
+"""
+gdal_runner.py is launched by ArcGIS Pro's Python inside OSGeo4W's Python. Its stdout
+is a protocol channel -- one JSON line per captured command -- that the parent parses
+line by line, and its own log records travel down the same pipe. A ``gdalinfo -json``
+payload over 8 KiB (every real DEM) left its closing newline pending in the text layer
+while the next record was written beneath it; the parent then saw
+``{...}All commands executed successfully.``, not JSON, and Optimize Compression died
+with "No output captured from gdalinfo". Nothing in the suite reached that path, so this
+drives the runner's main() through a pipe-like stdout with an oversized payload and
+parses the result exactly as the parent does.
+"""
+
+import io
+import json
+import sys
+
+import pytest
+
+from gttk.utils import gdal_runner
+
+pytestmark = pytest.mark.unit
+
+
+def _run_runner(monkeypatch, tmp_path, captured: str) -> str:
+    """Drive gdal_runner.main() with one captured command and return raw stdout."""
+    raw = io.BytesIO()
+    stdout = io.TextIOWrapper(io.BufferedWriter(raw), encoding='utf-8')
+    monkeypatch.setattr(sys, 'stdout', stdout)
+    payload = {"commands": [{"command": ["gdalinfo", "-json", "x.tif"], "capture_output": True}]}
+    monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps(payload)))
+    osgeo4w = tmp_path / "OSGeo4W"
+    osgeo4w.mkdir()
+    monkeypatch.setattr(gdal_runner, 'get_config', lambda: {'paths': {'osgeo4w': str(osgeo4w)}})
+    monkeypatch.setattr(gdal_runner, 'create_isolated_env', lambda osgeo4w_dir: {})
+    monkeypatch.setattr(gdal_runner, 'run_gdal_command',
+                        lambda command, env, capture_output=False: captured)
+    monkeypatch.setattr(gdal_runner, 'SCRIPT_DIR', tmp_path / 'utils')  # its log goes under tmp
+    monkeypatch.setattr(gdal_runner, 'logger', gdal_runner._configure_script_logging())
+    gdal_runner.main()
+    stdout.flush()
+    return raw.getvalue().decode('utf-8')
+
+
+def _parse_as_the_parent_does(out: str):
+    """optimize_compression_arc.run_gdal_commands: JSON lines with a 'stdout' key."""
+    found = []
+    for line in out.strip().split('\n'):
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict) and "stdout" in data:
+            found.append(data)
+    return found
+
+
+def test_a_large_captured_output_reaches_the_parent_as_one_json_line(monkeypatch, tmp_path):
+    gdalinfo_json = json.dumps({"description": "x.tif", "metadata": {"": {"k": "v" * 20000}}})
+    out = _run_runner(monkeypatch, tmp_path, gdalinfo_json)
+    found = _parse_as_the_parent_does(out)
+    assert len(found) == 1, f"parent would capture nothing from: {out[:120]!r} ... {out[-100:]!r}"
+    assert found[0] == {"command_index": 0, "stdout": gdalinfo_json}
+
+
+def test_a_small_captured_output_still_arrives(monkeypatch, tmp_path):
+    out = _run_runner(monkeypatch, tmp_path, '{"description": "x.tif"}')
+    assert _parse_as_the_parent_does(out) == [{"command_index": 0, "stdout": '{"description": "x.tif"}'}]

@@ -85,14 +85,17 @@ class TestImportLeavesGdalAlone:
         assert out == "SAME", out
 
     def test_import_does_not_create_directories(self):
+        """gdal_runner.py creates gttk/logs/ when run as a script, so a developer who
+        has run it has the directory already; measure whether the *import* creates it."""
         out = _in_subprocess(f"""
-            import pathlib
+            import importlib.util, pathlib
+            logs = pathlib.Path(importlib.util.find_spec('gttk').origin).parent / 'logs'
+            before = logs.exists()
             for m in {GTTK_MODULES!r}:
                 __import__(m)
-            import gttk
-            print((pathlib.Path(gttk.__file__).parent / 'logs').exists())
+            print(logs.exists() == before)
         """)
-        assert out == "False", "importing GTTK created a logs/ directory"
+        assert out == "True", "importing GTTK created a logs/ directory"
 
 
 class TestImportLeavesLoggingAlone:
