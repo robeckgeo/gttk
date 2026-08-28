@@ -42,6 +42,17 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **`Optimize Compression` in ArcGIS Pro failed with "No output captured from gdalinfo"
+  on any real file, and `Read Metadata` silently lost the OSGeo4W projection info.**
+  `gdal_runner.py` hands its results to the parent as JSON lines on stdout, and its own
+  log records go down the same pipe -- but the log handler writes bytes beneath the text
+  layer while the JSON goes through it. A payload over 8 KiB (every `gdalinfo -json` of
+  a DEM) left its newline pending, the next record landed between the JSON and that
+  newline, and the parent found no line it could parse. The handler now flushes the text
+  layer before writing, and the runner commits each protocol line as it prints it.
+  Broken since the cp1252 console fix of 2026-04-19 and unnoticed because the test
+  suite cannot reach the ArcGIS path; a test now drives the runner through a pipe-like
+  stdout with an oversized payload.
 - **`Optimize Compression` from the ArcGIS toolbox failed on every run** with
   `NameError: name 'gdal_env' is not defined`: the entry point applied
   `gdal_env(GDAL_OPTIONS_ARC)` without importing either name. Its log lines -- the

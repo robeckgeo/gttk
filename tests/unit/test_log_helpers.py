@@ -150,3 +150,48 @@ class TestCheckProjEnv:
             _check_proj_env()
 
         assert not any('PROJ' in r.message for r in caplog.records)
+
+
+def _pipe_like_stdout():
+    """stdout as a subprocess sees it: block-buffered text over a buffered byte stream."""
+    raw = io.BytesIO()
+    return raw, io.TextIOWrapper(io.BufferedWriter(raw), encoding='utf-8')
+
+
+@pytest.mark.unit
+class TestUtf8StreamHandlerOrdering:
+    """The handler writes bytes beneath the text layer, so whatever the text layer
+    still holds has to go down first or a record lands in the middle of it."""
+
+    def test_record_lands_after_a_pending_newline(self, monkeypatch):
+        """print() of a line longer than the text layer's 8 KiB chunk pushes the text
+        down at once but keeps the newline pending; the next record used to be written
+        between them. That is how gdal_runner's JSON line reached ArcGIS Pro with
+        'All commands executed successfully.' glued to its end."""
+        raw, stdout = _pipe_like_stdout()
+        monkeypatch.setattr(sys, 'stdout', stdout)
+        logger = setup_logger()
+        try:
+            print('{"stdout": "' + 'x' * 9000 + '"}', file=sys.stdout)
+            logger.info("All commands executed successfully.")
+            sys.stdout.flush()
+        finally:
+            shutdown_logger(logger)
+        lines = raw.getvalue().decode('utf-8').split('\n')
+        assert lines[0].endswith('"}'), lines[0][-60:]
+        assert lines[1] == "All commands executed successfully."
+        assert lines[2] == ""
+
+    def test_record_does_not_overtake_short_pending_text(self, monkeypatch):
+        """A short print() stays entirely pending in the text layer; a record written
+        beneath it would come out first."""
+        raw, stdout = _pipe_like_stdout()
+        monkeypatch.setattr(sys, 'stdout', stdout)
+        logger = setup_logger()
+        try:
+            print("first", file=sys.stdout)
+            logger.info("second")
+            sys.stdout.flush()
+        finally:
+            shutdown_logger(logger)
+        assert raw.getvalue().decode('utf-8') == "first\nsecond\n"

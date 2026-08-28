@@ -578,8 +578,11 @@ def main():
                     "command_index": i,
                     "stdout": captured_stdout
                 }
-                # Print the JSON payload to the actual stdout for the parent to read
-                print(json.dumps(output_payload), file=sys.stdout)
+                # Print the JSON payload to the actual stdout for the parent to read.
+                # stdout is the protocol channel here, shared with this script's own log
+                # records: flush so the line -- newline included -- is committed before
+                # any later record reaches the pipe.
+                print(json.dumps(output_payload), file=sys.stdout, flush=True)
 
 
         logger.info("All commands executed successfully.")

@@ -35,6 +35,10 @@ class Utf8StreamHandler(logging.StreamHandler):
     underlying buffer on teardown). Falls back to the default text-mode
     write if the stream exposes no .buffer attribute.
 
+    Writing beneath the text layer means anything still pending in that layer
+    must be flushed first, or a record can land in the middle of it; emit()
+    does so before every write.
+
     sys.stdout.reconfigure() would be simpler but silently no-ops on some
     Windows console setups (observed with Python 3.12 + conda + cmd.exe),
     so we encode explicitly.
@@ -46,6 +50,12 @@ class Utf8StreamHandler(logging.StreamHandler):
             buffer = getattr(stream, 'buffer', None)
             if buffer is not None:
                 try:
+                    # Whatever the text layer still holds must go down first. print()
+                    # leaves a lone newline pending after a write longer than its 8 KiB
+                    # chunk; writing beneath it put this record between a line and its
+                    # newline -- which is how gdal_runner's JSON line reached its parent
+                    # with "All commands executed successfully." glued to the end.
+                    stream.flush()
                     buffer.write((msg + self.terminator).encode('utf-8', errors='replace'))
                     buffer.flush()
                     return
