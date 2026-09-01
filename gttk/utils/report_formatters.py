@@ -66,13 +66,14 @@ class ReportFormatter(ABC):
     
     Example:
         >>> # Build sections using MetadataReportBuilder
-        >>> builder = MetadataReportBuilder(context)
-        >>> builder.add_standard_sections(['tags', 'statistics'])
-        >>>
-        >>> # Generate formatted output
-        >>> formatter = MarkdownReportFormatter(context)
-        >>> formatter.sections = builder.sections
-        >>> report = formatter.format()
+        >>> with MetadataExtractor('example.tif') as extractor:
+        ...     builder = MetadataReportBuilder(extractor)
+        ...     builder.build(['tags', 'statistics'])
+        ...
+        ...     # Generate formatted output
+        ...     formatter = MarkdownReportFormatter(filename='example.tif')
+        ...     formatter.sections = builder.sections
+        ...     report = formatter.format()
     """
     
     def __init__(self, renderer: Renderer):
@@ -190,10 +191,9 @@ class MarkdownReportFormatter(ReportFormatter):
     of contents generation with anchor links.
     
     Example:
-        >>> context = build_context_from_file('example.tif')
-        >>> formatter = MarkdownReportFormatter(context)
-        >>> formatter.fetch_and_add_section('tags')
-        >>> formatter.fetch_and_add_section('statistics')
+        >>> formatter = MarkdownReportFormatter(filename='example.tif')
+        >>> formatter.include_title = True
+        >>> formatter.sections = builder.sections  # from a MetadataReportBuilder
         >>> markdown = formatter.format()
         >>> with open('report.md', 'w') as f:
         ...     f.write(markdown)
@@ -290,11 +290,10 @@ class HtmlReportFormatter(ReportFormatter):
     3. Wraps in custom HTML template with CSS and navigation
     
     Example:
-        >>> context = build_context_from_file('example.tif')
-        >>> formatter = HtmlReportFormatter(context, banner_text="UNCLASSIFIED")
-        >>> formatter.fetch_and_add_section('tags')
-        >>> formatter.fetch_and_add_section('statistics')
-        >>> xml_type = 'table'
+        >>> formatter = HtmlReportFormatter(filename='example.tif')
+        >>> formatter.report_title = "Metadata Content"
+        >>> formatter.sections = builder.sections  # from a MetadataReportBuilder
+        >>> html = formatter.format()
         >>> with open('report.html', 'w') as f:
         ...     f.write(html)
     """

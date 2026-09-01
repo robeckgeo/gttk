@@ -3,7 +3,7 @@
 # GeoTIFF ToolKit (GTTK): análisis y optimización de GeoTIFF
 
 <p align="left">
-  <img src="https://img.shields.io/badge/version-0.9.0-orange" alt="Versión">
+  <img src="https://img.shields.io/badge/version-0.10.0-orange" alt="Versión">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="Licencia">
 </p>
 
@@ -88,9 +88,9 @@ interfaz aparece **en español o en inglés** según el idioma del sistema (véa
 [Idioma de la caja de herramientas](#idioma-de-la-caja-de-herramientas)).
 
 <p align="center">
-  <img src="images/arcgis_toolbox_panels.png" alt="Cuadros de diálogo de la caja de herramientas GTTK" width="800">
+  <img src="images/arcgis_toolbox_panels.es.png" alt="Los cinco cuadros de diálogo de la caja de herramientas GTTK en español" width="800">
   <br>
-  <em>Los cinco cuadros de diálogo (capturas en inglés; en un sistema en español se muestran en español)</em>
+  <em>Los cinco cuadros de diálogo tal como se ven en un sistema en español; en un sistema en inglés aparecen en inglés</em>
 </p>
 
 ### Optimizar compresión

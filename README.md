@@ -3,7 +3,7 @@
 # GeoTIFF ToolKit (GTTK): GeoTIFF Analysis and Optimization Tools
 
 <p align="left">
-  <img src="https://img.shields.io/badge/version-0.9.0-orange" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.10.0-orange" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 </p>
 
@@ -574,9 +574,9 @@ The GTTK ArcGIS Pro Toolbox stored in `toolbox/GTTK_Toolbox.pyt` provides a comp
 - **Five complete tools** matching all CLI capabilities
 
 <p align="center">
-  <img src="images/arcgis_toolbox_panels.png" alt="GTTK Toolbox Parameter Panels" width="800">
+  <img src="images/arcgis_toolbox_panels.png" alt="GTTK Toolbox parameter dialogs for all five tools" width="800">
   <br>
-  <em>The Optimize Compression tool showing intelligent parameter organization and dynamic updates</em>
+  <em>All five parameter dialogs, showing intelligent parameter organization and dynamic updates. The toolbox also displays in Spanish -- see <a href="#toolbox-language">Toolbox Language</a>.</em>
 </p>
 
 **Quick Start for Existing QGIS/OSGeo4W Users**: If you already have QGIS installed, you likely have OSGeo4W configured. Look for "OSGeo4W Shell" in your Windows Start menu to confirm.

@@ -268,9 +268,11 @@ que deben instalarse en un entorno clonado.
    selecciónela.
 
 2. **Localícela**: la caja de herramientas `GTTK_Toolbox.pyt` aparecerá en la carpeta Cajas
-   de herramientas. Expándala para usar las herramientas.
+   de herramientas. Expándala para ver las cinco herramientas, repartidas en dos conjuntos:
+   **Herramientas de compresión** (Comparar, Optimizar y Probar compresión) y
+   **Herramientas de metadatos** (Leer y Validar metadatos).
 
-   <img src="../images/arcgis_toolbox_list.png" alt="Lista de herramientas de GTTK_Toolbox.pyt">
+   <img src="../images/arcgis_toolbox_list.es.png" alt="Lista de herramientas de GTTK_Toolbox.pyt en español">
 
 ---
 

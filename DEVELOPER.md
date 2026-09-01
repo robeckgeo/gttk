@@ -8,27 +8,27 @@ The toolkit uses a Builder pattern to separate report content (what to include) 
 
 ### Key Components
 
-1. **Data Models** ([`utils/data_models.py`](utils/data_models.py))
+1. **Data Models** ([`gttk/utils/data_models.py`](gttk/utils/data_models.py))
     * Strongly-typed dataclasses for all report data
     * Examples: `FileComparison`, `IfdTableData`, `StatisticsData`
     * Ensures type safety and clear contracts between components
 
-2. **Data Fetchers** ([`utils/data_fetchers.py`](utils/data_fetchers.py))
+2. **Metadata Extractor** ([`gttk/utils/metadata_extractor.py`](gttk/utils/metadata_extractor.py))
     * Extract data from GeoTIFF files
     * Return dataclass instances
-    * Examples: `fetch_tags_data()`, `fetch_statistics_data()`
+    * Examples: `extract_tags()`, `extract_statistics()`
 
-3. **Report Builders** ([`utils/report_builders.py`](utils/report_builders.py))
+3. **Report Builders** ([`gttk/utils/report_builders.py`](gttk/utils/report_builders.py))
     * Determine **WHAT** sections to include in reports
     * Classes: `MetadataReportBuilder`, `ComparisonReportBuilder`
-    * Usage: `builder.add_standard_sections(['tags', 'statistics'])`
+    * Usage: `builder.build(['tags', 'statistics'])`
 
-4. **Section Renderers** ([`utils/section_renderers.py`](utils/section_renderers.py))
+4. **Section Renderers** ([`gttk/utils/section_renderers.py`](gttk/utils/section_renderers.py))
     * Render individual sections to markdown
     * Base class: `MarkdownRenderer`
     * Extensible for custom rendering logic
 
-5. **Report Formatters** ([`utils/report_formatters.py`](utils/report_formatters.py))
+5. **Report Formatters** ([`gttk/utils/report_formatters.py`](gttk/utils/report_formatters.py))
     * Format complete reports for output (HTML or Markdown)
     * Classes: `HtmlReportFormatter`, `MarkdownReportFormatter`
     * Handle document structure, CSS, navigation, and table of contents
@@ -38,62 +38,66 @@ The toolkit uses a Builder pattern to separate report content (what to include) 
 #### Generating a Metadata Report
 
 ```python
-from utils.report_context import build_context_from_file
-from utils.report_builders import MetadataReportBuilder
-from utils.report_formatters import HtmlReportFormatter
+from gttk.utils.metadata_extractor import MetadataExtractor
+from gttk.utils.report_builders import MetadataReportBuilder
+from gttk.utils.report_formatters import HtmlReportFormatter
 
-# Build context from a GeoTIFF file
-context = build_context_from_file('input.tif')
+# Open the file; the extractor is the data-access layer
+with MetadataExtractor('input.tif') as extractor:
 
-# Build report structure
-builder = MetadataReportBuilder(context)
-builder.add_standard_sections(['tags', 'statistics', 'cog'])
+    # The builder decides WHAT sections to include
+    builder = MetadataReportBuilder(extractor, page=0, tag_scope='compact')
+    builder.build(['tags', 'statistics', 'cog'])
 
-# Format as HTML
-formatter = HtmlReportFormatter(context)
-formatter.sections = builder.sections
-html_report = formatter.generate()
+    # The formatter decides HOW they are presented
+    formatter = HtmlReportFormatter(filename=extractor.filepath.name)
+    formatter.report_title = "Metadata Content"
+    formatter.sections = builder.sections
+    html_report = formatter.format()
 
 # Write to file
-with open('report.html', 'w') as f:
+with open('report.html', 'w', encoding='utf-8') as f:
     f.write(html_report)
 ```
+
+`format()` calls `prepare_rendering()` for you, renders every section that
+`has_data()`, converts the markdown to HTML and wraps it in the report template.
+Swap in `MarkdownReportFormatter(filename=...)` for markdown output; set
+`include_title = True` on it if you want the title and table of contents.
 
 #### Generating a Comparison Report
 
 ```python
-from osgeo import gdal
-from utils.report_builders import ComparisonReportBuilder
-from utils.report_formatters import HtmlReportFormatter
-from tools.compare_compression import build_differences_data
+from gttk.utils.metadata_extractor import MetadataExtractor
+from gttk.utils.report_builders import ComparisonReportBuilder
+from gttk.utils.report_formatters import HtmlReportFormatter
 
-# Open datasets
-base_ds = gdal.Open('baseline.tif')
-comp_ds = gdal.Open('optimized.tif')
+# Both files stay open for the life of the builder
+with MetadataExtractor('baseline.tif') as base_extractor, \
+     MetadataExtractor('optimized.tif') as comp_extractor:
 
-# Build differences data
-differences = build_differences_data(
-    base_ds, comp_ds, args, 'Baseline', 'Optimized'
-)
+    # add_all_sections() computes the differences itself and adds every paired
+    # section: IFDs, tiling, statistics, histograms and COG validation
+    builder = ComparisonReportBuilder(
+        base_extractor, comp_extractor, 'Baseline', 'Optimized'
+    )
+    builder.add_all_sections()
 
-# Build report sections
-builder = ComparisonReportBuilder(base_ds, comp_ds, 'Baseline', 'Optimized')
-builder.add_differences_section(differences)
-builder.add_ifd_sections()
-builder.add_statistics_sections()
-builder.add_histogram_sections()
-builder.add_cog_sections()
-
-# Generate HTML output
-context = {'input_filename': 'optimized.tif'}
-formatter = HtmlReportFormatter(context)
-formatter.sections = builder.sections
-html_report = formatter.generate()
+    formatter = HtmlReportFormatter(
+        filename='optimized.tif', report_type='comparison'
+    )
+    formatter.report_title = "Compression Comparison"
+    formatter.sections = builder.sections
+    html_report = formatter.format()
 
 # Write report
-with open('comparison.html', 'w') as f:
+with open('comparison.html', 'w', encoding='utf-8') as f:
     f.write(html_report)
 ```
+
+The CLI tools take a longer route than this: they assemble the markdown by hand
+so a report summary can be injected above the first section. `format()` is the
+short path when you do not need that.
 
 ### Adding Custom Sections
 
@@ -108,10 +112,10 @@ To add a new section type:
         data: Dict[str, Any]
     ```
 
-2. **Add a fetcher function** in `data_fetchers.py`:
+2. **Add an extractor method** in `metadata_extractor.py`:
 
     ```python
-    def fetch_custom_data(context: Dict[str, Any]) -> Optional[CustomSectionData]:
+    def extract_custom_data(self) -> Optional[CustomSectionData]:
         # Extract and return data
         return CustomSectionData(title="Custom", data={...})
     ```
@@ -127,7 +131,7 @@ To add a new section type:
 4. **Use the builder** to add your section:
 
     ```python
-    builder.add_section('custom', 'Custom Section', 'Custom', custom_data)
+    builder.add_section('custom', custom_data, title_override='Custom Section')
     ```
 
 ### Benefits of the Builder Pattern

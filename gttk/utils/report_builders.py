@@ -88,12 +88,13 @@ class ReportBuilder(ABC):
         sections: List of ReportSection objects to include in report
     
     Example:
-        >>> builder = MetadataReportBuilder(context)
-        >>> builder.add_standard_sections(['tags', 'statistics'])
-        >>> # Pass sections to generator for formatting
-        >>> generator = HtmlReportGenerator(context)
-        >>> generator.sections = builder.sections
-        >>> html = generator.generate()
+        >>> with MetadataExtractor('example.tif') as extractor:
+        ...     builder = MetadataReportBuilder(extractor)
+        ...     builder.build(['tags', 'statistics'])
+        ...     # Pass sections to a formatter for output
+        ...     formatter = HtmlReportFormatter(filename='example.tif')
+        ...     formatter.sections = builder.sections
+        ...     html = formatter.format()
     """
     
     def __init__(self):
@@ -190,15 +191,16 @@ class MetadataReportBuilder(ReportBuilder):
     user-selected section IDs. This builder is used for single-file
     metadata extraction and reporting.
     
-    The builder uses SECTION_CONFIGS to look up fetchers for each section,
-    calls the fetcher to get data, and adds the section if data is available.
+    The builder pulls each section's data from the MetadataExtractor, looks up
+    the section's title, icon and renderer in SECTION_CONFIGS, and adds the
+    section if data is available.
     
     Example:
-        >>> context = build_context_from_file('example.tif')
-        >>> builder = MetadataReportBuilder(context)
-        >>> builder.add_standard_sections(['tags', 'statistics', 'cog'])
-        >>> # builder.sections now contains these sections with their data
-        >>> print(len(builder.sections))  # 3 (assuming all sections had data)
+        >>> with MetadataExtractor('example.tif') as extractor:
+        ...     builder = MetadataReportBuilder(extractor)
+        ...     builder.build(['tags', 'statistics', 'cog'])
+        ...     # builder.sections now contains these sections with their data
+        ...     print(len(builder.sections))  # 3 (assuming all sections had data)
     """
     
     def __init__(self, extractor: MetadataExtractor, page: int = 0, tag_scope: str = 'complete', reader_type: Optional[str] = None):
@@ -546,10 +548,12 @@ class ComparisonReportBuilder(ReportBuilder):
     section types, making it easy to compare side-by-side.
     
     Example:
-        >>> builder = ComparisonReportBuilder(base_ds, comp_ds)
-        >>> builder.add_differences_section(differences_data)
-        >>> builder.add_ifd_sections()
-        >>> builder.add_statistics_sections()
+        >>> with MetadataExtractor('baseline.tif') as base_extractor, \
+        ...      MetadataExtractor('optimized.tif') as comp_extractor:
+        ...     builder = ComparisonReportBuilder(
+        ...         base_extractor, comp_extractor, 'Baseline', 'Optimized'
+        ...     )
+        ...     builder.add_all_sections()
         >>> # builder.sections now contains comparison sections
         >>> for section in builder.sections:
         ...     print(f"{section.id}: {section.title}")

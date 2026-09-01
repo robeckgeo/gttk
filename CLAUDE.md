@@ -54,7 +54,7 @@ pytest --cov=gttk --cov-report=html
 The toolkit separates report content from formatting:
 
 1. **Data Models** (`gttk/utils/data_models.py`) - Strongly-typed dataclasses (`FileComparison`, `IfdTableData`, `StatisticsData`, etc.)
-2. **Data Fetchers** (`gttk/utils/data_fetchers.py`) - Extract data from GeoTIFF files, return dataclass instances
+2. **Metadata Extractor** (`gttk/utils/metadata_extractor.py`) - Extract data from GeoTIFF files, return dataclass instances
 3. **Report Builders** (`gttk/utils/report_builders.py`) - Determine WHAT sections to include (`MetadataReportBuilder`, `ComparisonReportBuilder`)
 4. **Section Renderers** (`gttk/utils/section_renderers.py`) - Render individual sections to markdown
 5. **Report Formatters** (`gttk/utils/report_formatters.py`) - Format complete reports (HTML or Markdown)
@@ -134,4 +134,4 @@ Toolbox language coverage:
 - **psutil** - Memory monitoring for statistics calculator
 
 ## Data Flow
-GeoTIFF file -> Metadata Extractor -> Data Fetchers -> Data Models -> Report Builders -> Section Renderers -> Report Formatters -> Output (HTML/Markdown)
+GeoTIFF file -> Metadata Extractor -> Data Models -> Report Builders -> Section Renderers -> Report Formatters -> Output (HTML/Markdown)

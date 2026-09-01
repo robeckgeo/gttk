@@ -82,6 +82,7 @@ temp/
 
 # Local notes, drafts and diagnostics (never packaged; MANIFEST.in prunes docs)
 docs/
+/draft/
 
 # Custom TOML validation rules
 # Keep example file only as a template
