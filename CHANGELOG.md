@@ -40,43 +40,10 @@ All notable changes to this project will be documented in this file.
   `thematic` benchmark preset already carried a `LERC` row at `max_z_error=0`; until now
   that row could never run.
 
-### Fixed
-
-- **`Optimize Compression` in ArcGIS Pro failed with "No output captured from gdalinfo"
-  on any real file, and `Read Metadata` silently lost the OSGeo4W projection info.**
-  `gdal_runner.py` hands its results to the parent as JSON lines on stdout, and its own
-  log records go down the same pipe -- but the log handler writes bytes beneath the text
-  layer while the JSON goes through it. A payload over 8 KiB (every `gdalinfo -json` of
-  a DEM) left its newline pending, the next record landed between the JSON and that
-  newline, and the parent found no line it could parse. The handler now flushes the text
-  layer before writing, and the runner commits each protocol line as it prints it.
-  Broken since the cp1252 console fix of 2026-04-19 and unnoticed because the test
-  suite cannot reach the ArcGIS path; a test now drives the runner through a pipe-like
-  stdout with an oversized payload.
-- **`Optimize Compression` from the ArcGIS toolbox failed on every run** with
-  `NameError: name 'gdal_env' is not defined`: the entry point applied
-  `gdal_env(GDAL_OPTIONS_ARC)` without importing either name. Its log lines -- the
-  resolved-settings block included -- also had no handler when called from the toolbox,
-  so they never reached the geoprocessing pane; they do now, for the duration of the call.
-- **The Optimize help side panel documented 23 of the dialog's 28 parameters** and
-  described the raster-type default backwards. It now covers every parameter, and a test
-  keeps each language's sidecar in step with the dialog.
-- The toolbox's "CompressionReport Format" label gets its missing space; Read Metadata no
-  longer pre-fills `Text`/`Table` into a lowercase value list; Optimize and Test
-  Compression share one product-type list (`Error Model`, with the old
-  `Generic Point-cloud Model` still accepted).
-
-- **`gttk optimize` and `gttk read` could hang at the histogram step wherever a display
-  is advertised.** The histogram generator imported pyplot without choosing a backend, so
-  matplotlib took a GUI one (QtAgg under WSLg, which sets `DISPLAY` for every shell) and
-  then blocked on the compositor socket; a headless run sat at 1% CPU until its timeout.
-  The module now selects the Agg backend before pyplot loads -- the histogram is a PNG for
-  the report, never a window -- and a test imports it with a display advertised and checks
-  the backend it got.
-- **The vertical-datum list offered "European Vertical Reference Frame 2020 (EVRF2020)"
-  for `EPSG:5730`, which is EVRF2000 height** -- no EVRF2020 exists. The entry and its
-  `EVRF2020` abbreviation now say EVRF2000, and a test pins every name in both maps to
-  the name PROJ returns for its code, so a label can no longer drift from what it writes.
+- `--overview-resampling`, `--overview-compress`, `--overview-predictor` for explicit overview
+  control. An interpolating kernel on a `thematic` product is rejected.
+- `--num-threads` to cap compression threads per file, for running several `gttk` processes at once.
+- `--report` to skip report generation on batch runs. Directory input no longer auto-opens reports.
 
 ### Changed
 
@@ -136,6 +103,42 @@ All notable changes to this project will be documented in this file.
   metadata item and read back from there.
 
 ### Fixed
+
+- **`Optimize Compression` in ArcGIS Pro failed with "No output captured from gdalinfo"
+  on any real file, and `Read Metadata` silently lost the OSGeo4W projection info.**
+  `gdal_runner.py` hands its results to the parent as JSON lines on stdout, and its own
+  log records go down the same pipe -- but the log handler writes bytes beneath the text
+  layer while the JSON goes through it. A payload over 8 KiB (every `gdalinfo -json` of
+  a DEM) left its newline pending, the next record landed between the JSON and that
+  newline, and the parent found no line it could parse. The handler now flushes the text
+  layer before writing, and the runner commits each protocol line as it prints it.
+  Broken since the cp1252 console fix of 2026-04-19 and unnoticed because the test
+  suite cannot reach the ArcGIS path; a test now drives the runner through a pipe-like
+  stdout with an oversized payload.
+- **`Optimize Compression` from the ArcGIS toolbox failed on every run** with
+  `NameError: name 'gdal_env' is not defined`: the entry point applied
+  `gdal_env(GDAL_OPTIONS_ARC)` without importing either name. Its log lines -- the
+  resolved-settings block included -- also had no handler when called from the toolbox,
+  so they never reached the geoprocessing pane; they do now, for the duration of the call.
+- **The Optimize help side panel documented 23 of the dialog's 28 parameters** and
+  described the raster-type default backwards. It now covers every parameter, and a test
+  keeps each language's sidecar in step with the dialog.
+- The toolbox's "CompressionReport Format" label gets its missing space; Read Metadata no
+  longer pre-fills `Text`/`Table` into a lowercase value list; Optimize and Test
+  Compression share one product-type list (`Error Model`, with the old
+  `Generic Point-cloud Model` still accepted).
+
+- **`gttk optimize` and `gttk read` could hang at the histogram step wherever a display
+  is advertised.** The histogram generator imported pyplot without choosing a backend, so
+  matplotlib took a GUI one (QtAgg under WSLg, which sets `DISPLAY` for every shell) and
+  then blocked on the compositor socket; a headless run sat at 1% CPU until its timeout.
+  The module now selects the Agg backend before pyplot loads -- the histogram is a PNG for
+  the report, never a window -- and a test imports it with a display advertised and checks
+  the backend it got.
+- **The vertical-datum list offered "European Vertical Reference Frame 2020 (EVRF2020)"
+  for `EPSG:5730`, which is EVRF2000 height** -- no EVRF2020 exists. The entry and its
+  `EVRF2020` abbreviation now say EVRF2000, and a test pins every name in both maps to
+  the name PROJ returns for its code, so a label can no longer drift from what it writes.
 
 - **Flag-combination checks were skipped whenever no input file was set.** The rules
   rejecting LERC on imagery, JPEG/JXL on non-imagery, `discard_lsb` on the wrong codec,
@@ -237,13 +240,6 @@ All notable changes to this project will be documented in this file.
   blocks deleting or overwriting it. Release now happens in a `finally`.
 - Documentation: the vertical-SRS examples used `-v`, which is `--verbose` (the flag is `-s`), and
   DEVELOPER.md described a `gdal.Warp` reprojection step that does not exist — GTTK is assign-only.
-
-### Added
-
-- `--overview-resampling`, `--overview-compress`, `--overview-predictor` for explicit overview
-  control. An interpolating kernel on a `thematic` product is rejected.
-- `--num-threads` to cap compression threads per file, for running several `gttk` processes at once.
-- `--report` to skip report generation on batch runs. Directory input no longer auto-opens reports.
 
 ## [0.9.0] - 2026-01-19
 
