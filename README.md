@@ -131,7 +131,7 @@ The [`example_reports/`](example_reports/) directory contains sample HTML report
 
 ### The `gttk` Command
 
-GTTK provides a unified command-line interface with five specialized tools. Use the `--help` flag to see available tools and options:
+GTTK provides a unified command-line interface with five specialized tools, plus `optimize-arc`, the ArcGIS Pro variant of `optimize`. Use the `--help` flag to see available tools and options:
 
 ```bash
 # Show all available tools
@@ -140,6 +140,7 @@ gttk --help
 # Show help for a specific tool
 gttk compare --help
 gttk optimize --help
+gttk optimize-arc --help
 gttk test --help
 gttk read --help
 gttk validate --help
@@ -167,9 +168,9 @@ A compression report is also generated each time `gttk optimize` is run, compari
 
 | Argument | Short | Type | Required | Default | Description |
 | -------- | ----- | ---- | -------- | ------- | ----------- |
-| `--input` | `-i` | Path | Yes | - | The baseline (or original) GeoTIFF for comparison |
-| `--output` | `-o` | Path | Yes | - | The comparison (or processed) GeoTIFF |
-| `--report-format` | `-f` | str | No | `html` | Output format for the report file (`html` or `md`) |
+| `--input` | `-i` | Path | Yes | - | The baseline (or original) GeoTIFF for comparison; `--baseline` is an alias |
+| `--output` | `-o` | Path | Yes | - | The comparison (or processed) GeoTIFF; `--comparison` is an alias |
+| `--report-format` | `-f` | str | No | `html` | Output format for the report file (`html` or `md`); the historic spelling `--report_format` still works |
 | `--open-report` | - | bool | No | `True` | Open the report automatically after generation |
 | `--verbose` | `-v` | flag | No | `False` | Enable verbose logging |
 
@@ -239,28 +240,28 @@ This powerful tool combines multiple optimization techniques into a single, stre
 | `--raster-type` | `-r` | str | No | Profile | Override raster type (`point` for PixelIsPoint, `area` for PixelIsArea) |
 | `--algorithm` | `-a` | str | No | Profile | Compression algorithm (`JPEG`, `JXL`, `LZW`, `DEFLATE`, `ZSTD`, `LERC`, `NONE`) |
 | `--vertical-srs` | `-s` | str | Varies | - | Vertical SRS for elevation products (required for `dem` type) |
-| `--nodata` | `-n` | float | No | - | NoData value |
-| `--decimals` | `-d` | int or `none` | No | Profile | Decimal places to round DEM/error/scientific data, or `none` to keep full precision |
+| `--nodata` | `-n` | float | No | inherited from the input file | NoData value, for any product type; `nan` selects NaN |
+| `--decimals` | `-d` | int or `none` | No | Profile | Decimal places to round DEM/error/scientific data, or `none` (also `off`, `keep`) to keep full precision |
 | `--predictor` | `-p` | int | No | Profile | Predictor for LZW/DEFLATE/ZSTD compression (1, 2, or 3) |
 | `--max-z-error` | `-z` | float | No | Profile | Max Z error for LERC compression |
-| `--level` | `-l` | int | No | Profile | Compression level for DEFLATE or ZSTD |
+| `--level` | `-l` | int | No | 6 (DEFLATE), 9 (ZSTD) | Compression level for DEFLATE or ZSTD |
 | `--quality` | `-q` | int | No | `90` | JPEG/JXL quality (75-100) for image products |
 | `--geo-metadata` | `-g` | bool | No | `False` | Write external XML metadata to the GEO_METADATA tag |
 | `--write-pam-xml` | `-w` | bool | No | `True` | Write an Esri-compatible .aux.xml PAM statistics file |
 | `--tile-size` | - | int | No | `512` | Tile size in pixels for primary layer and overviews |
-| `--mask-alpha` | - | bool | No | `True` | Convert alpha band to internal mask (RGB+mask) vs. preserve RGBA |
+| `--mask-alpha` | - | bool | No | Profile | Convert alpha band to internal mask (RGB+mask) vs. preserve RGBA; `True` except for `thematic` |
 | `--mask-nodata` | - | bool | No | Profile | Add NoData pixels to transparency mask |
 | `--cog` | - | bool | No | `True` | Create a Cloud Optimized GeoTIFF |
 | `--overviews` | - | bool | No | `True` | Generate internal overviews |
 | `--overview-resampling` | - | str | No | Profile | Resampling kernel for overviews (`NEAREST`, `AVERAGE`, `BILINEAR`, `CUBIC`, `CUBICSPLINE`, `LANCZOS`, `MODE`, `RMS`, `GAUSS`) |
-| `--overview-compress` | - | str | No | `--algorithm` | Compression for overviews |
-| `--overview-predictor` | - | int | No | `--predictor` | Predictor for overviews |
+| `--overview-compress` | - | str | No | same as `--algorithm` | Compression for overviews |
+| `--overview-predictor` | - | int | No | same as `--predictor` | Predictor for overviews |
 | `--num-threads` | - | str | No | `ALL_CPUS` | Worker threads for compression; lower it when running several `gttk` processes at once |
 | `--report` | - | bool | No | `True` | Generate the before/after comparison report. Set `False` for batch runs |
 | `--report-format` | `-f` | str | No | `html` | Output format for the report file (`html` or `md`) |
 | `--report-suffix` | - | str | No | `_comp` | Suffix for the report filename |
 | `--open-report` | - | bool | No | `True` | Open the report automatically after generation |
-| `--show-defaults` | - | str | No | - | Print every setting that would be used for a product type, and where each one comes from, then exit |
+| `--show-defaults` | - | str, optional | No | - | Print every setting that would be used for a product type (or for all of them), and where each one comes from, then exit |
 | `--verbose` | `-v` | flag | No | `False` | Enable verbose logging |
 
 #### Product-Type Profiles
@@ -362,13 +363,15 @@ File Size and Compression sections also include a `Delta (%)` column, which is t
 | Argument | Short | Type | Required | Default | Description |
 | -------- | ----- | ---- | -------- | ------- | ----------- |
 | `--input` | `-i` | Path | Yes | - | Source GeoTIFF file or directory for testing |
-| `--output` | `-o` | Path | No | Auto | Path to save the output report table in Excel format (.xlsx) |
+| `--output` | `-o` | Path | No | derived from the input name, alongside the input | Path to save the output report table in Excel format (.xlsx) |
 | `--csv-params` | `-c` | Path | Excl.¹ | - | Path to CSV file with compression parameters to test |
 | `--product-type` | `-t` | str | Excl.¹ | - | Use preset template for product type (`dem`, `image`, `error`, `scientific`, `thematic`) |
-| `--temp-dir` | - | Path | No | `<input stem>_gttk_test/` beside the workbook | Directory for the temporary compressed GeoTIFFs; each run uses a `run_*` subdirectory of it |
-| `--log-file` | - | Path | No | Auto | Path to a log file for debugging |
-| `--delete-test-files` | - | bool | No | `True` | Delete temporary files after the test is complete |
+| `--temp-dir` | - | Path | No | a `<input stem>_gttk_test` directory beside the output workbook | Directory for the temporary compressed GeoTIFFs; each run uses a `run_*` subdirectory of it |
+| `--log-file` | - | Path | No | `test_compression_debug.log` in the temporary directory | Path to a log file for debugging |
+| `--delete-test-files` | - | bool | No | `True` | Delete the temporary compressed GeoTIFFs after the test; each candidate's comparison report stays in the run directory |
 | `--open-report` | - | bool | No | `True` | Open the Excel report automatically after generation |
+| `--arc-mode` | - | bool | No | `False` | Route log messages to the ArcGIS Pro geoprocessing pane (set by the toolbox) |
+| `--optimize-script` | - | Path | No | the installed gttk package is used directly | Run the candidates with this `optimize_compression.py` instead of the installed package |
 | `--verbose` | `-v` | flag | No | `False` | Enable verbose logging |
 
 *¹ Mutually exclusive: Either `--csv-params` or `--product-type` must be provided.*
@@ -442,15 +445,16 @@ Metadata reports provide comprehensive information about a single GeoTIFF file, 
 | -------- | ----- | ---- | -------- | ------- | ----------- |
 | `--input` | `-i` | Path | Yes | - | Path to the input GeoTIFF file |
 | `--page` | `-p` | int | No | `0` | Image File Directory (IFD) page to read |
-| `--banner` | `-b` | str | No | - | Text for a banner at the top/bottom of report (e.g., classification) |
+| `--banner` | `-b` | str | No | no banner | Text for a banner at the top/bottom of report (e.g., classification) |
 | `--reader-type` | `-r` | str | Excl.¹ | `producer` | Target reader type (`analyst` or `producer`) |
-| `--sections` | `-s` | str[] | Excl.¹ | - | Specific metadata sections to include in the report |
+| `--sections` | `-s` | str[] | Excl.¹ | the set implied by `--reader-type` | Specific metadata sections to include in the report |
 | `--xml-type` | `-x` | str | No | `table` | Present metadata as `table` or syntax-highlighted `text` |
 | `--tag-scope` | `-t` | str | No | `complete` | Level of detail for TIFF tags (`complete` or `compact`) |
 | `--write-pam-xml` | `-w` | bool | No | `False` | Write an Esri-compatible .aux.xml PAM statistics file |
 | `--report-format` | `-f` | str | No | `html` | Format for the output report (`html` or `md`) |
 | `--report-suffix` | - | str | No | `_meta` | Suffix to append to the output report filename |
 | `--open-report` | - | bool | No | `True` | Open the report automatically after generation |
+| `--arc-mode` | - | bool | No | `False` | Route log messages to the ArcGIS Pro geoprocessing pane (set by the toolbox) |
 | `--verbose` | `-v` | flag | No | `False` | Enable verbose logging |
 
 *¹ Mutually exclusive: If `--sections` is not provided, defaults to use `--reader-type`.*
@@ -522,10 +526,10 @@ Rules are defined in TOML format and organized by data product (e.g., 3DEP, NAIP
 | -------- | ----- | ---- | -------- | ------- | ----------- |
 | `--input` | `-i` | Path | Yes | - | Input GeoTIFF file or directory to validate |
 | `--product` | `-p` | str | Yes | - | Product name to validate against (must exist in rules file) |
-| `--rules-dir` | `-r` | Path | No | bundled with GTTK | Directory containing TOML validation rule files |
-| `--sections` | `-s` | str[] | No | All | Specific sections to validate (e.g., `tag geokey gdal`) |
-| `--name-filter` | `-n` | str | No | - | Filter files by name substring (directory mode only) |
-| `--output-dir` | `-o` | Path | No | Auto | Parent directory for validation output folder |
+| `--rules-dir` | `-r` | Path | No | the rules bundled with GTTK | Directory containing TOML validation rule files |
+| `--sections` | `-s` | str[] | No | all sections with rules | Specific sections to validate (e.g., `tag geokey gdal`) |
+| `--name-filter` | `-n` | str | No | no filter | Filter files by name substring (directory mode only) |
+| `--output-dir` | `-o` | Path | No | `<basename>_validation/` beside the input | Parent directory for validation output folder |
 | `--write-reports` | `-w` | bool | No | `True` | Write individual HTML/MD reports for each file |
 | `--report-format` | `-f` | str | No | `html` | Output format for individual reports (`html` or `md`) |
 | `--open-report` | - | bool | No | `True` | Open the JSON results file after generation |
@@ -636,17 +640,16 @@ osgeo4w = "C:/OSGeo4W"
 # Language of the ArcGIS Pro toolbox: "auto" (follow ArcGIS Pro, then Windows), "en" or "es"
 language = "auto"
 
-[logging]
-# Logging Configuration
-level = "INFO"
-file = "gttk.log"
+[statistics]
+# Tuning for the statistics calculator; the file lists every key with its meaning
+max_pixels_fast_path = 0
 ```
 
 ### When to Edit
 
 - **ArcGIS Pro Users**: Update `osgeo4w` path in `config.toml` to match your OSGeo4W installation; set `language` to force the toolbox's language
 - **CLI Users**: Generally no configuration needed; all settings can be passed as command-line arguments
-- **Batch Processing**: Customize defaults in `config.toml` to streamline repetitive tasks
+- **Large rasters**: the `[statistics]` keys choose between in-memory and blocked statistics and size the blocks
 
 **Location**: GTTK reads the first of these that applies:
 
@@ -699,23 +702,34 @@ gttk optimize-arc -i input.tif -o output.tif -t dem -a ZSTD -s EGM2008 --decimal
 gttk optimize-arc -i input_dir/ -o output_dir/ -t image -a JPEG -q 90
 ```
 
+#### Command-Line Arguments
+
+Every `gttk optimize` option applies, with the same defaults; `optimize-arc` adds one:
+
+| Argument | Short | Type | Required | Default | Description |
+| -------- | ----- | ---- | -------- | ------- | ----------- |
+| `--arc-mode` | - | bool | No | `True` | Route log messages to the ArcGIS Pro geoprocessing pane; the toolbox sets it, a shell run may pass `False` |
+
 ### Command Log Output
 
-When using `gttk optimize-arc`, all GDAL commands are logged. Example output:
+When using `gttk optimize-arc`, all GDAL commands are logged before they run. This is the
+log of `gttk optimize-arc -i dem.tif -o dem_cog.tif -t dem -s EPSG:5703` on a Float32 DEM
+with NoData; the two `python` steps run the generated rounding scripts, and the compound
+CRS passed to `-a_srs` on the last command is abbreviated here:
 
 ```text
-GDAL commands staged. Total commands: 4
+GDAL commands staged. Total commands: 5
 ---------------------------------------
 
-> gdal_calc.py --calc numpy.where(A == -3.4028235e+38, numpy.nan, A) -A C:/code/GeoTiffToolKit/input/INEGI/889463844341_t/conjunto_de_datos/f13a35e4_ms.tif --outfile C:/Users/john/AppData/Local/Temp/gttk_569d65857c3a46689d9b19a45fd4e121/nodata_remapped.tif --type Float32
+> gdal_translate --config OSR_WKT_FORMAT WKT2_2019 --config GTIFF_WRITE_SRS_WKT2 YES --config GTIFF_SRS_SOURCE WKT -of GTiff -co TILED=YES -co BIGTIFF=YES -mo AREA_OR_POINT=Area -mo TIFFTAG_SOFTWARE=GeoTIFF ToolKit v0.10.0 -mo AREA_OR_POINT=Point -b 1 -a_nodata -9999.0 dem.tif /tmp/gttk_nsov46hn/preprocessed.tif
 
-> gdal_calc.py --calc round(A, 2) -A C:/Users/john/AppData/Local/Temp/gttk_569d65857c3a46689d9b19a45fd4e121/nodata_remapped.tif --outfile C:/Users/john/AppData/Local/Temp/gttk_569d65857c3a46689d9b19a4
+> python /tmp/gttk_nsov46hn/round_data.py /tmp/gttk_nsov46hn/preprocessed.tif
 
-> gdal_calc.py --calc round(A, 2) -A C:/Users/john/AppData/Local/Temp/gttk_569d65857c3a46689d9b19a45fd4e121/nodata_remapped.tif --outfile C:/Users/john/AppData/Local/Temp/gttk_569d65857c3a46689d9b19a45fd4e121/rounded.tif --overwrite --type Float32
+> gdaladdo -r BILINEAR -ro --config OSR_WKT_FORMAT WKT2_2019 --config GTIFF_WRITE_SRS_WKT2 YES --config GTIFF_SRS_SOURCE WKT --config COMPRESS_OVERVIEW NONE --config TILED YES --config BLOCKXSIZE 512 --config BLOCKYSIZE 512 /tmp/gttk_nsov46hn/preprocessed.tif 2
 
-> gdal_translate --config OSR_WKT_FORMAT WKT2_2019 --config GTIFF_WRITE_SRS_WKT2 YES --config GTIFF_SRS_SOURCE WKT -of GTiff -co TILED=YES -mo AREA_OR_POINT=Area -mo TIFFTAG_SOFTWARE=GeoTIFF ToolKit v0.8.0 -mo AREA_OR_POINT=Point -a_nodata nan C:/Users/john/AppData/Local/Temp/gttk_569d65857c3a46689d9b19a45fd4e121/rounded.tif C:/Users/john/AppData/Local/Temp/gttk_569d65857c3a46689d9b19a45fd4e121/preprocessed.tif
+> python /tmp/gttk_nsov46hn/round_overviews.py /tmp/gttk_nsov46hn/preprocessed.tif
 
-> python C:/Users/john/AppData/Local/Temp/gttk_569d65857c3a46689d9b19a45fd4e121/run_translate.py    
+> gdal_translate --config OSR_WKT_FORMAT WKT2_2019 --config GTIFF_WRITE_SRS_WKT2 YES --config GTIFF_SRS_SOURCE WKT -of COG -mo AREA_OR_POINT=Point -co GEOTIFF_VERSION=1.1 -co BIGTIFF=IF_SAFER -co NUM_THREADS=ALL_CPUS -co COMPRESS=DEFLATE -co BLOCKSIZE=512 -co OVERVIEWS=FORCE_USE_EXISTING -co OVERVIEW_COMPRESS=DEFLATE -co OVERVIEW_PREDICTOR=2 -co PREDICTOR=2 -co LEVEL=6 -stats -a_nodata -9999.0 -a_srs COMPOUNDCRS["WGS 84 / UTM zone 10N + NAVD88 height",PROJCRS["WGS 84 / UTM zone 10N",...],VERTCRS["NAVD88 height",...]] /tmp/gttk_nsov46hn/preprocessed.tif dem_cog.tif
 
 ---------------------------------------
 ```

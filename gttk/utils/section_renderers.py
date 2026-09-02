@@ -30,7 +30,7 @@ from gttk.utils.markdown_formatter import format_value, format_citation, xml_to_
 from gttk.utils.xml_formatter import pretty_print_xml
 from gttk.utils.data_models import (
     GeoKey, GeoReference, GeoExtents, GeoTransform,
-    BoundingBox, StatisticsBand, HistogramImage, TileInfo, IfdInfo,
+    BoundingBox, HistogramImage, TileInfo, IfdInfo,
     WktString, JsonString, CogValidation, XmlMetadata,
     TiffTagsData, StatisticsData, IfdInfoData,
     FileInfo, FileComparison, IfdInfoComparison, StatisticsComparison,
@@ -112,21 +112,6 @@ class Renderer(ABC):
         Args:
             geokeys: List of GeoKey objects
             title: Section title
-            
-        Returns:
-            Formatted string representation
-        """
-        pass
-    
-    @abstractmethod
-    def render_statistics(self, stats: List[StatisticsBand], title: str = "Statistics", footer: Optional[str] = None) -> str:
-        """
-        Render statistics section.
-        
-        Args:
-            stats: List of StatisticsBand objects
-            title: Section title
-            footer: Optional footer text
             
         Returns:
             Formatted string representation
@@ -568,62 +553,6 @@ class MarkdownRenderer(Renderer):
                 value_text = f"{parts[0].strip()}: {parts[1].strip(')')}"
             
             lines.append(f"| {key.id} | {key.name} | {value_text} |")
-        
-        return "\n".join(lines)
-    
-    def render_statistics(self, stats: List[StatisticsBand], title: str = "Statistics", footer: Optional[str] = None) -> str:
-        """Render statistics as a markdown table."""
-        if not stats:
-            return f"## {title}\n\nNo statistics available."
-        
-        lines = [f"## {title}", ""]
-        
-        # Use class method for field definitions
-        display_fields = StatisticsBand.get_display_fields()
-        
-        # Initialize color manager if styling is enabled
-        color_map = {}
-        if self.enable_html_styling:
-            band_names_only = [s.band_name for s in stats]
-            color_manager = ColorManager(band_names_only)
-            color_map = color_manager.get_color_map()
-        
-        # Build headers
-        headers = ["Statistic"]
-        for s in stats:
-            name = s.band_name
-            if self.enable_html_styling and name in color_map:
-                color = color_map[name]
-                headers.append(f'<span style="color: {color}">{name}</span>')
-            else:
-                headers.append(name)
-        
-        lines.append(f"| {' | '.join(headers)} |")
-        lines.append(f"| {' | '.join(['---'] * len(headers))} |")
-        
-        # Build rows - render all fields that have data in at least one band
-        for display_name, field_name, always_show in display_fields:
-            # Skip fields that have no data in any band (None for all bands)
-            if not always_show and not any(getattr(band, field_name, None) is not None for band in stats):
-                continue
-            
-            values = [display_name]
-            for band in stats:
-                val = getattr(band, field_name, None)
-                val_str = format_value(val) if val is not None else ""
-                
-                if self.enable_html_styling and val_str:
-                     # Get color for this band column
-                    color = color_map.get(band.band_name)
-                    if color:
-                        val_str = f'<span style="color: {color}">{val_str}</span>'
-                
-                values.append(val_str)
-            lines.append(f"| {' | '.join(values)} |")
-        
-        if footer:
-            lines.append("")
-            lines.append(footer)
         
         return "\n".join(lines)
     

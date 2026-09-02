@@ -225,7 +225,7 @@ def _read_metadata_inner(args: ReadArguments):
     try:
         # Set context variables from arguments
         output_format_context.set(args.report_format)
-        xml_type_context.set(args.xml_type or 'text')
+        xml_type_context.set(args.xml_type or 'table')
         banner_context.set(str(args.banner) if args.banner is not None else None)
         
         with MetadataExtractor(str(args.input_path)) as extractor:

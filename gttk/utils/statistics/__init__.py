@@ -107,5 +107,4 @@ __all__ = [
     'format_number',
 ]
 
-__version__ = '1.0.0'
 __author__ = 'Eric Robeck'

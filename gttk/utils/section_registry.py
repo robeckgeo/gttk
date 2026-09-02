@@ -171,7 +171,7 @@ SECTION_CONFIGS: Dict[str, SectionConfig] = {
         id='pam-metadata',
         title='Precision Auxiliary Metadata (PAM)',
         menu_name='PAM',
-        icon='aux',
+        icon='pam',
         renderer='render_pam_metadata'
     ),
 

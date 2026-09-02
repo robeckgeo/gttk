@@ -153,6 +153,13 @@ class TestPackagedDefault:
         with PACKAGED.open('rb') as fh:
             assert set(_keys(tomllib.load(fh))) == LIVE_KEYS
 
+    def test_the_checkout_config_carries_the_same_keys_and_nothing_else(self):
+        """config.toml at the checkout root carried eleven keys nothing read -- [api],
+        [logging], four [gui] keys and a statistics tolerance -- and the README documented
+        [logging] as live."""
+        with (ROOT / 'config.toml').open('rb') as fh:
+            assert set(_keys(tomllib.load(fh))) == LIVE_KEYS
+
     def test_agrees_with_the_checkout_config_on_those_keys(self):
         with PACKAGED.open('rb') as fh:
             packaged = tomllib.load(fh)

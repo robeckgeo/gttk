@@ -34,6 +34,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`gttk.__version__`.** The release number was written in five places that agreed by
+  discipline and a sixth, `gttk.utils.statistics.__version__ = '1.0.0'`, that agreed with
+  nothing, while five modules each looked the installed version up for themselves. The
+  package exposes it once, read lazily from the installed metadata (`0.0.0-dev` for a
+  checkout on `sys.path` that was never installed); the report footers, the
+  `TIFFTAG_SOFTWARE` stamp and `gttk validate`'s JSON read it from there, and the ArcGIS
+  Pro toolbox shows it in its label. `tests/unit/test_versions.py` holds `pyproject.toml`,
+  `CITATION.cff`, both README badges and the changelog's newest release to the same
+  number, and `test_import_side_effects.py` now checks all six tool entry points, not
+  just `optimize`'s, for the shape DEVELOPER.md promises: open `gdal_env()`, delegate
+  to the inner function.
 - **Two validation scripts nothing ran are tests now.** `tests/validation/` held the checks
   that Welford's accumulator reproduces NumPy and that the blocked statistics path reproduces
   the fast path. pytest did not collect them and no document named them, so the second had
@@ -80,6 +91,26 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **The documents that describe the suite are held to it.** `tests/unit/test_docs_pinned.py`
+  compares the test counts CLAUDE.md and tests/README.md state -- in total, by category and
+  per file -- with one `--collect-only` run, the marker list with `pytest.ini`, and every
+  backticked path and `gttk.` name in CLAUDE.md, DEVELOPER.md, README.md and tests/README.md
+  with the tree and the package. On today's documents that found a validation-test count
+  two off, a per-file count two off, a dataclass named `IfdTableData` that has never
+  existed (it is `IfdInfo`), and DEVELOPER.md pointing at
+  `resources/esri/esri_epsg_name_lookup.json` and a `tools/` directory, neither of which
+  exists.
+- **The README's option tables are pinned to the parser.** Each tool's table is now
+  compared, row by row, with `build_parser()` by `tests/unit/test_readme_option_tables.py`:
+  option, short flag, type, whether it is required, and the default exactly as `--help`
+  states it (`Profile` where that varies by product type). Bringing the tables into line
+  added the `--arc-mode` and `--optimize-script` rows `test` and `read` were missing, gave
+  `optimize-arc` a table of what it adds to `optimize`, listed it in the `--help` tour,
+  corrected `--mask-alpha`'s default (`True` except for thematic), `--level`'s (per codec,
+  not per product type) and `--show-defaults`'s type (an optional value), named the
+  `--baseline`/`--comparison` aliases, and replaced the `optimize-arc` command-log sample,
+  which showed four commands from v0.8.0 with one of them cut off mid-path, with the five
+  a real run stages today.
 - **The external XML metadata lookup is documented where it is used.** `gttk read`,
   `gttk validate`, `gttk optimize` and `gttk optimize-arc` look for `<stem>.xml`, then
   `<stem>_meta.xml`, beside the raster, then in its parent directory, then in a sibling
@@ -130,6 +161,21 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
+- **Code and files nothing reached.** `TiffTagParser.get_exif_tags()` -- the only user of
+  Pillow, which is no longer a dependency -- along with two `render_statistics` methods
+  the section registry never dispatched to, two exception classes nothing raised, four
+  `PerformanceTracker` methods, `ColorManager.get_index_color_map()`, and the resource
+  manager's `get_icon_path()` and `_read_file()`. Twenty icon files shipped in the wheel
+  for nothing: ten GUI glyphs for an application this repository does not contain, eight
+  PNG favicon tiles, an `.ico` and an unreferenced menu icon.
+  `tests/unit/test_shipped_resources.py` now holds the icon directories to exactly what
+  the reports can ask for.
+- **Eleven `config.toml` keys nothing read.** `[api]`, `[logging]`, four `[gui]` keys
+  (`default_layout`, `default_theme`, `window_size`, `enable_dark_mode`) and
+  `statistics.alpha_artifact_tolerance` had no reader anywhere in the code; the README
+  documented `[logging]` as live. The checkout's `config.toml` now carries the same keys
+  as the packaged default, a test keeps it that way, and `Config.get_section()`, whose
+  only caller was its own docstring, is gone.
 - **`init_arcpy()` and `gttk/utils/arcgis_proj_config.py`.** The first imported a top-level
   `utils` package that has never existed, and the `ImportError` it swallowed ended it before
   the one line it was for, `arcpy.env.overwriteOutput = True`, could run -- so the three
@@ -146,6 +192,40 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **The ArcGIS Pro toolbox configures PROJ under both of its names.** It checked and set
+  `PROJ_LIB` only. PROJ 8 and later read `PROJ_DATA` first, so a Pro process that exported
+  `PROJ_DATA` got `PROJ_LIB` pointed at OSGeo4W's database and went on using its own, while
+  the toolbox reported success. Both names are now checked before anything is done and
+  set together, `GTTK_CONFIG` names the toolbox's `config.toml` as it does the CLI's, and
+  the `tomli` fallback for Pythons GTTK no longer supports is gone.
+- **The `.aux.xml` statistics sidecar is written as bytes**, so it carries bare newlines on
+  Windows as it does elsewhere; text mode would have turned each into CRLF. Every text read
+  and write in the package and the test suite now names its encoding -- twenty-nine test
+  calls and three library calls relied on the platform default -- and
+  `tests/unit/test_encoding_hygiene.py` keeps it that way.
+- **The PAM section has its icon back.** The section registry asked for `aux`; the file
+  that draws it is `pam.svg`, so every metadata report logged a missing icon and showed
+  none. The validation-summary section's icon, which was also missing, ships too.
+- **Library code no longer prints.** The resource manager reported a theme, banner-rule
+  or resource file it could not read with `print()`, into whatever the host application
+  was writing; those messages go to the `gttk` logger, and
+  `tests/unit/test_logging_hygiene.py` fails on any `print()` outside a module's own
+  `__main__` block.
+- **A library caller gets the command line's defaults.** `TestArguments.delete_test_files`
+  defaulted to `False` where `gttk test` defaults to `True`, and `ReadArguments` left
+  `reader_type`, `xml_type` and `tag_scope` unset for the tool to fill in -- with `text`
+  for `xml_type`, where `gttk read` and the README say `table`. The dataclasses now
+  declare the command line's values, and `tests/unit/test_cli_defaults.py` holds every
+  argparse default equal to its dataclass default, names the two divergences that are
+  meant (`optimize-arc --arc-mode`, `read --write-pam-xml`), and pins the three
+  documented places where the ArcGIS dialog differs from the command line.
+- **Help text that contradicted the code.** `--log-file` said no log is written by default;
+  `gttk test` always writes `test_compression_debug.log` in its temporary directory.
+  `--delete-test-files` said it deletes temporary files; it deletes the candidate rasters and
+  keeps each candidate's comparison report. `--nodata` claimed to apply to `dem` and `error`
+  only; every product type accepts it, and `nan` is a value. `--decimals` also takes `off`
+  and `keep`. `validate`'s `--sections`, `--name-filter` and `--output-dir` now state their
+  defaults.
 - **Rule files are read in name order.** The validation loader took `*.toml` files in
   whatever order the filesystem listed them, so which file answered for a product, and
   whether a broken file was reported before a match ended the search, differed from one
@@ -237,10 +317,10 @@ All notable changes to this project will be documented in this file.
 - **`pip install geotiff-toolkit` brings everything the code imports.** `psutil` was in
   `environment.yml` and `requirements.txt` but not in `pyproject.toml`, so a pip install ran
   without it and the statistics calculator silently used a fixed fast-path threshold
-  instead of sizing it from the available RAM; Pillow, which decodes the InterColourProfile
-  tag, was declared nowhere and present only because matplotlib happens to need it. Both
-  are dependencies now, and `tests/unit/test_dependency_manifests.py` keeps the three
-  manifests and the code's imports in agreement. The wheel's package-data rule now says
+  instead of sizing it from the available RAM. It is a dependency now, and
+  `tests/unit/test_dependency_manifests.py` keeps the three manifests and the code's
+  imports in agreement. (Pillow, briefly declared for an ICC-profile reader, went with
+  that reader once it turned out nothing called it; see Removed.) The wheel's package-data rule now says
   what ships (`resources/**/*`, minus the build caches and bytecode); the old list of
   extensions covered none of the JavaScript, CSV, XLSX or theme files that reports and
   `gttk test` read, and `MANIFEST.in` no longer prunes five directories that do not exist.

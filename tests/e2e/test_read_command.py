@@ -228,8 +228,8 @@ class TestReadCommand:
         assert result_complete.returncode == 0
         
         # Complete report should be longer (has more tags)
-        compact_content = (tmp_path / "test_compact.html").read_text()
-        complete_content = (tmp_path / "test_complete.html").read_text()
+        compact_content = (tmp_path / "test_compact.html").read_text(encoding='utf-8')
+        complete_content = (tmp_path / "test_complete.html").read_text(encoding='utf-8')
         
         # This is a simple heuristic - complete should have more content
         assert len(complete_content) >= len(compact_content)
@@ -262,7 +262,7 @@ class TestReadCommand:
         assert pam_file.exists(), "PAM XML file should be created"
         
         # Verify it's valid XML with statistics
-        pam_content = pam_file.read_text()
+        pam_content = pam_file.read_text(encoding='utf-8')
         assert '<PAMDataset>' in pam_content
         assert '<PAMRasterBand' in pam_content
     
@@ -270,7 +270,7 @@ class TestReadCommand:
         """Test error handling for invalid file."""
         # Arrange: Create invalid file
         invalid_file = tmp_path / "invalid.tif"
-        invalid_file.write_text("Not a TIFF file")
+        invalid_file.write_text("Not a TIFF file", encoding='utf-8')
         
         # Act
         result = subprocess.run([

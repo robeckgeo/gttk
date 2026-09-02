@@ -96,7 +96,7 @@ expected = { min = -430.0, max = 8850.0 }
 def create_test_rules(temp_rules_dir, sample_toml_content):
     """Create test rule files in temporary directory."""
     rules_file = temp_rules_dir / 'test_rules.toml'
-    rules_file.write_text(sample_toml_content)
+    rules_file.write_text(sample_toml_content, encoding='utf-8')
     return temp_rules_dir
 
 
@@ -164,7 +164,7 @@ description = "Test"
 data_type = "integer"
 constraint = "exact"
 expected = 32
-''')
+''', encoding='utf-8')
 
         file2 = temp_rules_dir / 'rules2.toml'
         file2.write_text('''
@@ -176,7 +176,7 @@ description = "Test"
 data_type = "integer"
 constraint = "exact"
 expected = 8
-''')
+''', encoding='utf-8')
 
         with pytest.raises(ValueError) as excinfo:
             load_validation_rules(temp_rules_dir, 'DuplicateProduct')
@@ -185,7 +185,7 @@ expected = 8
     def test_load_rules_invalid_toml(self, temp_rules_dir):
         """Test error handling for invalid TOML syntax."""
         bad_file = temp_rules_dir / 'bad.toml'
-        bad_file.write_text('this is not valid toml [[[')
+        bad_file.write_text('this is not valid toml [[[', encoding='utf-8')
 
         with pytest.raises(ValueError) as excinfo:
             load_validation_rules(temp_rules_dir, 'TestProduct')
@@ -203,7 +203,7 @@ description = "Test"
 data_type = "invalid_type"
 constraint = "exact"
 expected = 32
-''')
+''', encoding='utf-8')
 
         with pytest.raises(ValueError) as excinfo:
             load_validation_rules(temp_rules_dir, 'BadProduct')
@@ -387,7 +387,7 @@ tag = 1
 description = "Test"
 data_type = "integer"
 constraint = "exists"
-''')
+''', encoding='utf-8')
 
         file2 = temp_rules_dir / 'prod2.toml'
         file2.write_text('''
@@ -406,7 +406,7 @@ tag = 3
 description = "Test"
 data_type = "integer"
 constraint = "exists"
-''')
+''', encoding='utf-8')
 
         products = get_available_products(temp_rules_dir)
 
@@ -432,7 +432,7 @@ tag = 1
 description = "Test"
 data_type = "integer"
 constraint = "exists"
-''')
+''', encoding='utf-8')
 
         file2 = temp_rules_dir / 'b.toml'
         file2.write_text('''
@@ -443,7 +443,7 @@ tag = 2
 description = "Test"
 data_type = "integer"
 constraint = "exists"
-''')
+''', encoding='utf-8')
 
         with pytest.raises(ValueError) as excinfo:
             get_available_products(temp_rules_dir)
@@ -483,7 +483,7 @@ tag = 1
 description = "Test"
 data_type = "integer"
 constraint = "exists"
-''')
+''', encoding='utf-8')
 
         metadata = get_product_metadata(temp_rules_dir, 'MinimalProduct')
 

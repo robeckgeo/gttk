@@ -323,7 +323,7 @@ class TestCompareCommand:
         baseline_file = tmp_path / "invalid.tif"
         comparison_file = tmp_path / "valid.tif"
         
-        baseline_file.write_text("Not a TIFF file")
+        baseline_file.write_text("Not a TIFF file", encoding='utf-8')
         MockGeoTIFF(width=256, height=256, bands=1).save_to_file(comparison_file)
         
         # Act

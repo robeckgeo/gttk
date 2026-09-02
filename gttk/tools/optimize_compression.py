@@ -29,7 +29,6 @@ import logging
 import os
 import sys
 import traceback
-from importlib import metadata
 from osgeo import gdal
 from pathlib import Path
 from typing import Any, Optional
@@ -47,10 +46,7 @@ from gttk.utils.script_arguments import OptimizeArguments
 from gttk.utils.srs_logic import handle_srs_logic, check_vertical_srs_mismatch
 from gttk.utils.statistics import calculate_statistics, build_pam_data_from_stats, write_pam_xml
 
-try:
-    __version__ = metadata.version("geotiff-toolkit")
-except metadata.PackageNotFoundError:
-    __version__ = "0.0.0-dev"
+from gttk import __version__
 
 # Global logger variables
 log_file_path = None  # Path to the log file so it can be deleted by ArcPy

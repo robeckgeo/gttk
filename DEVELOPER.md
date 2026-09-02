@@ -10,7 +10,7 @@ The toolkit uses a Builder pattern to separate report content (what to include) 
 
 1. **Data Models** ([`gttk/utils/data_models.py`](gttk/utils/data_models.py))
     * Strongly-typed dataclasses for all report data
-    * Examples: `FileComparison`, `IfdTableData`, `StatisticsData`
+    * Examples: `FileComparison`, `IfdInfo`, `StatisticsData`
     * Ensures type safety and clear contracts between components
 
 2. **Metadata Extractor** ([`gttk/utils/metadata_extractor.py`](gttk/utils/metadata_extractor.py))
@@ -247,14 +247,15 @@ The toolkit includes a built-in lookup table that maps Esri-specific CRS names t
 
 ### Packaged Data
 
-The lookup table is stored as a JSON file at `resources/esri/esri_epsg_name_lookup.json`. This file is packaged with the toolkit and is used by default for all SRS standardization operations.
+The lookup table is stored as a JSON file at `gttk/resources/esri/esri_cs_epsg_lookup.json`. This file is packaged with the toolkit and is used by default for all SRS standardization operations.
 
 ### Updating the Lookup Table
 
 The lookup table is generated from Esri's `projection-engine-db-doc` GitHub repository. To update the local version to the latest data, run:
 
 ```bash
-python tools/build_esri_epsg_lookup.py
+cd gttk
+python resources/esri/build_esri_cs_epsg_lookup.py
 ```
 
 This will fetch the latest CRS definitions from the repository and overwrite the existing JSON file with the updated data.
@@ -279,7 +280,19 @@ That property is what everything else hangs off. `gttk/utils/cli_help.py` expose
 **When you change a default, change it in `optimize_constants.py` or `_resolve_defaults`
 and nowhere else.** Help text, the epilog table, the ArcGIS dialog and
 `--show-defaults` all follow. `tests/unit/test_cli_help.py` pins the epilog table and the
-README table to the resolver, so a hand-edit that disagrees fails the suite.
+README's profile table to the resolver, and `tests/unit/test_readme_option_tables.py` pins
+each subcommand's option table in the README to `build_parser()` -- the default column is
+what the option's own `Default:` clause says, or `Profile` when that varies by product type
+-- so a hand-edit that disagrees with either fails the suite.
+
+### The version number
+
+`gttk.__version__` is read from the installed package metadata on first use, so the only
+place to bump it is `pyproject.toml` -- then `CITATION.cff`, the two README badges and the
+changelog's release heading, which `tests/unit/test_versions.py` holds to the same number.
+The modules that stamp reports and `TIFFTAG_SOFTWARE`, and the toolbox label, all import
+it; none looks the metadata up itself. An editable install reports the version it was
+installed with, so after a bump run `pip install -e .` again.
 
 ### Known ArcGIS toolbox divergences
 

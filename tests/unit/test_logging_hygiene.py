@@ -39,6 +39,27 @@ SCRIPTS = {
     ROOT / 'gttk' / 'resources' / 'tiff' / 'build_tiff_tag_lookup.py',
 }
 
+#: stdout is these modules' output by design: --show-defaults prints its table, and the
+#: OSGeo4W-side runner uses stdout as its protocol channel to the parent.
+PRINTS_BY_DESIGN = {
+    ROOT / 'gttk' / 'utils' / 'cli_help.py',
+    ROOT / 'gttk' / 'utils' / 'gdal_runner.py',
+    # GDAL's own validate_cloud_optimized_geotiff.py, kept verbatim (DEVELOPER.md, Third-Party
+    # Code); its prints are in its usage() and main(), which GTTK never calls.
+    ROOT / 'gttk' / 'utils' / 'validate_cloud_optimized_geotiff.py',
+}
+
+
+def _print_calls_outside_main(path: pathlib.Path):
+    tree = ast.parse(path.read_text(encoding='utf-8'))
+    in_main = {id(inner) for node in tree.body
+               if isinstance(node, ast.If) and '__main__' in ast.unparse(node.test)
+               for inner in ast.walk(node)}
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+                and node.func.id == 'print' and id(node) not in in_main):
+            yield node.lineno
+
 
 def _root_logger_calls(path: pathlib.Path):
     tree = ast.parse(path.read_text(encoding='utf-8'))
@@ -54,6 +75,15 @@ def test_no_module_calls_the_root_logger():
                  for path in sorted((ROOT / 'gttk').rglob('*.py')) if path not in SCRIPTS
                  for line in _root_logger_calls(path)]
     assert offenders == [], 'these log through the root logger, which installs a handler on it:\n' + '\n'.join(offenders)
+
+
+def test_no_module_prints():
+    """A library's stdout belongs to the application. The resource manager reported a theme
+    or banner file it could not read with print(), into whatever the host was writing."""
+    offenders = [f'{path.relative_to(ROOT)}:{line}'
+                 for path in sorted((ROOT / 'gttk').rglob('*.py')) if path not in SCRIPTS | PRINTS_BY_DESIGN
+                 for line in _print_calls_outside_main(path)]
+    assert offenders == [], 'these print instead of logging:\n' + '\n'.join(offenders)
 
 
 def test_create_isolated_env_leaves_the_root_logger_alone():

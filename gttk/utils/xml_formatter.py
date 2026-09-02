@@ -672,7 +672,7 @@ def pretty_print_xml(xml_string: str, flatten: bool = False, indent: str = '  ')
         return '\n'.join(result_lines)
     except Exception as e:
         # If custom formatting fails, return the original string
-        print(f"Error in custom XML formatting: {e}")
+        logger.warning(f"Custom XML formatting failed; returning the XML unformatted: {e}")
         return xml_string
     
 #: A metadata sidecar larger than this is refused rather than read into memory. ISO 19115

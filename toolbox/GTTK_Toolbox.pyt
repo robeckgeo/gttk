@@ -35,6 +35,7 @@ import arcpy # type: ignore
 import numpy as np
 import os
 import sys
+import tomllib
 from pathlib import Path
 
 # Add the project root to sys.path to ensure we import the local 'gttk' package.
@@ -84,66 +85,41 @@ def _prefer_this_checkout():
 
 _prefer_this_checkout()
 
-# Configure PROJ_LIB for ArcGIS BEFORE importing any modules that use GDAL
-# This must happen before GDAL is imported, as GDAL only reads PROJ_LIB during initialization
-if 'PROJ_LIB' not in os.environ:
-    arcpy.AddMessage("PROJ_LIB not set, attempting configuration...")
+# Point PROJ at OSGeo4W's proj.db BEFORE anything imports GDAL: GDAL reads PROJ_DATA
+# (PROJ 8+; PROJ_LIB is the pre-8 name and still honoured) at initialisation, and ArcGIS
+# Pro's own PROJ database lacks recent EPSG codes. A process that already exports either
+# variable has made its choice, and both names are set together so that nothing reads a
+# different database depending on which one it looks at.
+def _configure_proj_from_osgeo4w() -> None:
+    already = {name: os.environ[name] for name in ('PROJ_DATA', 'PROJ_LIB') if name in os.environ}
+    if already:
+        arcpy.AddMessage("PROJ already configured: " + ", ".join(f"{k}={v}" for k, v in already.items()))
+        return
+    config_path = Path(os.environ.get('GTTK_CONFIG') or gttk_path / "config.toml")
     try:
-        # Load config to get OSGeo4W path
-        config_path = gttk_path / "config.toml"
-        arcpy.AddMessage(f"Looking for config at: {config_path}")
-        
-        if config_path.exists():
-            arcpy.AddMessage("Config file found, attempting to load...")
-            try:
-                import sys
-                if sys.version_info >= (3, 11):
-                    import tomllib
-                else:
-                    try:
-                        import tomli as tomllib
-                    except ImportError:
-                        tomllib = None
-                
-                if tomllib:
-                    with open(config_path, "rb") as f:
-                        config = tomllib.load(f)
-                    arcpy.AddMessage("Config loaded successfully")
-                    
-                    osgeo4w_root = config.get('paths', {}).get('osgeo4w')
-                    arcpy.AddMessage(f"OSGeo4W root from config: {osgeo4w_root}")
-                    
-                    if osgeo4w_root:
-                        osgeo4w_path = Path(osgeo4w_root)
-                        proj_share_path = osgeo4w_path / "share" / "proj"
-                        proj_db_path = proj_share_path / "proj.db"
-                        
-                        arcpy.AddMessage(f"Checking for proj.db at: {proj_db_path}")
-                        if proj_db_path.exists():
-                            os.environ['PROJ_LIB'] = str(proj_share_path)
-                            arcpy.AddMessage(f"✓ PROJ_LIB configured: {proj_share_path}")
-                        else:
-                            arcpy.AddWarning(f"proj.db not found at: {proj_db_path}")
-                    else:
-                        arcpy.AddWarning("OSGeo4W path not found in config.toml")
-                else:
-                    arcpy.AddWarning("tomllib/tomli not available for reading config")
-            except Exception as e:
-                arcpy.AddWarning(f"Error during PROJ_LIB configuration: {e}")
-                import traceback
-                arcpy.AddWarning(traceback.format_exc())
-        else:
-            arcpy.AddWarning(f"Config file not found at: {config_path}")
-    except Exception as e:
-        arcpy.AddWarning(f"Failed to configure PROJ_LIB: {e}")
-else:
-    arcpy.AddMessage(f"PROJ_LIB already set to: {os.environ['PROJ_LIB']}")
+        with open(config_path, "rb") as f:
+            osgeo4w_root = tomllib.load(f).get('paths', {}).get('osgeo4w')
+    except (OSError, tomllib.TOMLDecodeError) as e:
+        arcpy.AddWarning(f"PROJ not configured: could not read {config_path}: {e}")
+        return
+    if not osgeo4w_root:
+        arcpy.AddWarning(f"PROJ not configured: no paths.osgeo4w in {config_path}")
+        return
+    proj_share = Path(osgeo4w_root) / "share" / "proj"
+    if not (proj_share / "proj.db").exists():
+        arcpy.AddWarning(f"PROJ not configured: proj.db not found at {proj_share}")
+        return
+    os.environ['PROJ_DATA'] = os.environ['PROJ_LIB'] = str(proj_share)
+    arcpy.AddMessage(f"PROJ_DATA and PROJ_LIB set to {proj_share}")
+
+_configure_proj_from_osgeo4w()
 
 try:
     from osgeo import gdal
     # GTTK applies GDAL's exception mode per operation, not at import, so this
     # toolbox makes the choice for the ArcGIS process it runs in.
     gdal.UseExceptions()
+    from gttk import __version__
     import gttk.i18n as i18n
     from gttk.i18n import _, N_, Picklist
     import gttk.tools.compare_compression as cc
@@ -279,7 +255,7 @@ def _get_report_path(input_path: str, suffix: str, format: str) -> str:
 class Toolbox:
     def __init__(self):
         """Define the toolbox (the name of the toolbox is the name of the .pyt file)."""
-        self.label = _("GTTK Toolbox")
+        self.label = f'{_("GTTK Toolbox")} {__version__}'
         self.alias = "gttk"
         self.icon = "icons/GTTK_Toolbox.pyt.32px.png"
         # List of tool classes associated with this toolbox

@@ -532,76 +532,6 @@ class TiffTagParser:
         
         return None
 
-    def get_exif_tags(self, page_index: int = 0) -> Dict[int, Dict[str, Any]]:
-        """
-        Extract EXIF-specific tags from a TIFF page.
-
-        Args:
-            page_index: Index of the TIFF page to process (default: 0)
-
-        Returns:
-            Dictionary mapping tag codes to tag information for EXIF tags
-        """
-        if page_index >= len(self.tif.pages):
-            raise IndexError(f"Page index {page_index} out of range")
-
-        exif_tags = {}
-        page = self.tif.pages[page_index]
-
-        # Only proceed if ExifIFD tag exists
-        tags = page.tags  # type: ignore
-        exif_ifd_tag = tags.get(34665)  # ExifIFD tag
-        if not exif_ifd_tag:
-            return {}
-
-        # Parse ExifIFD data
-        if isinstance(exif_ifd_tag.value, dict):
-            for key, value in exif_ifd_tag.value.items():
-                try:
-                    # Convert numeric keys to strings for consistent handling
-                    exif_tags[str(key)] = {
-                        'name': str(key),
-                        'value': self._format_exif_value(key, value)
-                    }
-                except Exception:
-                    continue
-
-        # Try to read InterColourProfile if it exists
-        icc_tag = tags.get(34675)  # InterColourProfile tag
-        if icc_tag:
-            try:
-                import io
-                import PIL.ImageCms
-                icc_data = io.BytesIO(icc_tag.value)
-                icc_profile = PIL.ImageCms.ImageCmsProfile(icc_data)
-                profile_info = PIL.ImageCms.getProfileInfo(icc_profile)
-                
-                exif_tags[34675] = {
-                    'name': 'InterColourProfile',
-                    'value': {
-                        'manufacturer': getattr(profile_info, 'manufacturer', ''),
-                        'model': getattr(profile_info, 'model', ''),
-                        'description': getattr(profile_info, 'description', ''),
-                        'copyright': getattr(profile_info, 'copyright', '')
-                    }
-                }
-            except Exception:
-                logger.warning("Could not parse InterColourProfile tag; PIL may not be installed or profile is invalid.")
-
-        # Look for other common EXIF-related tags
-        for tag in tags.values():
-            if tag.code in EXIF_RELATED_TAGS:
-                try:
-                    tag_value = self._format_exif_value(EXIF_RELATED_TAGS[tag.code], tag.value)
-                    exif_tags[tag.code] = {
-                        'name': EXIF_RELATED_TAGS[tag.code],
-                        'value': tag_value
-                    }
-                except Exception:
-                    continue
-
-        return exif_tags
-
     def get_tags(self, page_index: int = 0, tag_scope: str = 'complete') -> List[TiffTag]:
         """
         Extract and interpret all TIFF tags from a specific page.
@@ -803,5 +733,3 @@ def _parse_jpeg_tables(data: bytes) -> str:
     if summary:
         return f"Contains {' and '.join(summary)} tables ({len(data)} bytes)"
     return f"binary data ({len(data)} bytes)"
-
-

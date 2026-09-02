@@ -282,13 +282,13 @@ class TestSyncSidecars:
     @pytest.fixture
     def toolbox(self, tmp_path):
         pyt = tmp_path / 'X.pyt'
-        pyt.write_text('# toolbox\n')
+        pyt.write_text('# toolbox\n', encoding='utf-8')
         for lang in ('en', 'es'):
             folder = tmp_path / 'i18n' / lang
             folder.mkdir(parents=True)
             (folder / 'X.pyt.xml').write_bytes(f'<metadata xml:lang="{lang}"/>'.encode())
             (folder / 'X.Tool.pyt.xml').write_bytes(f'<tool lang="{lang}"/>'.encode())
-            (folder / 'notes.txt').write_text('ignored')
+            (folder / 'notes.txt').write_text('ignored', encoding='utf-8')
         return pyt
 
     def test_copies_the_active_language_set(self, toolbox):
@@ -314,7 +314,7 @@ class TestSyncSidecars:
 
     def test_missing_i18n_dir_warns_and_does_not_raise(self, tmp_path):
         pyt = tmp_path / 'X.pyt'
-        pyt.write_text('# toolbox\n')
+        pyt.write_text('# toolbox\n', encoding='utf-8')
         result = sync_sidecars(pyt, 'es')
         assert result.copied == []
         assert result.warnings and 'No help files found' in result.warnings[0]

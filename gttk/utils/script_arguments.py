@@ -302,7 +302,7 @@ class TestArguments(OptimizeArguments):
     csv_path: Optional[Path] = None
     product_type: Optional[str] = None
     temp_dir: Optional[Path] = None
-    delete_test_files: bool = False
+    delete_test_files: bool = True
     log_file: Optional[Path] = None
     optimize_script_path: Optional[Path] = None
 
@@ -335,10 +335,10 @@ class TestArguments(OptimizeArguments):
 class ReadArguments(BaseArguments):
     """Arguments for the read_metadata tool."""
     sections: Optional[List[str]] = None
-    reader_type: Optional[str] = None
+    reader_type: Optional[str] = 'producer'
     page: int = 0
-    xml_type: Optional[str] = None
-    tag_scope: Optional[str] = None
+    xml_type: Optional[str] = 'table'
+    tag_scope: Optional[str] = 'complete'
     banner: Optional[str] = None
     report_format: str = 'html'
     report_suffix: str = '_meta'
