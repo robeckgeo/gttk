@@ -50,6 +50,14 @@ All notable changes to this project will be documented in this file.
   path and use the same function now. `--help` says "the rules bundled with GTTK" rather
   than printing an absolute path into site-packages.
 
+- `pytest.ini` carried `[coverage:run]`, `[coverage:report]` and `[coverage:html]` sections
+  that coverage.py has never read -- it looks in `.coveragerc`, `setup.cfg`, `tox.ini` and
+  `pyproject.toml`, not `pytest.ini` -- so `precision = 2` never showed and the `omit`
+  patterns never omitted anything. Removed, with a note where the real settings live: the
+  `--cov*` flags in `addopts`. Reports are unchanged, because nothing in that block was ever
+  in effect. `gttk/resources/tiff/` also gained the `__init__.py` its sibling `esri/`
+  already had, so pytest imports its build script under its package name.
+
 - The two lookup-table build scripts under `gttk/resources/` called
   `logging.basicConfig()` at module scope, claiming the root logger of any process that
   imported them -- which `--doctest-modules gttk/` now does. Moved into `main()`, where a
