@@ -127,7 +127,8 @@ def _calculate_statistics_blocked(
                 if len(nodata_values_str) > 1 and len(nodata_values_str) == ds_or_band.RasterCount:
                     try:
                         effective_nodata = float(nodata_values_str[band_idx])
-                    except (ValueError, IndexError):
+                    except (ValueError, IndexError) as e:
+                        logger.warning(f"NoData value {nodata_value!r} could not be read as one number per band ({e}); using it as is")
                         effective_nodata = nodata_value
             
             # Scan blocks for min/max
@@ -248,7 +249,8 @@ def _calculate_statistics_blocked(
                 if len(nodata_values_str) > 1 and len(nodata_values_str) == ds_or_band.RasterCount:
                     try:
                         effective_nodata = float(nodata_values_str[band_idx])
-                    except (ValueError, IndexError):
+                    except (ValueError, IndexError) as e:
+                        logger.warning(f"NoData value {nodata_value!r} could not be read as one number per band ({e}); using it as is")
                         effective_nodata = nodata_value
             
             color_interp = gdal.GetColorInterpretationName(band.GetColorInterpretation())
@@ -518,7 +520,8 @@ def _calculate_statistics_full(ds_or_band: Union[gdal.Dataset, gdal.Band]) -> Op
                 if isinstance(ds_or_band, gdal.Dataset) and len(nodata_values_str) > 1 and len(nodata_values_str) == ds_or_band.RasterCount:
                     try:
                         effective_nodata = float(nodata_values_str[i-1])
-                    except (ValueError, IndexError):
+                    except (ValueError, IndexError) as e:
+                        logger.warning(f"NoData value {nodata_value!r} could not be read as one number per band ({e}); using it as is")
                         effective_nodata = nodata_value
             
             # Use safe nodata comparison with dtype awareness

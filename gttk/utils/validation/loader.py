@@ -313,6 +313,7 @@ def get_product_metadata(rules_dir: Path, product: str) -> dict:
             with open(toml_file, 'rb') as f:
                 data = tomllib.load(f)
         except tomllib.TOMLDecodeError:
+            logger.warning(f"Skipping invalid TOML file: {toml_file.name}")
             continue
 
         if product in data:

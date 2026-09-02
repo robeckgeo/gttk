@@ -50,6 +50,44 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
 
+def is_numeric(value: Any) -> bool:
+    """Whether ``value`` (or every element of a list) reads as a number."""
+    items = value if isinstance(value, (list, tuple)) else [value]
+    if isinstance(value, (list, tuple)) and not items:
+        return False
+    for item in items:
+        if isinstance(item, bool):
+            return False
+        try:
+            float(item)
+        except (TypeError, ValueError):
+            return False
+    return True
+
+
+def comparison_failure(value: Any, expected: Any, constraint: str) -> Optional[str]:
+    """
+    Why a numeric constraint could not be evaluated for ``value``, or None.
+
+    A range compared against text, or an exact number against a value that is not one,
+    used to come back as a bare ``False`` -- the same answer as a real mismatch. The
+    validator appends this reason to the result's message so the two can be told apart.
+
+    Example:
+        >>> comparison_failure('abc', {'min': 0, 'max': 255}, 'range')
+        'not a number'
+        >>> comparison_failure(300, {'min': 0, 'max': 255}, 'range') is None
+        True
+        >>> comparison_failure('n/a', 32, 'exact')
+        'not a number'
+    """
+    numeric_expected = (constraint in ('range', 'ranges')
+                        or (constraint == 'exact' and isinstance(expected, (int, float)) and not isinstance(expected, bool)))
+    if numeric_expected and not is_numeric(value):
+        return 'not a number'
+    return None
+
+
 def validate_exact(value: Any, expected: Any) -> bool:
     """
     Validate that value exactly matches expected value.

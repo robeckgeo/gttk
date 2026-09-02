@@ -914,3 +914,16 @@ class TestValueTruncation:
 
         # Short value should not have truncation marker
         assert '...' not in result.message or 'is present with value: 32' in result.message
+
+
+class TestMessagesSayWhenAValueCouldNotBeCompared:
+
+    def test_range_against_text(self):
+        from gttk.utils.validation.validator import _with_comparison_failure
+        message = _with_comparison_failure('Tag 258 value abc is outside range 0 to 255', 'abc', {'min': 0, 'max': 255}, 'range')
+        assert message.endswith('(could not be compared: not a number)')
+
+    def test_a_real_mismatch_is_left_alone(self):
+        from gttk.utils.validation.validator import _with_comparison_failure
+        message = _with_comparison_failure('Tag 258 value 300 is outside range 0 to 255', 300, {'min': 0, 'max': 255}, 'range')
+        assert 'could not be compared' not in message

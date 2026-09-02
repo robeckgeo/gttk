@@ -284,6 +284,7 @@ def extract_projection_info():
         sys.exit(1)
     
     info = {{}}
+    warnings = []   # what could not be read, reported to the parent rather than dropped
     
     # Raster type
     metadata = ds.GetMetadata()
@@ -306,8 +307,8 @@ def extract_projection_info():
             info['semi_major'] = srs.GetSemiMajor()
             info['inv_flattening'] = srs.GetInvFlattening()
             info['angular_unit_name'] = srs.GetAngularUnitsName()
-        except Exception:
-            pass
+        except Exception as e:
+            warnings.append(f"geographic CRS: {{e}}")
     
     # Projected CS
     if srs.IsProjected():
@@ -315,15 +316,15 @@ def extract_projection_info():
             info['projected_cs_name'] = srs.GetAttrValue('PROJCS')
             info['projected_cs_code'] = srs.GetAuthorityCode('PROJCS')
             info['linear_unit_name'] = srs.GetLinearUnitsName()
-        except Exception:
-            pass
+        except Exception as e:
+            warnings.append(f"projected CRS: {{e}}")
     
     # Compound CS
     if srs.IsCompound():
         try:
             info['compound_cs_name'] = srs.GetAttrValue('COMPD_CS')
-        except Exception:
-            pass
+        except Exception as e:
+            warnings.append(f"compound CRS: {{e}}")
     
     # Vertical CS - extract from WKT (compound CRS)
     try:
@@ -345,8 +346,8 @@ def extract_projection_info():
             vert_unit = vert_srs.GetLinearUnitsName()
             if vert_unit:
                 info['vertical_unit_name'] = vert_unit
-    except Exception:
-        pass
+    except Exception as e:
+        warnings.append(f"vertical CRS: {{e}}")
     
     # Check for 3D Geographic CRS (e.g., EPSG:4979)
     # These have ellipsoidal height as 3rd axis but no separate VERT_CS
@@ -364,29 +365,30 @@ def extract_projection_info():
                     linear_unit = srs.GetLinearUnitsName()
                     if linear_unit:
                         info['vertical_unit_name'] = linear_unit
-        except Exception:
-            pass
+        except Exception as e:
+            warnings.append(f"3D axis: {{e}}")
     
     # Export WKT for use in ArcGIS environment
     wkt_string = ""
     try:
         wkt_string = srs.ExportToWkt(['FORMAT=WKT2_2019', 'MULTILINE=YES'])
-    except Exception:
-        pass
+    except Exception as e:
+        warnings.append(f"WKT export: {{e}}")
     
     # Export PROJJSON for use in ArcGIS environment
     # This ensures consistent format with full member IDs when PROJ database is available
     projjson_string = ""
     try:
         projjson_string = srs.ExportToPROJJSON()
-    except Exception:
-        pass
+    except Exception as e:
+        warnings.append(f"PROJJSON export: {{e}}")
     
     # Output projection_info, WKT, and PROJJSON as JSON
     result = {{
         "projection_info": info,
         "wkt_string": wkt_string,
-        "projjson_string": projjson_string
+        "projjson_string": projjson_string,
+        "warnings": warnings
     }}
     print(json.dumps(result))
     ds = None
@@ -515,6 +517,8 @@ def get_projection_info_from_osgeo4w(filepath: str) -> Tuple[Optional[Dict[str, 
                             projection_info = result.get("projection_info")
                             wkt_string = result.get("wkt_string", "")
                             projjson_string = result.get("projjson_string", "")
+                            for note in result.get("warnings", []):
+                                logger.warning(f"OSGeo4W projection info for {Path(filepath).name}: {note}")
                             logger.info(f"Successfully extracted projection_info: {projection_info}")
                             logger.info(f"WKT string length: {len(wkt_string)} chars")
                             logger.info(f"PROJJSON string length: {len(projjson_string)} chars")

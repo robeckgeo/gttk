@@ -545,3 +545,17 @@ class TestBundledRulesDir:
         from gttk.utils.script_arguments import ValidateArguments
         field = {f.name: f for f in dataclasses.fields(ValidateArguments)}['rules_dir']
         assert field.default_factory() == bundled_rules_dir()
+
+
+class TestInvalidRuleFilesAreNamedWhenSkipped:
+
+    def test_get_product_metadata_names_a_file_it_skips(self, tmp_path, caplog):
+        """The product listing already said which file it skipped; the metadata lookup
+        skipped the same file in silence."""
+        import logging
+        from gttk.utils.validation.loader import get_product_metadata
+        (tmp_path / 'good.toml').write_text('[X]\ntitle = "X"\n', encoding='utf-8')
+        (tmp_path / 'bad.toml').write_text('this is not = toml [', encoding='utf-8')
+        with caplog.at_level(logging.WARNING):
+            assert get_product_metadata(tmp_path, 'X')['title'] == 'X'
+        assert 'Skipping invalid TOML file: bad.toml' in caplog.text

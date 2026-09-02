@@ -236,3 +236,4 @@ class TestGeneratedScriptsRun:
         info = json.loads(result.stdout.strip().splitlines()[-1])
         assert info['projection_info']['projected_cs_code'] == '32610'
         assert 'PROJCRS' in info['wkt_string']
+        assert info['warnings'] == []   # the script lists what it could not read, here nothing

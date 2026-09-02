@@ -33,6 +33,7 @@ from gttk.utils.validation.models import (
     get_section_missing_message,
 )
 from gttk.utils.validation.constraints import (
+    comparison_failure,
     validate_exact,
     validate_enum,
     validate_regex,
@@ -54,6 +55,12 @@ KEY_FIELD_CAPS = {
     'xpath': 'XPath',
     'jsonpath': 'JSONPath'
 }
+
+def _with_comparison_failure(message: str, value: Any, expected: Any, constraint: str) -> str:
+    """Append why a numeric constraint could not be evaluated, when that is the reason."""
+    reason = comparison_failure(value, expected, constraint)
+    return f"{message} (could not be compared: {reason})" if reason else message
+
 
 class ValidationEngine:
     """
@@ -283,6 +290,7 @@ class ValidationEngine:
                 message = f"{key_type} {key} value matches expected value: {value_str}"
             else:
                 message = f"{key_type} {key} value {value_str} does not match expected value {expected_str}"
+                message = _with_comparison_failure(message, value, expected, 'exact')
 
         elif constraint == 'enum':
             # expected is validated as list in ValidationRule.__post_init__
@@ -317,6 +325,7 @@ class ValidationEngine:
                 message = f"{key_type} {key} value {display_value} is within range {min_val} to {max_val}"
             else:
                 message = f"{key_type} {key} value {display_value} is outside range {min_val} to {max_val}"
+                message = _with_comparison_failure(message, value, expected, 'range')
 
         elif constraint == 'ranges':
             # expected is validated as list in ValidationRule.__post_init__
@@ -333,6 +342,7 @@ class ValidationEngine:
                     max_v = r.get('max', '+inf')
                     formatted_ranges.append(f"{min_v}-{max_v}")
                 message = f"{key_type} {key} value {display_value} is not in any of the expected ranges: [{', '.join(formatted_ranges)}]"
+                message = _with_comparison_failure(message, value, expected, 'ranges')
 
         elif constraint == 'exists':
             passed = validate_exists(value)

@@ -113,6 +113,15 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **What a fallback could not read is said, not skipped.** The projection script run under
+  OSGeo4W for ArcGIS Pro swallowed seven kinds of failure with `pass` and still exited 0
+  with valid JSON; it now lists each one and the parent logs them by file. A per-band NoData
+  string the statistics calculator cannot read as a number is reported instead of being
+  used as it came. The rules loader's product-metadata lookup names an invalid TOML file it
+  skips, as the product listing already did. And a `gttk validate` result whose value could
+  not be compared at all -- text against a numeric range, or against an exact number -- says
+  "could not be compared: not a number" in its message instead of reading like a plain
+  mismatch.
 - **Failures inside the extractors are reported, not rendered as clean results.** A crash
   in the COG validator came back as no validation at all, which the report showed as a
   file without issues; it is now an error entry, "Validation could not run". An IFD field

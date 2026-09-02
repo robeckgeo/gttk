@@ -395,3 +395,24 @@ class TestApplyConstraint:
         with pytest.raises(ValueError) as excinfo:
             apply_constraint(32, 'unknown_constraint', 32)
         assert 'Unknown constraint type' in str(excinfo.value)
+
+
+class TestAComparisonThatCannotBeMadeSaysSo:
+    """validate_range('abc', ...) and validate_exact('n/a', 32) return False, the same
+    answer as a real mismatch; the validator appends the reason to its message."""
+
+    def test_text_against_a_range(self):
+        from gttk.utils.validation.constraints import comparison_failure, validate_range
+        assert validate_range('abc', {'min': 0, 'max': 255}) is False
+        assert comparison_failure('abc', {'min': 0, 'max': 255}, 'range') == 'not a number'
+        assert comparison_failure(300, {'min': 0, 'max': 255}, 'range') is None
+
+    def test_text_against_an_exact_number(self):
+        from gttk.utils.validation.constraints import comparison_failure
+        assert comparison_failure('n/a', 32, 'exact') == 'not a number'
+        assert comparison_failure(64, 32, 'exact') is None
+        assert comparison_failure('LZW', 'DEFLATE', 'exact') is None   # text against text is a plain mismatch
+
+    def test_lists_are_judged_element_by_element(self):
+        from gttk.utils.validation.constraints import is_numeric
+        assert is_numeric([8, 8, 8]) and not is_numeric([8, 'x']) and not is_numeric([]) and not is_numeric(True)

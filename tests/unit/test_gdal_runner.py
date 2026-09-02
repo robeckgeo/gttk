@@ -108,3 +108,36 @@ class TestProjectionExtractionTimeout:
         result = gdal_runner.get_projection_info_from_osgeo4w(str(tmp_path / 'x.tif'))
         assert result == (None, None, None)
         assert events == ['timeout', 'killed', 'reaped']
+
+
+class TestProjectionScriptWarningsReachTheLog:
+    """The generated script used to swallow seven failures with `pass` and still exit 0
+    with valid JSON; it now lists them, and the parent logs each one."""
+
+    def test_each_warning_is_logged_with_the_file_name(self, tmp_path, monkeypatch, caplog):
+        import json
+        import logging
+        import subprocess
+        from gttk.utils.config_loader import config
+        osgeo4w = tmp_path / 'OSGeo4W'
+        (osgeo4w / 'bin').mkdir(parents=True)
+        (osgeo4w / 'bin' / 'python.exe').touch()
+        monkeypatch.setattr(config, 'get', lambda key, default=None: str(osgeo4w) if key == 'paths.osgeo4w' else default)
+        answer = {"projection_info": {"is_projected": True}, "wkt_string": "PROJCRS[...]",
+                  "projjson_string": "", "warnings": ["WKT export: no PROJ database", "PROJJSON export: boom"]}
+
+        class Answering:
+            returncode = 0
+
+            def communicate(self, input=None, timeout=None):
+                return (json.dumps({"command_index": 0, "stdout": json.dumps(answer)}) + '\n', '')
+
+            def kill(self):
+                pass
+
+        monkeypatch.setattr(subprocess, 'Popen', lambda *a, **k: Answering())
+        with caplog.at_level(logging.WARNING):
+            info, wkt, projjson = gdal_runner.get_projection_info_from_osgeo4w(str(tmp_path / 'tile.tif'))
+        assert info == {"is_projected": True} and wkt == "PROJCRS[...]"
+        assert 'tile.tif: WKT export: no PROJ database' in caplog.text
+        assert 'tile.tif: PROJJSON export: boom' in caplog.text
