@@ -32,6 +32,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 import lxml.etree as etree
+from gttk.utils.xml_safety import parse_untrusted
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +205,7 @@ class ValueExtractor:
             return self._gdal_items_cache
 
         try:
-            root = etree.fromstring(content.encode('utf-8'))
+            root = parse_untrusted(content)
             # GDAL metadata format:
             # <GDALMetadata>
             #   <Item name="NAME">VALUE</Item>
@@ -607,7 +608,7 @@ class ValueExtractor:
             return None
 
         try:
-            root = etree.fromstring(xml_content.encode('utf-8'))
+            root = parse_untrusted(xml_content)
 
             # Collect all namespaces from the document
             namespaces = self._collect_all_namespaces(root)

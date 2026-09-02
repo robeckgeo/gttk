@@ -28,6 +28,7 @@ Classes:
 
 import os
 import lxml.etree as etree
+from gttk.utils.xml_safety import parse_untrusted
 from abc import ABC
 from typing import Any, List, Optional
 from gttk.utils.data_models import (
@@ -398,7 +399,7 @@ class MetadataReportBuilder(ReportBuilder):
         """
         try:
             # Parse the XML
-            root = etree.fromstring(xml_content.encode('utf-8'))
+            root = parse_untrusted(xml_content)
             
             # Find all Item elements with name attribute matching ^STATISTICS_
             statistics_items = root.xpath(".//Item[starts-with(@name, 'STATISTICS_')]")

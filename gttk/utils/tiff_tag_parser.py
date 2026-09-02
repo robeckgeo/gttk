@@ -28,6 +28,7 @@ import re
 import tifffile
 import unicodedata
 import lxml.etree as etree
+from gttk.utils.xml_safety import parse_untrusted
 from copy import deepcopy
 from importlib import resources
 from osgeo import gdal
@@ -651,7 +652,7 @@ class TiffTagParser:
                     else:
                         try:
                             # Attempt to parse with lxml to confirm it's well-formed
-                            etree.fromstring(fundamental_value.encode('utf-8'))
+                            parse_untrusted(fundamental_value)
                         except etree.XMLSyntaxError:
                             interpretation = "Malformed XML (treated as text)"
 

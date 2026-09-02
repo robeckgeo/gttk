@@ -20,6 +20,7 @@ import logging
 import re
 import textwrap
 import lxml.etree as etree
+from gttk.utils.xml_safety import untrusted_parser
 from pathlib import Path
 from typing import Optional, Dict
 
@@ -497,7 +498,7 @@ def pretty_print_xml(xml_string: str, flatten: bool = False, indent: str = '  ')
         try:
             # Test if we can preserve comments with lxml
             # Use remove_blank_text=True to force re-indentation of "flat" XML files
-            parser = etree.XMLParser(strip_cdata=False, remove_comments=False, remove_blank_text=True)
+            parser = untrusted_parser(strip_cdata=False, remove_comments=False, remove_blank_text=True)
             
             # Ensure the XML declaration matches the UTF-8 encoding we are about to use.
             # If the original string had encoding="ISO-8859-1", lxml would misinterpret
@@ -674,6 +675,12 @@ def pretty_print_xml(xml_string: str, flatten: bool = False, indent: str = '  ')
         print(f"Error in custom XML formatting: {e}")
         return xml_string
     
+#: A metadata sidecar larger than this is refused rather than read into memory. ISO 19115
+#: and FGDC records run to a few megabytes; the sidecar is chosen by its name next to an
+#: input raster, so its size is not something GTTK controls.
+MAX_XML_SIDECAR_BYTES = 64 * 1024 * 1024
+
+
 def read_xml_with_encoding_detection(xml_path: Path) -> Optional[bytes]:
     """
     Reads an XML file and returns the raw bytes.
@@ -685,9 +692,16 @@ def read_xml_with_encoding_detection(xml_path: Path) -> Optional[bytes]:
         xml_path: Path to the XML file
         
     Returns:
-        The XML content as bytes, or None if reading failed
+        The XML content as bytes, or None if reading failed or the file is larger than
+        :data:`MAX_XML_SIDECAR_BYTES`.
     """
     try:
+        size = xml_path.stat().st_size
+        if size > MAX_XML_SIDECAR_BYTES:
+            logger.error(f"Refusing to read XML file {xml_path}: {size:,} bytes exceeds the "
+                         f"{MAX_XML_SIDECAR_BYTES:,}-byte limit for a metadata sidecar")
+            return None
+
         # Read file in binary mode and return raw bytes
         # Let the XML parser handle encoding detection from the XML declaration
         with open(xml_path, 'rb') as f:
@@ -713,16 +727,19 @@ def decode_xml_bytes(xml_bytes: bytes) -> Optional[str]:
     if not xml_bytes:
         return None
     
-    encodings_to_try = ['utf-8', 'iso-8859-1', 'windows-1252', 'latin-1']
-    
-    for encoding in encodings_to_try:
+    try:
+        return xml_bytes.decode('utf-8')
+    except UnicodeDecodeError:
+        pass
+
+    # windows-1252 leaves five byte values undefined; latin-1 maps every byte, so the
+    # loop always returns and a caller never sees None for non-empty input.
+    for encoding in ('windows-1252', 'latin-1'):
         try:
             decoded_string = xml_bytes.decode(encoding)
-            if encoding != 'utf-8':
-                logger.warning(f"UTF-8 decoding failed, successfully decoded using '{encoding}'.")
-            return decoded_string
         except UnicodeDecodeError:
             continue
-            
-    logger.error(f"Failed to decode XML bytes with any of the attempted encodings: {', '.join(encodings_to_try)}")
+        logger.warning(f"UTF-8 decoding failed, successfully decoded using '{encoding}'.")
+        return decoded_string
+    raise AssertionError("latin-1 decodes every byte sequence")  # pragma: no cover
     return None

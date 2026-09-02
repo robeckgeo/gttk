@@ -19,6 +19,7 @@ compliance with GDAL's expectations.
 import logging
 from pathlib import Path
 import lxml.etree as etree
+from gttk.utils.xml_safety import parse_untrusted
 from osgeo import gdal
 from typing import Optional
 
@@ -49,8 +50,7 @@ def prepare_xml_for_gdal(xml_path: Path) -> Optional[str]:
             xml_bytes = f.read()
 
         # Parse the XML from bytes, allowing lxml to detect the encoding
-        parser = etree.XMLParser(remove_blank_text=True)
-        xml_tree_root = etree.fromstring(xml_bytes, parser)
+        xml_tree_root = parse_untrusted(xml_bytes, remove_blank_text=True)
 
         # Serialize to a UTF-8 string and then prettify it
         xml_content_raw = etree.tostring(xml_tree_root, encoding='UTF-8', xml_declaration=True).decode('utf-8')

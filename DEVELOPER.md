@@ -203,6 +203,16 @@ in; an application that never calls it receives GTTK's messages through its own 
 handlers by normal propagation. Clearing root's handlers -- which `setup_logger` used to
 do -- silently disabled the logging of anything that imported GTTK.
 
+## XML That GTTK Did Not Write
+
+Tags 700 (XMP), 42112 (GDAL_METADATA) and 50909 (GEO_METADATA), and the `.xml` and
+`.aux.xml` sidecars, are parsed through `gttk.utils.xml_safety` -- never with a bare
+`etree.fromstring` or a parser a site builds for itself. `untrusted_parser()` never
+substitutes an entity, loads a DTD or touches the network, and the four options that make
+it so cannot be passed to it. `tests/unit/test_xml_safety.py` feeds an entity that names a
+local file through every entry point: a tag written into a raster, a sidecar beside it, and
+the formatters that render them.
+
 ## Understanding the Processing Pipeline
 
 `gttk optimize` uses a sophisticated, multi-step pipeline to process your data. All steps are performed in-memory using GDAL's virtual file system, meaning no temporary files are written to disk.

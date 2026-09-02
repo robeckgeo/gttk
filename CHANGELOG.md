@@ -22,6 +22,15 @@ All notable changes to this project will be documented in this file.
   is evaluated, a backtick escapes and a `"` ends the string, and the path comes from the
   input raster's name. The path is now a single-quoted PowerShell literal carried as
   `-EncodedCommand`, so neither PowerShell nor the Windows command line ever parses it.
+- **Every parser that reads XML out of a GeoTIFF or a sidecar now refuses entities, DTDs
+  and the network.** Nine sites -- the validation extractors, the report builder's
+  statistics filter, the GEO_METADATA writer, the XML pretty-printer, the markdown renderer
+  and the tag parser -- used lxml's default parser, so whether
+  `<!ENTITY x SYSTEM "file:///...">` read a local file depended on the installed libxml2.
+  `gttk.utils.xml_safety` fixes the answer for all of them; internal entities are not
+  substituted either, which is what a test can observe on any libxml2. A metadata sidecar
+  over 64 MiB is refused rather than read into memory, and `decode_xml_bytes` no longer
+  carries a failure branch that `latin-1` made unreachable.
 
 ### Added
 

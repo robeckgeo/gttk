@@ -18,6 +18,7 @@ structure in a tabular format.
 """
 from typing import List, Set, Dict, Any, Optional
 import lxml.etree as etree
+from gttk.utils.xml_safety import untrusted_parser
 from lxml.etree import ElementBase
 from gttk.utils.contexts import output_format_context
 import re
@@ -243,7 +244,7 @@ def xml_to_markdown(xml_content: bytes | str, sample_color_map: Optional[Dict[st
         is_html = output_format_context.get() == 'html'
         
         # Handle both bytes and string input
-        parser = etree.XMLParser(recover=True, remove_comments=False, remove_pis=False)
+        parser = untrusted_parser(recover=True, remove_comments=False, remove_pis=False)
         if isinstance(xml_content, str):
             # If string, let lxml handle encoding
             

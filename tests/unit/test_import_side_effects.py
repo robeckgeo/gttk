@@ -45,6 +45,7 @@ GTTK_MODULES = [
     "gttk.utils.gdal_runner",
     "gttk.utils.gdal_scripts",
     "gttk.utils.validation.gpkg_writer",
+    "gttk.utils.xml_safety",
     # Not part of the library surface, but pytest --doctest-modules walks all of
     # gttk/ and imports them, so their import must be as quiet as everything else.
     "gttk.resources.tiff.build_tiff_tag_lookup",

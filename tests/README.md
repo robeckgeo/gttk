@@ -47,11 +47,11 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,517
+- **Total Tests**: 1,544
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,309 tests (models, processors, extractors, formatters, utilities)
-  - Doctests: 101 (92 in `gttk/`, 9 in `tests/`)
+  - Unit Tests: 1,335 tests (models, processors, extractors, formatters, utilities)
+  - Doctests: 102 (93 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 51 tests (metadata workflows, statistics validation)
   - E2E Tests: 56 tests (CLI commands)
 
@@ -103,7 +103,7 @@ tests/
 │   ├── custom_vertical_crs.py                   # A vertical CRS with no EPSG code
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,309)
+├── unit/                                        # Unit tests (1,335)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (95)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
@@ -127,6 +127,7 @@ tests/
 │   ├── test_validation_loader.py                # TOML rule loading (28)
 │   ├── test_mock_factory.py                     # MockGeoTIFF factory itself (27)
 │   ├── test_preprocessor.py                     # Data preprocessing (25)
+│   ├── test_xml_safety.py                       # XML from rasters and sidecars never reads a file (25)
 │   ├── test_statistics_vectorized.py            # Vectorized statistics (24)
 │   ├── test_validation_report.py                # Validation report generation (19)
 │   ├── test_statistics_block_infrastructure.py  # Block processing (17)
