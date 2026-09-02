@@ -473,7 +473,7 @@ gttk read -i classified.tif --report-format md --banner "UNCLASSIFIED"
 
 **1. [ASTER_PCA_bands1-9_meta.html](example_reports/ASTER_PCA_bands1-9_meta.html)**
 
-**Description**: A multi-band Principal Component Analysis (PCA) over the Gobi Desert in Mongolia, constructed from all 9 VNIR and SWIR bands of the Advanced Spaceborne Thermal Emission & Reflectance Radiometer (ASTER) satellite. Raw data are from [AST_07XT_00404082004040535_20250325113927](s3://lp-prod-protected/AST_07XT.004/AST_07XT_00404082004040535_20250325113927/AST_07XT_00404082004040535_20250325113927.cmr.json).
+**Description**: A multi-band Principal Component Analysis (PCA) over the Gobi Desert in Mongolia, constructed from all 9 VNIR and SWIR bands of the Advanced Spaceborne Thermal Emission & Reflectance Radiometer (ASTER) satellite. Raw data are from granule `AST_07XT_00404082004040535_20250325113927` (LP DAAC, `s3://lp-prod-protected/AST_07XT.004/`).
 
 - Synchronizes font and patch colors between band-specific GDAL metadata, Statistics columns and Histogram chart.
 - Displays a layered histogram with all bands in one chart for contrast and to reduce real estate.

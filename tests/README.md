@@ -55,8 +55,8 @@ open htmlcov/index.html   # macOS/Linux
   - Integration Tests: 51 tests (metadata workflows, statistics validation)
   - E2E Tests: 56 tests (CLI commands)
 
-> The per-file counts in the directory tree below have not been kept current and are
-> indicative only. The category totals above are from `pytest --collect-only`.
+Counts here and in the tree below are from `pytest --collect-only`; doctests
+live in the source modules and are not listed per file.
 
 ### Doctests
 
@@ -96,49 +96,68 @@ a GDAL dataset alive -- are in the **Doctests** section of `CLAUDE.md`.
 conftest.py                                      # (repo root) PROJ_LIB, gdal.UseExceptions,
                                                  # and the doctest sandbox
 tests/
-├── __init__.py                                  # Test package initialization
+├── __init__.py
 ├── conftest.py                                  # Mock GeoTIFF fixtures & assertion formatting
-├── README.md                                    # Detailed test documentation
+├── README.md                                    # This guide
 ├── fixtures/                                    # Mock data factories
-│   ├── __init__.py
-│   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator (20 tests)
+│   ├── custom_vertical_crs.py                   # A vertical CRS with no EPSG code
+│   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (516 tests, 81%)
-│   ├── __init__.py
-│   ├── test_data_models.py                      # Data class tests (125 tests)
-│   ├── test_geotiff_processor.py                # GeoTIFF processing (82 tests)
-│   ├── test_xml_formatter.py                    # XML formatting (44 tests)
-│   ├── test_srs_logic.py                        # SRS/CRS logic (42 tests)
-│   ├── test_metadata_extractor.py               # Metadata extraction (35 tests)
-│   ├── test_report_formatters.py                # Report generation tests (30 tests)
-│   ├── test_preprocessor.py                     # Data preprocessing (27 tests)
-│   ├── test_statistics_type_utilities.py        # Type utilities (25 tests)
-│   ├── test_statistics_vectorized.py            # Vectorized stats (23 tests)
-│   ├── test_mock_factory.py                     # Mock factory validation (20 tests)
-│   ├── test_statistics_block_infrastructure.py  # Block processing (15 tests)
-│   ├── test_statistics_phase2.py                # Phase 2 optimizations (15 tests)
-│   ├── test_statistics_strategy_selection.py    # Strategy selection (15 tests)
-│   ├── test_section_renderers.py                # Section rendering (15 tests)
-│   ├── test_custom_vertical_crs_compound.py     # Custom CRS (2 tests)
-│   └── test_custom_vertical_datum_storage.py    # Vertical datum (1 test)
-├── integration/                                 # Integration tests (31 tests, 5%)
-│   ├── __init__.py
-│   ├── test_metadata_workflow.py                # End-to-end workflows (13 tests)
-│   ├── test_statistics_native_dtype.py          # Native dtype testing (9 tests)
-│   └── test_statistics_blocked_path.py          # Blocked path validation (9 tests)
-├── e2e/                                         # End-to-end CLI tests (76 tests, 12%)
-│   ├── __init__.py
-│   ├── test_read_command.py                     # `gttk read` tests (17 tests)
-│   ├── test_compare_command.py                  # `gttk compare` tests (15 tests)
-│   ├── test_optimize_command.py                 # `gttk optimize` tests (11 tests)
-│   └── test_test_command.py                     # `gttk test` tests (7 tests)
-├── benchmarks/                                  # Performance benchmarks (10 functions, 2%)
-│   ├── __init__.py
-│   └── benchmark_statistics.py                  # Comprehensive stats benchmarks
-└── validation/                                  # Accuracy validation (5 functions, <1%)
-    ├── __init__.py
-    ├── validate_block_statistics_accuracy.py    # Block accuracy (4 functions)
-    └── validate_phase2_accuracy.py              # Phase 2 accuracy (1 function)
+├── unit/                                        # Unit tests (1,240)
+│   ├── test_data_models.py                      # Data classes (129)
+│   ├── test_cli_help.py                         # Rendered command-line help (95)
+│   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
+│   ├── test_i18n.py                             # Toolbox language detection & catalogs (67)
+│   ├── test_overview_control.py                 # Overview & thread control on the COG path (61)
+│   ├── test_srs_logic.py                        # SRS/CRS logic (58)
+│   ├── test_validation_extractors.py            # Validation value extraction (58)
+│   ├── test_toolbox_sidecars.py                 # .pyt.xml help sidecars pinned to the dialog (51)
+│   ├── test_validation_constraints.py           # All 7 constraint types (49)
+│   ├── test_metadata_extractor.py               # Metadata extraction (48)
+│   ├── test_xml_formatter.py                    # XML formatting (44)
+│   ├── test_validation_models.py                # Validation data models (42)
+│   ├── test_validation_xml.py                   # XPath extraction with namespaces (38)
+│   ├── test_validation_phase5.py                # JSONPath & extended data types (36)
+│   ├── test_validation_validator.py             # ValidationEngine (33)
+│   ├── test_statistics_type_utilities.py        # Native dtype utilities (32)
+│   ├── test_import_side_effects.py              # Importing GTTK leaves the host process alone (31)
+│   ├── test_discard_lsb.py                      # DISCARD_LSB decimals-to-bits helper (30)
+│   ├── test_report_formatters.py                # Report formatting (30)
+│   ├── test_validation_loader.py                # TOML rule loading (28)
+│   ├── test_mock_factory.py                     # MockGeoTIFF factory itself (27)
+│   ├── test_preprocessor.py                     # Data preprocessing (25)
+│   ├── test_statistics_vectorized.py            # Vectorized statistics (24)
+│   ├── test_validation_report.py                # Validation report generation (19)
+│   ├── test_statistics_block_infrastructure.py  # Block processing (17)
+│   ├── test_statistics_strategy_selection.py    # Fast vs blocked strategy selection (16)
+│   ├── test_validation_output.py                # Output folder & report path construction (14)
+│   ├── test_statistics_phase2.py                # Phase 2 statistics optimizations (13)
+│   ├── test_section_renderers.py                # Section rendering (11)
+│   ├── test_log_helpers.py                      # Logging helpers & startup env checks (9)
+│   ├── test_i18n_catalog.py                     # Spanish catalog pinned to the toolbox (8)
+│   ├── test_custom_vertical_crs_compound.py     # Custom vertical CRS into a compound CRS (7)
+│   ├── test_optimize_arc_wiring.py              # ArcGIS optimize path wiring (6)
+│   ├── test_toolbox_load.py                     # Loading the .pyt the way ArcGIS Pro does (6)
+│   ├── test_developer_guide.py                  # DEVELOPER.md's worked examples, executed (3)
+│   ├── test_gdal_runner.py                      # gdal_runner's stdout protocol (2)
+│   ├── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
+│   └── test_histogram_generator.py              # Headless matplotlib backend (1)
+├── integration/                                 # Integration tests (51)
+│   ├── test_validation_integration.py           # End-to-end validation workflows (20)
+│   ├── test_metadata_workflow.py                # Metadata extraction workflows (13)
+│   ├── test_statistics_blocked_path.py          # Block-based statistics (9)
+│   └── test_statistics_native_dtype.py          # Native dtype statistics (9)
+├── e2e/                                         # End-to-end CLI tests (56)
+│   ├── test_read_command.py                     # `gttk read` (17)
+│   ├── test_compare_command.py                  # `gttk compare` (15)
+│   ├── test_optimize_command.py                 # `gttk optimize` (14)
+│   ├── test_test_command.py                     # `gttk test` (7)
+│   └── test_validate_command.py                 # `gttk validate`, run from outside the repo (3)
+├── benchmarks/                                  # Not collected by pytest
+│   └── benchmark_statistics.py                  # Statistics performance benchmarks
+└── validation/                                  # Not collected by pytest
+    ├── validate_block_statistics_accuracy.py    # Block-statistics accuracy script
+    └── validate_phase2_accuracy.py              # Phase 2 accuracy script
 ```
 
 ---
