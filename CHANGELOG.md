@@ -113,6 +113,10 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Rule files are read in name order.** The validation loader took `*.toml` files in
+  whatever order the filesystem listed them, so which file answered for a product, and
+  whether a broken file was reported before a match ended the search, differed from one
+  machine to the next.
 - **What a fallback could not read is said, not skipped.** The projection script run under
   OSGeo4W for ArcGIS Pro swallowed seven kinds of failure with `pass` and still exited 0
   with valid JSON; it now lists each one and the parent logs them by file. A per-band NoData

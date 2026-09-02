@@ -99,7 +99,10 @@ def load_validation_rules(
         'example_rules.toml'
     """
     # 1. Find all TOML files
-    toml_files = list(rules_dir.glob('*.toml'))
+    # In name order: a directory listing's order is the filesystem's, so without the
+    # sort which file answers first -- and whether a broken file is reported before
+    # a match ends the search -- differed from one machine to the next.
+    toml_files = sorted(rules_dir.glob('*.toml'))
     logger.debug(f"Found {len(toml_files)} TOML files in {rules_dir}")
 
     if not toml_files:
@@ -265,7 +268,10 @@ def get_available_products(rules_dir: Path) -> Dict[str, str]:
         >>> products['DGED5']
         'example_rules.toml'
     """
-    toml_files = list(rules_dir.glob('*.toml'))
+    # In name order: a directory listing's order is the filesystem's, so without the
+    # sort which file answers first -- and whether a broken file is reported before
+    # a match ends the search -- differed from one machine to the next.
+    toml_files = sorted(rules_dir.glob('*.toml'))
 
     if not toml_files:
         return {}
@@ -306,7 +312,10 @@ def get_product_metadata(rules_dir: Path, product: str) -> dict:
     Raises:
         ValueError: If product not found
     """
-    toml_files = list(rules_dir.glob('*.toml'))
+    # In name order: a directory listing's order is the filesystem's, so without the
+    # sort which file answers first -- and whether a broken file is reported before
+    # a match ends the search -- differed from one machine to the next.
+    toml_files = sorted(rules_dir.glob('*.toml'))
 
     for toml_file in toml_files:
         try:
