@@ -2,6 +2,29 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Removed
+
+- `gttk/utils/xml_helpers.py`, a leftover from a Qt GUI this repository does not contain.
+  It imported PyQt6 at module scope, which was declared in neither `pyproject.toml`,
+  `environment.yml` nor `requirements.txt` and installed nowhere, so the module could not
+  be imported at all -- it had no references, no tests, and 0% coverage. Its sibling
+  `xml_formatter.py` is unaffected and still used.
+
+### Fixed
+
+- The two lookup-table build scripts under `gttk/resources/` called
+  `logging.basicConfig()` at module scope, claiming the root logger of any process that
+  imported them -- which `--doctest-modules gttk/` now does. Moved into `main()`, where a
+  script's own logging belongs.
+
+  The existing import-side-effect guard could not have caught this: it installs a root
+  handler before importing, and `basicConfig()` is a no-op once root has one. It now also
+  checks the case that matters -- an application that has not configured logging yet, and
+  so starts with no root handler at all -- and both scripts were added to the list of
+  modules it imports.
+
 ## [0.10.0] - 2026-09-01
 
 ### Added

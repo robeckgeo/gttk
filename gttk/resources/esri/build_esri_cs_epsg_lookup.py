@@ -25,8 +25,6 @@ import urllib.error
 from pathlib import Path
 from datetime import datetime, timezone
 
-# --- Basic logging setup ---
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 URL_PREFIX = 'https://raw.githubusercontent.com/Esri/projection-engine-db-doc/master/json/'
 CACHE_DIR = Path('resources/esri/cache')
@@ -136,6 +134,12 @@ def build_lookup(force_online=False):
 
 def main():
     """Main function to run the script."""
+    # Configured here, not at import: this file lives under gttk/, so anything
+    # that walks the package (pytest --doctest-modules, for one) imports it, and
+    # basicConfig at module scope would reconfigure the host process's root
+    # logger. GTTK does not touch logging on import -- see DEVELOPER.md.
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument(
         '--out',

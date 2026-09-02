@@ -34,8 +34,6 @@ URL = "https://www.loc.gov/preservation/digital/formats/content/tiff_tags.shtml"
 OUTPUT_FILENAME = "tiff_tag_lookup.json"
 CACHE_FILENAME = "loc_tiff_tags.shtml"
 
-# --- Basic logging setup ---
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class TiffTagParser(HTMLParser):
     def __init__(self):
@@ -275,6 +273,12 @@ def build_lookup(force_online=False):
 
 def main():
     """Main function to run the script."""
+    # Configured here, not at import: this file lives under gttk/, so anything
+    # that walks the package (pytest --doctest-modules, for one) imports it, and
+    # basicConfig at module scope would reconfigure the host process's root
+    # logger. GTTK does not touch logging on import -- see DEVELOPER.md.
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument(
         '--out',

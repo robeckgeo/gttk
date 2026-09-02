@@ -54,6 +54,15 @@ from gttk.utils.validate_cloud_optimized_geotiff import validate as validate_cog
 # --- Configuration & Setup ---
 logger = logging.getLogger(__name__)
 
+# This module is named test_compression.py because it implements `gttk test`, not
+# because it holds tests. Without this, pytest's `python_files = test_*.py` and
+# `python_functions = test_*` claim the file and try to run the tool's own
+# `test_compression(args)` entry point as a test case, which fails looking for an
+# `args` fixture. An empty dict rather than False because two tools read this name:
+# pytest skips the module when it is falsy, while doctest expects a mapping of extra
+# objects to search -- an empty one leaves the ordinary docstring scan untouched.
+__test__ = {}
+
 # --- Constants ---
 # Script Behavior
 DEFAULT_TEMP_DIR = Path("./temp")

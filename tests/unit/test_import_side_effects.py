@@ -44,6 +44,10 @@ GTTK_MODULES = [
     "gttk.tools.validate_metadata",
     "gttk.utils.gdal_runner",
     "gttk.utils.validation.gpkg_writer",
+    # Not part of the library surface, but pytest --doctest-modules walks all of
+    # gttk/ and imports them, so their import must be as quiet as everything else.
+    "gttk.resources.tiff.build_tiff_tag_lookup",
+    "gttk.resources.esri.build_esri_cs_epsg_lookup",
 ]
 
 WATCHED_OPTIONS = sorted(set(GDAL_OPTIONS) | set(GDAL_OPTIONS_ARC))
@@ -112,6 +116,27 @@ class TestImportLeavesLoggingAlone:
             print(root.handlers == handlers and root.level == level)
         """)
         assert out == "True", "importing GTTK reconfigured the root logger"
+
+    def test_import_does_not_install_a_root_handler(self):
+        """
+        The complementary case to the test above, and the one that catches
+        `logging.basicConfig()`.
+
+        `basicConfig()` is a no-op once the root logger has a handler, so a test that
+        installs one first cannot see it. An application that has not configured
+        logging yet -- the common case, and the one that matters -- starts with none,
+        and a module-scope `basicConfig()` in anything GTTK imports silently claims
+        the root logger for the rest of that process.
+        """
+        out = _in_subprocess(f"""
+            import logging
+            root = logging.getLogger()
+            before = (list(root.handlers), root.level)
+            for m in {GTTK_MODULES!r}:
+                __import__(m)
+            print((list(root.handlers), root.level) == before, root.handlers)
+        """)
+        assert out.startswith("True"), f"importing GTTK configured the root logger: {out}"
 
     def test_import_does_not_quiet_matplotlib(self):
         out = _in_subprocess(f"""
