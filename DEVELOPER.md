@@ -189,7 +189,10 @@ with gdal_env():
     ...  # GDAL sees GTTK's settings here, and only here
 ```
 
-`gdal_env()` nests safely, so an entry point and a helper may both use it.
+`gdal_env()` nests safely, so an entry point and a helper may both use it. It also turns
+PROJ's network access off for the duration (`osr.SetPROJEnableNetwork`) and restores the
+host's setting afterwards; `geokey_parser` used to force `PROJ_NETWORK=OFF` into the
+environment at import, for the whole process.
 
 **Applications choose the exception mode.** `gdal.UseExceptions()` is process-global, so
 GTTK does not call it at import. The CLI (`gttk/main.py`), the ArcGIS toolbox and the
@@ -197,11 +200,18 @@ test suite each call it for themselves; a library consumer should do the same, o
 `gdal_env()` around the calls it makes.
 
 **Logging goes to the `gttk` logger, never root.** Every module uses
-`logging.getLogger(__name__)`, which places it under `gttk.*`. `setup_logger()`
+`logging.getLogger(__name__)`, which places it under `gttk.*`, and logs through that
+logger -- never through `logging.debug()` and its siblings, which are the root logger's
+functions and install a handler on it the first time they run
+(`tests/unit/test_logging_hygiene.py` scans for them). `setup_logger()`
 configures that logger and sets `propagate = False`, so GTTK owns its output once you opt
 in; an application that never calls it receives GTTK's messages through its own root
 handlers by normal propagation. Clearing root's handlers -- which `setup_logger` used to
 do -- silently disabled the logging of anything that imported GTTK.
+
+**Rendering never selects a matplotlib backend.** `histogram_generator` draws on a
+`Figure` with its own Agg canvas and does not import `pyplot`, so an application that chose
+a backend keeps it and a headless run never touches a GUI one.
 
 ## XML That GTTK Did Not Write
 

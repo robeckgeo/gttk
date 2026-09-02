@@ -47,10 +47,10 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,544
+- **Total Tests**: 1,551
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,335 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,342 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 102 (93 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 51 tests (metadata workflows, statistics validation)
   - E2E Tests: 56 tests (CLI commands)
@@ -103,7 +103,7 @@ tests/
 │   ├── custom_vertical_crs.py                   # A vertical CRS with no EPSG code
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,335)
+├── unit/                                        # Unit tests (1,342)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (95)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
@@ -121,7 +121,7 @@ tests/
 │   ├── test_validation_phase5.py                # JSONPath & extended data types (36)
 │   ├── test_validation_validator.py             # ValidationEngine (33)
 │   ├── test_statistics_type_utilities.py        # Native dtype utilities (32)
-│   ├── test_import_side_effects.py              # Importing GTTK leaves the host process alone (31)
+│   ├── test_import_side_effects.py              # Importing GTTK leaves the host process alone (35)
 │   ├── test_discard_lsb.py                      # DISCARD_LSB decimals-to-bits helper (30)
 │   ├── test_report_formatters.py                # Report formatting (30)
 │   ├── test_validation_loader.py                # TOML rule loading (28)
@@ -144,8 +144,9 @@ tests/
 │   ├── test_developer_guide.py                  # DEVELOPER.md's worked examples, executed (3)
 │   ├── test_path_helpers.py                     # Report opening never hands a path to a shell unquoted (3)
 │   ├── test_gdal_runner.py                      # gdal_runner's stdout protocol (2)
-│   ├── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
-│   └── test_histogram_generator.py              # Headless matplotlib backend (1)
+│   ├── test_histogram_generator.py              # Histograms render headless and pick no backend (2)
+│   ├── test_logging_hygiene.py                  # Nothing logs through the root logger (2)
+│   └── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
 ├── integration/                                 # Integration tests (51)
 │   ├── test_validation_integration.py           # End-to-end validation workflows (20)
 │   ├── test_metadata_workflow.py                # Metadata extraction workflows (13)

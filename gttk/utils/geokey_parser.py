@@ -31,8 +31,7 @@ from pathlib import Path
 from typing import Any, List, Optional, Tuple, Union
 from gttk.utils.data_models import GeoKey
 
-# Configure environment and logging
-os.environ['PROJ_NETWORK'] = 'OFF'  # Disable PROJ network access
+logger = logging.getLogger(__name__)
 
 # --- Lookup Tables ---
 # Lookup tables for GeoTIFF keys and their values
@@ -309,7 +308,7 @@ class GeoKeyParser:
             offset = 4 + (i * 4)
             key_data = geokey_dir[offset:offset + 4]
             if len(key_data) < 4:
-                logging.debug(f"Skipping malformed GeoKey at index {i}")
+                logger.debug(f"Skipping malformed GeoKey at index {i}")
                 continue
 
             key_id, tag_loc, count, value_offset = key_data
@@ -320,7 +319,7 @@ class GeoKeyParser:
                 if key:
                     keys.append(key)
             except Exception as e:
-                logging.debug(f"Error parsing GeoKey {i} (ID: {key_id}): {e}")
+                logger.debug(f"Error parsing GeoKey {i} (ID: {key_id}): {e}")
                 
         return version_info, keys
 
@@ -378,7 +377,7 @@ class GeoKeyParser:
                 ascii_str = ascii_val.decode('ascii', 'replace') if isinstance(ascii_val, bytes) else str(ascii_val)
                 return ascii_str[value_offset : value_offset + count].rstrip('\x00')
             except Exception as e:
-                logging.debug(f"Error decoding ASCII params: {e}")
+                logger.debug(f"Error decoding ASCII params: {e}")
         
         return None
 
@@ -464,7 +463,7 @@ class GeoKeyParser:
                 return result[0]
                 
         except Exception as e:
-            logging.debug(f"PROJ DB lookup failed for {table_name}:{code} - {e}")
+            logger.debug(f"PROJ DB lookup failed for {table_name}:{code} - {e}")
             return None
             
         return None

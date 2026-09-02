@@ -19,6 +19,8 @@ them process-global for anything that so much as imported a GTTK module:
   formatted.
 - ``GTIFF_SRS_SOURCE=WKT`` changes how every GeoTIFF in the process is *read*.
 - ``gdal.UseExceptions()`` changes how every GDAL call in the process reports failure.
+- ``PROJ_NETWORK=OFF`` in the environment keeps PROJ from fetching grids for every
+  transformation in the process.
 
 None of that is GTTK's to decide for an application that only wanted to call one
 function.  The options now apply for the duration of a GTTK operation and are restored
@@ -31,7 +33,7 @@ Functions:
 from contextlib import ExitStack, contextmanager
 from typing import Mapping, Optional
 
-from osgeo import gdal
+from osgeo import gdal, osr
 
 #: Configuration GTTK's in-process read/write paths depend on.
 GDAL_OPTIONS: dict[str, str] = {
@@ -47,6 +49,22 @@ GDAL_OPTIONS: dict[str, str] = {
 #: compound CRS survives the round-trip through gdal_translate rather than being
 #: rebuilt from the GeoTIFF keys.
 GDAL_OPTIONS_ARC: dict[str, str] = {**GDAL_OPTIONS, 'GTIFF_SRS_SOURCE': 'WKT'}
+
+
+@contextmanager
+def _proj_network_disabled():
+    """PROJ never reaches for a grid over the network during a GTTK operation.
+
+    geokey_parser used to force ``PROJ_NETWORK=OFF`` into ``os.environ`` at import,
+    process-wide and for good, which also switched the network off for an application
+    that had enabled it on purpose. Scoping it here leaves the host's setting alone.
+    """
+    before = osr.GetPROJEnableNetwork()
+    osr.SetPROJEnableNetwork(False)
+    try:
+        yield
+    finally:
+        osr.SetPROJEnableNetwork(before)
 
 
 @contextmanager
@@ -70,4 +88,5 @@ def gdal_env(options: Optional[Mapping[str, str]] = None, use_exceptions: bool =
                                                 thread_local=False))
         if use_exceptions:
             stack.enter_context(gdal.ExceptionMgr(useExceptions=True))
+        stack.enter_context(_proj_network_disabled())
         yield

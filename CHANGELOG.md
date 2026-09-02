@@ -91,6 +91,17 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Importing GTTK no longer changes the host's matplotlib backend, its root logger or
+  PROJ's network setting.** The histogram module forced the Agg backend at import (the
+  cure for a headless stall under WSLg), which replaced whatever backend an application
+  had chosen; it now draws on a figure with its own Agg canvas and never imports pyplot.
+  `gdal_runner`, `geokey_parser` and `tiff_tag_parser` logged through the root logger's
+  `logging.debug()` functions, which install a handler on it the first time they run --
+  inside ArcGIS Pro, or on any malformed tag during `gttk read`; they log through their
+  own module loggers now. `geokey_parser` wrote `PROJ_NETWORK=OFF` into the environment at
+  import; `gdal_env()` turns the network off for the duration of an operation instead and
+  restores the host's setting.
+
 - **`gttk validate` now works from any directory.** Its default `--rules-dir` was the
   repo-relative `gttk/resources/rules`, so the command worked from a checkout's root and
   nowhere else: an installed copy run from a data directory failed with "Rules directory

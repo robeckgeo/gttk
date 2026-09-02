@@ -90,6 +90,41 @@ class TestImportLeavesGdalAlone:
         """)
         assert out == "SAME", out
 
+    def test_import_does_not_change_the_environment(self):
+        """geokey_parser used to write PROJ_NETWORK=OFF into os.environ at import, which
+        switched PROJ's network off for every transformation in the host process."""
+        out = _in_subprocess(f"""
+            import os
+            before = dict(os.environ)
+            for m in {GTTK_MODULES!r}:
+                __import__(m)
+            changed = sorted(set(os.environ.items()) ^ set(before.items()))
+            print("SAME" if not changed else f"CHANGED {{changed}}")
+        """)
+        assert out == "SAME", out
+
+    def test_import_does_not_touch_proj_network(self):
+        out = _in_subprocess(f"""
+            from osgeo import osr
+            before = osr.GetPROJEnableNetwork()
+            for m in {GTTK_MODULES!r}:
+                __import__(m)
+            print("SAME" if osr.GetPROJEnableNetwork() == before else "CHANGED")
+        """)
+        assert out == "SAME", out
+
+    def test_import_does_not_select_a_matplotlib_backend(self):
+        """A host that chose the PDF backend must still have it; the histogram module
+        used to call matplotlib.use("Agg") at import."""
+        out = _in_subprocess(f"""
+            import matplotlib
+            matplotlib.use("pdf")
+            for m in {GTTK_MODULES!r}:
+                __import__(m)
+            print(matplotlib.get_backend())
+        """)
+        assert out == "pdf", out
+
     def test_import_does_not_create_directories(self):
         """gdal_runner.py creates gttk/logs/ when run as a script, so a developer who
         has run it has the directory already; measure whether the *import* creates it."""
@@ -243,6 +278,16 @@ class TestGdalEnv:
             with gdal_env({"OSR_WKT_FORMAT": "WKT1_GDAL"}):
                 assert gdal.GetConfigOption("OSR_WKT_FORMAT") == "WKT1_GDAL"
             assert gdal.GetConfigOption("OSR_WKT_FORMAT") == "WKT2_2019"
+
+    def test_disables_proj_network_for_the_operation_and_restores_it(self):
+        from osgeo import osr
+        osr.SetPROJEnableNetwork(True)
+        try:
+            with gdal_env():
+                assert not osr.GetPROJEnableNetwork()
+            assert osr.GetPROJEnableNetwork()
+        finally:
+            osr.SetPROJEnableNetwork(False)
 
     def test_restores_the_exception_mode(self):
         before = gdal.GetUseExceptions()

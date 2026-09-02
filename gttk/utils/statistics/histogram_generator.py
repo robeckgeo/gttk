@@ -19,15 +19,16 @@ environments like ArcGIS Pro.
 import base64
 import io
 import logging
-import matplotlib
-# Histograms are rendered to PNG bytes for the report; no window is ever shown.
-# Select the headless backend before pyplot is imported, because matplotlib
-# otherwise picks a GUI backend wherever a display is advertised (WSLg sets
-# DISPLAY, and QtAgg then blocks on the compositor socket in a headless run).
-matplotlib.use("Agg")
+# The figure is drawn on an Agg canvas this module holds itself; pyplot is never
+# imported. Importing pyplot selects a backend for the whole process -- a GUI one
+# wherever a display is advertised (WSLg sets DISPLAY for every shell, and QtAgg then
+# blocked on the compositor socket for the length of a headless run) -- and forcing the
+# Agg backend at import, the previous cure, replaced whatever backend the importing
+# application had chosen. A Figure with its own FigureCanvasAgg needs neither.
 from matplotlib.axes import Axes
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
 import matplotlib.colors as mcolors
-import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
 from typing import Dict, Any, Optional, cast
@@ -69,9 +70,10 @@ def generate_histogram_base64(stats_data: Dict[str, Any], file_name: str, figure
     # Initialize Color Manager
     color_manager = ColorManager(band_names)
 
-    fig = None
     try:
-        fig, ax1 = plt.subplots(figsize=figure_size)
+        fig = Figure(figsize=figure_size)
+        FigureCanvasAgg(fig)
+        ax1 = fig.add_subplot(1, 1, 1)
         ax2 = None  # Second axis for alpha (created if needed)
         
         # Separate alpha from other bands
@@ -193,8 +195,8 @@ def generate_histogram_base64(stats_data: Dict[str, Any], file_name: str, figure
         
         # Perform all layout operations first
         fig.tight_layout()
-        ax1.set_title(file_name, fontsize=10, weight='bold')  # Use axes method instead of plt.title()
-        plt.subplots_adjust(top=0.95)  # remove whitespace above chart
+        ax1.set_title(file_name, fontsize=10, weight='bold')
+        fig.subplots_adjust(top=0.95)  # remove whitespace above chart
         
         # Set x-axis limits for byte data AFTER all layout operations
         # This ensures no subsequent layout operation can re-trigger autoscaling
@@ -209,17 +211,12 @@ def generate_histogram_base64(stats_data: Dict[str, Any], file_name: str, figure
 
         buf = io.BytesIO()
         fig.savefig(buf, format='png')
-        plt.close(fig)
         buf.seek(0)
         hist_base64 = base64.b64encode(buf.read()).decode('utf-8')
         
         return hist_base64
 
     except Exception as e:
+        # The figure is registered nowhere, so there is nothing to close.
         logger.error(f"An error occurred during histogram generation: {e}", exc_info=True)
-        if fig is not None:
-            try:
-                plt.close(fig)
-            except Exception as e:
-                logger.error(f"An error occurred while closing the figure: {e}", exc_info=True)
         return None

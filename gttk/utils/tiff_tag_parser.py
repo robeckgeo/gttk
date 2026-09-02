@@ -37,6 +37,8 @@ from typing import Dict, Any, Optional, Union, List
 from gttk.utils.geokey_parser import is_geotiff
 from gttk.utils.data_models import TiffTag
 
+logger = logging.getLogger(__name__)
+
 def _load_tiff_tag_lookup() -> tuple[Dict[int, str], Dict[int, str]]:
     """
     Load TIFF tag definitions from the JSON lookup file.
@@ -73,8 +75,8 @@ def _load_tiff_tag_lookup() -> tuple[Dict[int, str], Dict[int, str]]:
         return tiff_tags, exif_tags
         
     except FileNotFoundError:
-        logging.warning(f"TIFF tag lookup file not found: {lookup_file}")
-        logging.warning("Falling back to minimal tag definitions")
+        logger.warning(f"TIFF tag lookup file not found: {lookup_file}")
+        logger.warning("Falling back to minimal tag definitions")
         # Return minimal fallback definitions
         return {
             256: 'ImageWidth',
@@ -83,7 +85,7 @@ def _load_tiff_tag_lookup() -> tuple[Dict[int, str], Dict[int, str]]:
             259: 'Compression',
         }, {}
     except Exception as e:
-        logging.error(f"Error loading TIFF tag lookup: {e}")
+        logger.error(f"Error loading TIFF tag lookup: {e}")
         return {}, {}
 
 # Load TIFF tag definitions from the Library of Congress-based lookup file
@@ -350,9 +352,9 @@ class TiffTagParser:
                         # LERC_VERSION can be a float string, so parse as float then cast to int
                         params['LERC_VERSION'] = int(float(md['LERC_VERSION']))
                     except (ValueError, TypeError):
-                        logging.warning(f"Could not parse LERC_VERSION: {md['LERC_VERSION']}")
+                        logger.warning(f"Could not parse LERC_VERSION: {md['LERC_VERSION']}")
         except Exception as e:
-            logging.warning(f"Could not decode LercParameters using GDAL: {e}")
+            logger.warning(f"Could not decode LercParameters using GDAL: {e}")
         finally:
             ds = None
         
@@ -566,7 +568,7 @@ class TiffTagParser:
                     }
                 }
             except Exception:
-                logging.warning("Could not parse InterColourProfile tag; PIL may not be installed or profile is invalid.")
+                logger.warning("Could not parse InterColourProfile tag; PIL may not be installed or profile is invalid.")
 
         # Look for other common EXIF-related tags
         for tag in tags.values():
@@ -686,7 +688,7 @@ class TiffTagParser:
                         else:
                             fundamental_value = nodata_str
                     except Exception as e:
-                        logging.warning(f"Could not parse GDAL_NODATA using GDAL: {e}")
+                        logger.warning(f"Could not parse GDAL_NODATA using GDAL: {e}")
                         fundamental_value = nodata_str
                     finally:
                         ds = None
@@ -706,7 +708,7 @@ class TiffTagParser:
                     interpretation=interpretation,
                 ))
             except Exception as e:
-                logging.warning(f"Skipping tag {tag.code} ({tag_name}) due to parsing error: {e}")
+                logger.warning(f"Skipping tag {tag.code} ({tag_name}) due to parsing error: {e}")
                 continue
 
         if not tags_info:

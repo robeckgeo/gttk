@@ -63,10 +63,10 @@ def get_config() -> Dict[str, Any]:
         with open(CONFIG_PATH, "rb") as f:  # tomllib needs binary mode
             return tomllib.load(f)
     except FileNotFoundError:
-        logging.error(f"Configuration file not found at: {CONFIG_PATH}")
+        logger.error(f"Configuration file not found at: {CONFIG_PATH}")
         raise
     except tomllib.TOMLDecodeError:
-        logging.error(f"Error decoding TOML syntax from: {CONFIG_PATH}")
+        logger.error(f"Error decoding TOML syntax from: {CONFIG_PATH}")
         raise
 
 def create_isolated_env(osgeo4w_dir: Path) -> Dict[str, str]:
@@ -79,10 +79,10 @@ def create_isolated_env(osgeo4w_dir: Path) -> Dict[str, str]:
     """
     # Start with a copy of the current environment
     env = os.environ.copy()
-    logging.debug("--- Initial Environment (before cleaning) ---")
+    logger.debug("--- Initial Environment (before cleaning) ---")
     for k, v in sorted(env.items()):
-        logging.debug(f"{k}={v}")
-    logging.debug("--------------------------------------------")
+        logger.debug(f"{k}={v}")
+    logger.debug("--------------------------------------------")
 
     # List of variables to remove to prevent contamination
     vars_to_remove = [
@@ -170,7 +170,7 @@ def run_gdal_command(command: List[str], env: Dict[str, str], capture_output: bo
                 )
             except Exception:
                 # If even this fails, continue without changing code page.
-                logging.debug('Unable to set console code page to 65001.')
+                logger.debug('Unable to set console code page to 65001.')
 
     command_str = [str(item) for item in command]
     
@@ -211,12 +211,12 @@ def run_gdal_command(command: List[str], env: Dict[str, str], capture_output: bo
         raise GdalExecutionError("Could not determine OSGeo4W bin directory from PATH.")
     
     log_command = ' '.join(shlex.quote(s) for s in command_str)
-    logging.info(f"Executing: {log_command}")
+    logger.info(f"Executing: {log_command}")
 
-    logging.debug("--- Final Environment for Subprocess ---")
+    logger.debug("--- Final Environment for Subprocess ---")
     for k, v in sorted(env.items()):
-        logging.debug(f"{k}={v}")
-    logging.debug("----------------------------------------")
+        logger.debug(f"{k}={v}")
+    logger.debug("----------------------------------------")
 
     try:
         creation_flags = subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
@@ -233,7 +233,7 @@ def run_gdal_command(command: List[str], env: Dict[str, str], capture_output: bo
         
         if capture_output:
             if result.stderr:
-                logging.info(f"[Captured STDERR]:\n{result.stderr}")
+                logger.info(f"[Captured STDERR]:\n{result.stderr}")
             return result.stdout
         else:
             if result.stdout:
@@ -244,12 +244,12 @@ def run_gdal_command(command: List[str], env: Dict[str, str], capture_output: bo
 
     except subprocess.CalledProcessError as e:
         error_message = f"Command failed with exit code {e.returncode}"
-        logging.error(error_message)
+        logger.error(error_message)
         if e.stdout:
-            logging.error(f"--- STDOUT ---\n{e.stdout}")
+            logger.error(f"--- STDOUT ---\n{e.stdout}")
             error_message += f"\nSTDOUT: {e.stdout}"
         if e.stderr:
-            logging.error(f"--- STDERR ---\n{e.stderr}")
+            logger.error(f"--- STDERR ---\n{e.stderr}")
             error_message += f"\nSTDERR: {e.stderr}"
         
         # Also print the detailed error to the runner's stderr so the parent process can capture it.
@@ -257,10 +257,10 @@ def run_gdal_command(command: List[str], env: Dict[str, str], capture_output: bo
         
         raise GdalExecutionError(error_message)
     except FileNotFoundError:
-        logging.error(f"Command not found: {command_str[0]}. Is the OSGeo4W path in config.toml correct?")
+        logger.error(f"Command not found: {command_str[0]}. Is the OSGeo4W path in config.toml correct?")
         raise
     except Exception as e:
-        logging.error(f"An unexpected error occurred: {e}")
+        logger.error(f"An unexpected error occurred: {e}")
         raise
 
 _PROJECTION_INFO_SCRIPT = '''
