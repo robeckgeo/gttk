@@ -146,6 +146,12 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Opening a report from WSL without `wslpath` reaches the right place.** The fallback
+  spelled every path through the distribution's network share, and always Ubuntu's, so a
+  report on a Windows drive (`/mnt/c/...`) took the long way round to `C:\` and any other
+  distribution got a share that does not exist. A path under `/mnt/<drive>/` now maps to the
+  drive letter, and the share uses the name WSL puts in `WSL_DISTRO_NAME`. `open_file`,
+  which had no test on any platform, now has one per launcher and per WSL choice.
 - **An alpha band's statistics are the same whichever path computes them.** For a raster
   small enough for the in-memory path -- nearly every RGBA image a report is run on -- the
   alpha band was masked with itself, so a binary alpha reported a minimum of 255, a mean of

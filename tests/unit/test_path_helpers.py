@@ -20,6 +20,7 @@ ends the string, and the path is derived from the input raster's name. No test r
 
 import base64
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -125,3 +126,105 @@ class TestBatchCollection:
             found = ph.get_geotiff_files(str(tmp_path))
         assert [Path(f).name for f in found] == ['ok.tif']
         assert 'bad.tif' in caplog.text and 'skipped' in caplog.text
+
+
+class TestOpenFileByPlatform:
+    """Which launcher each platform gets. None of them runs here."""
+
+    @staticmethod
+    def _native(monkeypatch, platform):
+        calls = []
+        monkeypatch.setattr(ph.sys, 'platform', platform)
+        monkeypatch.setattr(ph, '_is_wsl', lambda: False)
+
+        def run(argv, **kwargs):
+            assert kwargs.get('check') is True
+            calls.append(argv)
+            return subprocess.CompletedProcess(argv, 0)
+        monkeypatch.setattr(subprocess, 'run', run)
+        return calls
+
+    def test_windows_hands_the_path_to_startfile(self, monkeypatch):
+        opened = []
+        monkeypatch.setattr(ph.sys, 'platform', 'win32')
+        monkeypatch.setattr(ph.os, 'startfile', opened.append, raising=False)
+        ph.open_file(Path('C:/reports/r.html'))
+        assert opened == [str(Path('C:/reports/r.html'))]
+
+    def test_macos_uses_open(self, monkeypatch):
+        calls = self._native(monkeypatch, 'darwin')
+        ph.open_file('/tmp/r.html')
+        assert calls == [['open', '/tmp/r.html']]
+
+    def test_linux_uses_xdg_open(self, monkeypatch):
+        calls = self._native(monkeypatch, 'linux')
+        ph.open_file('/tmp/r.html')
+        assert calls == [['xdg-open', '/tmp/r.html']]
+
+
+class TestOpenFileOnWslByType:
+
+    @pytest.fixture
+    def started(self, monkeypatch):
+        """WSL, with a record of every process open_file would start."""
+        record = {'run': [], 'popen': []}
+        monkeypatch.setattr(ph.sys, 'platform', 'linux')
+        monkeypatch.setattr(ph, '_is_wsl', lambda: True)
+        monkeypatch.setattr(ph, '_convert_wsl_path_to_windows', lambda p: 'C:\\r.html')
+        monkeypatch.setattr(subprocess, 'Popen', lambda argv, **kw: record['popen'].append(argv))
+        return record
+
+    @staticmethod
+    def _vs_code(monkeypatch, record, installed):
+        def run(argv, **kwargs):
+            record['run'].append(argv)
+            return subprocess.CompletedProcess(argv, 0 if installed else 1)
+        monkeypatch.setattr(subprocess, 'run', run)
+
+    def test_markdown_opens_in_vs_code_when_it_is_installed(self, monkeypatch, started):
+        self._vs_code(monkeypatch, started, installed=True)
+        ph.open_file('/home/u/report.md')
+        assert started['run'] == [['which', 'code'], ['code', '/home/u/report.md']]
+        assert started['popen'] == []
+
+    def test_markdown_falls_back_to_windows_without_vs_code(self, monkeypatch, started):
+        self._vs_code(monkeypatch, started, installed=False)
+        ph.open_file('/home/u/report.md')
+        assert started['run'] == [['which', 'code']]
+        assert len(started['popen']) == 1 and started['popen'][0][0] == 'powershell.exe'
+
+    def test_html_goes_straight_to_windows(self, monkeypatch, started):
+        self._vs_code(monkeypatch, started, installed=True)
+        ph.open_file('/home/u/report.html')
+        assert started['run'] == []
+        assert len(started['popen']) == 1
+
+
+class TestWslPathConversion:
+
+    @pytest.fixture
+    def no_wslpath(self, monkeypatch):
+        def run(argv, **kwargs):
+            raise FileNotFoundError('wslpath')
+        monkeypatch.setattr(subprocess, 'run', run)
+
+    def test_asks_wslpath_first(self, monkeypatch):
+        def run(argv, **kwargs):
+            assert argv == ['wslpath', '-w', '/home/u/r.html']
+            return subprocess.CompletedProcess(argv, 0, stdout='\\\\wsl.localhost\\Ubuntu\\home\\u\\r.html\n')
+        monkeypatch.setattr(subprocess, 'run', run)
+        assert ph._convert_wsl_path_to_windows('/home/u/r.html') == '\\\\wsl.localhost\\Ubuntu\\home\\u\\r.html'
+
+    def test_a_mounted_drive_becomes_its_drive_letter(self, no_wslpath):
+        """The fallback used to spell /mnt/c/... through the distribution's share, the long
+        way round to C:, and always through Ubuntu's."""
+        assert ph._convert_wsl_path_to_windows('/mnt/c/Users/eric/r.html') == 'C:\\Users\\eric\\r.html'
+        assert ph._convert_wsl_path_to_windows('/mnt/d') == 'D:\\'
+
+    def test_a_distro_path_uses_the_distro_name(self, no_wslpath, monkeypatch):
+        monkeypatch.setenv('WSL_DISTRO_NAME', 'Debian')
+        assert ph._convert_wsl_path_to_windows('/home/u/r.html') == '\\\\wsl.localhost\\Debian\\home\\u\\r.html'
+
+    def test_ubuntu_when_the_distro_is_unknown(self, no_wslpath, monkeypatch):
+        monkeypatch.delenv('WSL_DISTRO_NAME', raising=False)
+        assert ph._convert_wsl_path_to_windows('/home/u/r.html') == '\\\\wsl.localhost\\Ubuntu\\home\\u\\r.html'
