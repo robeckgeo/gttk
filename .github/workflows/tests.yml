@@ -1,0 +1,64 @@
+# The test suite, run where nobody has to remember to run it.
+#
+# Every push and pull request gets the fast suite (`-m "not slow"`), and a push to
+# main gets the whole thing, slow end-to-end tests included. The conda environment is
+# built from environment.yml -- the same file a developer uses -- so what CI tests is
+# what a checkout runs. Coverage is asked for explicitly here: it is opt-in for local
+# runs (see pytest.ini), and coverage.xml is kept as an artifact so a coverage number
+# can always be traced to the run that produced it.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        # A login shell, so the conda activation that setup-miniconda writes to the
+        # profile is in effect for every step.
+        shell: bash -el {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the gttk conda environment
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          environment-file: environment.yml
+          activate-environment: gttk
+          auto-activate-base: false
+
+      - name: Install GTTK in development mode
+        run: pip install -e .
+
+      - name: Record what is being tested
+        run: |
+          python --version
+          python -c "from osgeo import gdal; print('GDAL', gdal.__version__)"
+          conda list --export > conda-packages.txt
+
+      - name: Fast suite
+        if: github.ref != 'refs/heads/main'
+        run: pytest -m "not slow" --cov=gttk --cov-report=xml --cov-report=term
+
+      - name: Full suite
+        if: github.ref == 'refs/heads/main'
+        run: pytest --cov=gttk --cov-report=xml --cov-report=term
+
+      - name: Keep the coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ github.run_id }}
+          path: |
+            coverage.xml
+            conda-packages.txt
+          if-no-files-found: ignore

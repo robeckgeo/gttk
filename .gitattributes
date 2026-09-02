@@ -1,0 +1,5 @@
+# Text files are LF in the repository and on every checkout. GTTK ships an ArcGIS
+# Pro toolbox, so Windows clones are expected, and without this rule a clone made
+# with core.autocrlf=true rewrites every .py, .md, .toml and .pyt.xml and reports
+# them all as modified. Binary files are detected by git and left alone.
+* text=auto eol=lf

@@ -95,11 +95,13 @@ Located in `gttk/utils/validation/`:
 ## Configuration Files
 - `config.toml` - Runtime configuration (OSGeo4W path, logging, statistics tuning)
 - `pyproject.toml` - Package metadata, dependencies, entry point
-- `pytest.ini` - Test configuration with markers (`slow`, `unit`, `integration`, `e2e`, `models`)
+- `pytest.ini` - Test configuration with markers (`slow`, `unit`, `integration`, `e2e`, `renderer`, `models`); no coverage flags, those live in `pyproject.toml` `[tool.coverage]`
+- `.github/workflows/tests.yml` - CI: the fast suite (`-m "not slow"`) on every push and pull request, the full suite on `main`, `coverage.xml` kept as a run artifact
+- `.gitattributes` - LF line endings on every checkout, Windows clones included
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1448 tests total (1243 unit, 51 integration, 56 E2E, 98 doctests -- 89 in `gttk/`
+1451 tests total (1246 unit, 51 integration, 56 E2E, 98 doctests -- 89 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 328 validation tests
 - `tests/integration/` - Component interaction tests

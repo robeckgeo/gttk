@@ -50,3 +50,25 @@ class TestCoverageIsOptIn:
         assert run['source'] == ['gttk']
         assert run['branch'] is True
 
+
+class TestContinuousIntegration:
+    """The workflow is the only thing that runs the suite without a person; these pin
+    the policy CLAUDE.md states, since YAML cannot be executed here."""
+
+    WORKFLOW = ROOT / '.github' / 'workflows' / 'tests.yml'
+
+    def test_workflow_builds_the_conda_environment_from_environment_yml(self):
+        text = self.WORKFLOW.read_text(encoding='utf-8')
+        assert 'conda-incubator/setup-miniconda' in text
+        assert 'environment-file: environment.yml' in text
+
+    def test_fast_suite_on_every_push_and_the_full_suite_on_main(self):
+        text = self.WORKFLOW.read_text(encoding='utf-8')
+        assert 'pytest -m "not slow"' in text
+        assert "github.ref == 'refs/heads/main'" in text
+
+    def test_line_endings_are_pinned_for_windows_clones(self):
+        """GTTK ships an ArcGIS Pro toolbox, so the first Windows clone is not
+        hypothetical; without this rule core.autocrlf rewrites every text file."""
+        rules = (ROOT / '.gitattributes').read_text(encoding='utf-8').splitlines()
+        assert '* text=auto eol=lf' in rules

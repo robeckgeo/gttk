@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **The test suite runs in GitHub Actions.** There was no CI at all, so every guard in the
+  repository -- the executed doctests, the import-side-effect checks, the README tables
+  pinned to the resolver -- held only while someone remembered to run `pytest`.
+  `.github/workflows/tests.yml` builds the conda environment from `environment.yml`, runs
+  `pytest -m "not slow"` for every push and pull request and the full suite for a push to
+  `main`, and keeps `coverage.xml` as a run artifact so a coverage number can be traced to
+  the run that produced it.
+- **`.gitattributes` pins LF line endings.** GTTK ships an ArcGIS Pro toolbox, so Windows
+  clones are expected; without the rule, a clone made with `core.autocrlf=true` rewrites
+  every text file on checkout and shows the whole tree as modified.
+
 ### Changed
 
 - **Coverage is opt-in.** The `--cov` flags sat in `pytest.ini`'s `addopts`, so every
