@@ -38,7 +38,7 @@ NOT_PIP = {
 }
 
 #: Import name -> distribution name, where they differ.
-IMPORT_TO_DIST = {'PIL': 'pillow', 'jsonpath_ng': 'jsonpath-ng'}
+IMPORT_TO_DIST = {'jsonpath_ng': 'jsonpath-ng'}
 
 
 def _normalise(name: str) -> str:
@@ -95,7 +95,7 @@ class TestEveryImportIsDeclared:
 
     def test_the_two_that_were_missing(self):
         declared, _ = pyproject()
-        assert {'psutil', 'pillow'} <= declared
+        assert 'psutil' in declared
 
     def test_the_test_tools_are_a_dev_extra(self):
         _, extras = pyproject()

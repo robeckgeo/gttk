@@ -101,7 +101,7 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1726 tests total (1472 unit, 80 integration, 58 E2E, 10 benchmark smoke, 106 doctests -- 97 in `gttk/`
+1730 tests total (1476 unit, 80 integration, 58 E2E, 10 benchmark smoke, 106 doctests -- 97 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 328 validation tests
 - `tests/integration/` - Component interaction tests
@@ -184,6 +184,11 @@ Statistics accuracy:
 - `test_statistics_accuracy.py` - `OnlineStatistics` against NumPy, fed block by block
 - `test_statistics_phase2_accuracy.py` - the blocked path against NumPy and against the fast path on four rasters
 
+Packaging coverage:
+- `test_dependency_manifests.py` - `pyproject.toml`, `requirements.txt` and `environment.yml` agree with what `gttk/` imports
+- `test_installed_wheel.py` - the wheel built from what git ships works from a scratch virtual environment
+- `test_shipped_resources.py` - every icon a report can ask for ships, and nothing ships that nothing asks for
+
 Documentation coverage:
 - `test_developer_guide.py` - runs DEVELOPER.md's two worked examples straight out of the markdown
 - `test_readme_option_tables.py` - every subcommand's option table in README.md against `build_parser()`: option, short flag, type, required, and the default as `--help` states it
@@ -198,7 +203,6 @@ Documentation coverage:
 - **mistune** - Markdown to HTML conversion
 - **jsonpath-ng** - JSONPath expressions for PROJJSON validation
 - **psutil** - Memory monitoring for statistics calculator
-- **Pillow** - ICC profile decoding for the InterColourProfile tag
 
 ## Data Flow
 GeoTIFF file -> Metadata Extractor -> Data Models -> Report Builders -> Section Renderers -> Report Formatters -> Output (HTML/Markdown)

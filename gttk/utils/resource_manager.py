@@ -19,12 +19,13 @@ can reliably access these resources.
 Classes:
     ResourceManager: A singleton for accessing packaged static files.
 """
+import logging
 import re
+import tomllib
 from pathlib import Path
 from typing import Dict, Optional
 
-
-import tomllib
+logger = logging.getLogger(__name__)
 
 
 class ResourceManager:
@@ -99,7 +100,7 @@ class ResourceManager:
             self._theme_cache[theme] = theme_data
             return theme_data
         except Exception as e:
-            print(f"Warning: Could not load theme {theme}: {e}")
+            logger.warning(f"Could not load theme {theme}: {e}")
             return self._default_theme_colors()
     
     def _default_theme_colors(self) -> Dict:
@@ -136,24 +137,6 @@ class ResourceManager:
             }
         }
     
-    def get_icon_path(self, icon_name: str, icon_type: str = "menu") -> Path:
-        """Get path to icon file
-        
-        Args:
-            icon_name: Icon name (without extension)
-            icon_type: Icon type ('menu' or 'favicon')
-            
-        Returns:
-            Path to SVG icon file
-        """
-        icon_path = self.resources_dir / "icons" / "svg" / icon_type / f"{icon_name}.svg"
-        if not icon_path.exists():
-            # Try alternate locations
-            icon_path = self.resources_dir / "icons" / "working" / f"{icon_name}.png"
-            if not icon_path.exists():
-                raise FileNotFoundError(f"Icon not found: {icon_name}")
-        return icon_path
-    
     def _read_file_safe(self, relative_path: str) -> str:
         """Read a file from resources directory, return empty string if not found
         
@@ -171,24 +154,8 @@ class ResourceManager:
             with open(file_path, "r", encoding="utf-8") as f:
                 return f.read()
         except Exception as e:
-            print(f"Warning: Could not read {file_path}: {e}")
+            logger.warning(f"Could not read {file_path}: {e}")
             return ""
-    
-    def _read_file(self, relative_path: str) -> str:
-        """Read a file from resources directory
-        
-        Args:
-            relative_path: Path relative to resources directory
-            
-        Returns:
-            File content
-            
-        Raises:
-            FileNotFoundError: If file does not exist
-        """
-        file_path = self.resources_dir / relative_path
-        with open(file_path, "r", encoding="utf-8") as f:
-            return f.read()
     
     def _apply_theme_colors(self, css: str, theme_colors: Dict) -> str:
         """Apply theme colors to CSS template
@@ -251,7 +218,7 @@ class ResourceManager:
                         text_color = rule["color"]
                     match_found = True
             except re.error:
-                print(f"Warning: Invalid regex pattern in banner rules: {rule.get('pattern')}")
+                logger.warning(f"Invalid regex pattern in banner rules: {rule.get('pattern')}")
         
         if match_found:
             # Replace colors in CSS using markers
@@ -289,7 +256,7 @@ class ResourceManager:
                 self._banner_rules = rules
                 return rules
         except Exception as e:
-            print(f"Warning: Could not load banner rules: {e}")
+            logger.warning(f"Could not load banner rules: {e}")
             self._banner_rules = []
             return []
 

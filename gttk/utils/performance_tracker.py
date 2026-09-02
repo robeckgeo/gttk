@@ -38,32 +38,3 @@ class PerformanceTracker:
             duration = time.perf_counter() - self._start_times[step_name]
             self.timings[step_name] = duration
             del self._start_times[step_name]
-
-    def get_timings(self) -> Dict[str, float]:
-        """Returns all recorded timings."""
-        return self.timings
-
-    def print_summary(self):
-        """Prints a summary of the recorded timings."""
-        print("\n--- Performance Summary ---")
-        for step, duration in self.timings.items():
-            print(f"- {step}: {duration:.4f} seconds")
-        print("-------------------------\n")
-
-    def get_total_time(self) -> float:
-        """Returns the total time for all recorded steps."""
-        return sum(self.timings.values())
-
-    def format_time(self, seconds: float) -> str:
-        """Formats seconds into a human-readable string."""
-        if seconds < 60:
-            return f"{seconds:.2f}s"
-        elif seconds < 3600:
-            minutes = int(seconds // 60)
-            remaining_seconds = seconds % 60
-            return f"{minutes}m {remaining_seconds:.1f}s"
-        else:
-            hours = int(seconds // 3600)
-            minutes = int((seconds % 3600) // 60)
-            remaining_seconds = seconds % 60
-            return f"{hours}h {minutes}m {remaining_seconds:.0f}s"

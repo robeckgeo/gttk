@@ -152,6 +152,15 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
+- **Code and files nothing reached.** `TiffTagParser.get_exif_tags()` -- the only user of
+  Pillow, which is no longer a dependency -- along with two `render_statistics` methods
+  the section registry never dispatched to, two exception classes nothing raised, four
+  `PerformanceTracker` methods, `ColorManager.get_index_color_map()`, and the resource
+  manager's `get_icon_path()` and `_read_file()`. Twenty icon files shipped in the wheel
+  for nothing: ten GUI glyphs for an application this repository does not contain, eight
+  PNG favicon tiles, an `.ico` and an unreferenced menu icon.
+  `tests/unit/test_shipped_resources.py` now holds the icon directories to exactly what
+  the reports can ask for.
 - **Eleven `config.toml` keys nothing read.** `[api]`, `[logging]`, four `[gui]` keys
   (`default_layout`, `default_theme`, `window_size`, `enable_dark_mode`) and
   `statistics.alpha_artifact_tolerance` had no reader anywhere in the code; the README
@@ -174,6 +183,14 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **The PAM section has its icon back.** The section registry asked for `aux`; the file
+  that draws it is `pam.svg`, so every metadata report logged a missing icon and showed
+  none. The validation-summary section's icon, which was also missing, ships too.
+- **Library code no longer prints.** The resource manager reported a theme, banner-rule
+  or resource file it could not read with `print()`, into whatever the host application
+  was writing; those messages go to the `gttk` logger, and
+  `tests/unit/test_logging_hygiene.py` fails on any `print()` outside a module's own
+  `__main__` block.
 - **A library caller gets the command line's defaults.** `TestArguments.delete_test_files`
   defaulted to `False` where `gttk test` defaults to `True`, and `ReadArguments` left
   `reader_type`, `xml_type` and `tag_scope` unset for the tool to fill in -- with `text`
@@ -280,10 +297,10 @@ All notable changes to this project will be documented in this file.
 - **`pip install geotiff-toolkit` brings everything the code imports.** `psutil` was in
   `environment.yml` and `requirements.txt` but not in `pyproject.toml`, so a pip install ran
   without it and the statistics calculator silently used a fixed fast-path threshold
-  instead of sizing it from the available RAM; Pillow, which decodes the InterColourProfile
-  tag, was declared nowhere and present only because matplotlib happens to need it. Both
-  are dependencies now, and `tests/unit/test_dependency_manifests.py` keeps the three
-  manifests and the code's imports in agreement. The wheel's package-data rule now says
+  instead of sizing it from the available RAM. It is a dependency now, and
+  `tests/unit/test_dependency_manifests.py` keeps the three manifests and the code's
+  imports in agreement. (Pillow, briefly declared for an ICC-profile reader, went with
+  that reader once it turned out nothing called it; see Removed.) The wheel's package-data rule now says
   what ships (`resources/**/*`, minus the build caches and bytecode); the old list of
   extensions covered none of the JavaScript, CSV, XLSX or theme files that reports and
   `gttk test` read, and `MANIFEST.in` no longer prunes five directories that do not exist.

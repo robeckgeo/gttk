@@ -47,10 +47,10 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,726
+- **Total Tests**: 1,730
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,472 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,476 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 106 (97 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 80 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
@@ -105,7 +105,7 @@ tests/
 │   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,472)
+├── unit/                                        # Unit tests (1,476)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (99)
 │   ├── test_readme_option_tables.py             # README option tables pinned to the parser (14)
@@ -157,7 +157,8 @@ tests/
 │   ├── test_developer_guide.py                  # DEVELOPER.md's worked examples, executed (3)
 │   ├── test_gdal_runner.py                      # gdal_runner's stdout protocol and its timeout (4)
 │   ├── test_histogram_generator.py              # Histograms render headless and pick no backend (2)
-│   ├── test_logging_hygiene.py                  # Nothing logs through the root logger (2)
+│   ├── test_logging_hygiene.py                  # Nothing logs through the root logger, nothing prints (3)
+│   ├── test_shipped_resources.py                # Every icon asked for ships; nothing ships unasked (3)
 │   ├── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
 │   ├── test_compare_compression.py              # compare releases both datasets on every path (1)
 │   └── test_statistics_nodata_warnings.py       # An unreadable per-band NoData is reported (1)

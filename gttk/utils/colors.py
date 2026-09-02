@@ -87,7 +87,3 @@ class ColorManager:
     def get_color_map(self) -> Dict[str, str]:
         """Get a map of band_name -> color."""
         return {name: self.get_color(i, name) for i, name in enumerate(self.band_names)}
-
-    def get_index_color_map(self) -> Dict[int, str]:
-        """Get a map of band_index -> color."""
-        return {i: self.get_color(i, name) for i, name in enumerate(self.band_names)}
