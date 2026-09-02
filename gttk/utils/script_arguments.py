@@ -24,6 +24,7 @@ Classes:
     TestArguments: Arguments for the test_compression tool.
 """
 import logging
+import os
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Optional, List, Union
@@ -191,18 +192,45 @@ class OptimizeArguments(BaseArguments):
         if self.input_path and isinstance(self.input_path, Path):
             if not self.input_path.exists():
                 raise ValueError(f"Input file not found: {self.input_path}")
+            self._refuse_in_place()
             # Lightweight check for single-band restriction on DEM, ERROR, and THEMATIC types
-            if self.product_type in [PT.DEM.value, PT.ERROR.value, PT.THEMATIC.value]:
-                try:
-                    ds = gdal.Open(str(self.input_path), gdal.GA_ReadOnly)
-                    if ds:
-                        if ds.RasterCount > 1:
-                            raise ValueError(f"Multi-band rasters ({ds.RasterCount} bands) are not supported for '{self.product_type}' product type. Use 'image' or 'scientific' instead.")
-                        ds = None
-                except Exception as e:
-                    if "Multi-band rasters" in str(e):
-                        raise
-                    pass
+            if self.product_type in [PT.DEM.value, PT.ERROR.value, PT.THEMATIC.value] and self.input_path.is_file():
+                self._refuse_multiband()
+
+    def _refuse_in_place(self) -> None:
+        """GTTK never optimizes a file onto itself.
+
+        Nothing used to stop `-o` from naming the input, or the input directory; the run
+        exited 0 and the data survived only because the pipeline stages through /vsimem/.
+        """
+        if not self.output_path:
+            return
+        source, target = Path(self.input_path).resolve(), Path(self.output_path).resolve()
+        same = source == target or (target.exists() and os.path.samefile(source, target))
+        if same:
+            what = "directory" if source.is_dir() else "file"
+            raise ValueError(f"GTTK does not optimize in place: --output is the input {what} {self.input_path}")
+
+    def _refuse_multiband(self) -> None:
+        """DEM, error and thematic products are single-band; say so before any work starts.
+
+        The check used to catch its own ValueError and re-raise it only when the message
+        contained "Multi-band rasters", swallow any other failure of gdal.Open without a
+        word, and skip releasing the dataset on the path that raised.
+        """
+        ds = None
+        try:
+            ds = gdal.Open(str(self.input_path), gdal.GA_ReadOnly)
+            if ds is None:
+                logger.warning(f"Could not open {self.input_path} to check its band count")
+            elif ds.RasterCount > 1:
+                raise ValueError(f"Multi-band rasters ({ds.RasterCount} bands) are not supported for '{self.product_type}' product type. Use 'image' or 'scientific' instead.")
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.warning(f"Could not check the band count of {self.input_path}: {e}")
+        finally:
+            ds = None
 
     def _resolve_defaults(self) -> None:
         """Set context-aware default values."""
@@ -388,7 +416,9 @@ class ValidateArguments(BaseArguments):
 
         elif self.input_path.is_dir():
             # Directory/batch mode
-            geotiffs = list(self.input_path.glob('*.tif')) + list(self.input_path.glob('*.tiff'))
+            # By lower-cased suffix: glob('*.tif') is case-sensitive on Linux and not on Windows.
+            geotiffs = [p for p in self.input_path.iterdir()
+                        if p.is_file() and p.suffix.lower() in ('.tif', '.tiff')]
 
             if not geotiffs:
                 raise ValueError(f"No GeoTIFF files found in directory: {self.input_path}")

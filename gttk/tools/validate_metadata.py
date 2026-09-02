@@ -96,8 +96,7 @@ def _validate_metadata_inner(args: ValidateArguments) -> None:
     if args.input_path.is_file():
         logger.info(f"Single file validation: {args.input_path.name}")
     else:
-        total_in_dir = len(list(args.input_path.glob('*.tif')) +
-                          list(args.input_path.glob('*.tiff')))
+        total_in_dir = len(get_input_files(args.input_path))
         if args.name_filter:
             logger.info(
                 f"Batch validation with name filter '{args.name_filter}': "

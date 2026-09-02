@@ -149,3 +149,32 @@ class TestGetInputFiles:
 
     def test_missing_directory_yields_nothing(self, tmp_path):
         assert get_input_files(tmp_path / 'absent') == []
+
+
+class TestExtensionsAreMatchedCaseInsensitively:
+    """Path.glob('*.tif') is case-sensitive on Linux and not on Windows, so a directory
+    of .TIF files validated completely on one platform and found nothing on the other."""
+
+    def test_upper_case_extensions_are_found(self, tmp_path):
+        for name in ('a.tif', 'B.TIF', 'c.tiff', 'D.TIFF', 'notes.txt'):
+            (tmp_path / name).write_bytes(b'')
+        assert [f.name for f in get_input_files(tmp_path)] == ['B.TIF', 'D.TIFF', 'a.tif', 'c.tiff']
+
+
+class TestGeoPackageReplacement:
+
+    def test_an_output_that_cannot_be_replaced_is_reported_not_raised(self, tmp_path, caplog, monkeypatch):
+        """Under ArcGIS Pro the previous GeoPackage may be open in a map and Windows
+        refuses the unlink; here a directory in the way stands in for that."""
+        import logging
+        from types import SimpleNamespace
+        import gttk.utils.validation.gpkg_writer as gw
+        square = [[[0.0, 0.0], [0.0, 1.0], [1.0, 1.0], [1.0, 0.0], [0.0, 0.0]]]
+        monkeypatch.setattr(gw.GeoPackageFeature, 'from_json_result',
+                            staticmethod(lambda result: SimpleNamespace(name='tile', layer_name='PASSED',
+                                                                        wgs84_coordinates=square)))
+        blocked = tmp_path / 'validation_map.gpkg'
+        blocked.mkdir()
+        with caplog.at_level(logging.ERROR):
+            assert gw.write_validation_gpkg(blocked, [{'file': 'tile.tif'}], 'DGED5') is None
+        assert 'Cannot replace the existing GeoPackage' in caplog.text

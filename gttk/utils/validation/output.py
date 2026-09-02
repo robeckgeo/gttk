@@ -158,10 +158,13 @@ def get_input_files(input_path: Path, name_filter: str = '') -> list:
     if input_path.is_file():
         return [input_path]
 
-    # Collect all GeoTIFF files
-    tif_files = sorted(input_path.glob('*.tif'))
-    tiff_files = sorted(input_path.glob('*.tiff'))
-    geotiffs = tif_files + tiff_files
+    # Collect all GeoTIFF files. By suffix, lower-cased: Path.glob('*.tif') is
+    # case-sensitive on Linux and not on Windows, so a directory of .TIF files validated
+    # completely on one and "found nothing" on the other.
+    if not input_path.is_dir():
+        return []
+    geotiffs = sorted(p for p in input_path.iterdir()
+                      if p.is_file() and p.suffix.lower() in ('.tif', '.tiff'))
 
     # Apply name filter if provided
     if name_filter:

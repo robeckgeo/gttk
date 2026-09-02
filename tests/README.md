@@ -47,13 +47,13 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,594
+- **Total Tests**: 1,607
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,376 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,387 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 105 (96 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 57 tests (metadata workflows, statistics validation)
-  - E2E Tests: 56 tests (CLI commands)
+  - E2E Tests: 58 tests (CLI commands)
 
 Counts here and in the tree below are from `pytest --collect-only`; doctests
 live in the source modules and are not listed per file.
@@ -103,7 +103,7 @@ tests/
 │   ├── custom_vertical_crs.py                   # A vertical CRS with no EPSG code
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,376)
+├── unit/                                        # Unit tests (1,387)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (95)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
@@ -132,13 +132,14 @@ tests/
 │   ├── test_validation_report.py                # Validation report generation (19)
 │   ├── test_statistics_block_infrastructure.py  # Block processing (17)
 │   ├── test_statistics_strategy_selection.py    # Fast vs blocked strategy selection (16)
-│   ├── test_validation_output.py                # Output folder & report path construction (14)
+│   ├── test_validation_output.py                # Output folder & report path construction (16)
 │   ├── test_statistics_phase2.py                # Phase 2 statistics optimizations (13)
 │   ├── test_compression_efficiency.py           # An error is not 0.0 (12)
 │   ├── test_config_loader.py                    # Where config.toml comes from, quietly (11)
 │   ├── test_section_renderers.py                # Section rendering (11)
 │   ├── test_log_helpers.py                      # Logging helpers & startup env checks (9)
 │   ├── test_i18n_catalog.py                     # Spanish catalog pinned to the toolbox (8)
+│   ├── test_script_arguments.py                 # optimize's guards: no in-place writes, band check (8)
 │   ├── test_custom_vertical_crs_compound.py     # Custom vertical CRS into a compound CRS (7)
 │   ├── test_dependency_manifests.py             # The three manifests agree with the imports (6)
 │   ├── test_optimize_arc_wiring.py              # ArcGIS optimize path wiring (6)
@@ -147,7 +148,7 @@ tests/
 │   ├── test_scratch_locations.py                # Scratch files never land in the working directory (4)
 │   ├── test_developer_guide.py                  # DEVELOPER.md's worked examples, executed (3)
 │   ├── test_path_helpers.py                     # Report opening never hands a path to a shell unquoted (3)
-│   ├── test_gdal_runner.py                      # gdal_runner's stdout protocol (2)
+│   ├── test_gdal_runner.py                      # gdal_runner's stdout protocol and its timeout (3)
 │   ├── test_histogram_generator.py              # Histograms render headless and pick no backend (2)
 │   ├── test_logging_hygiene.py                  # Nothing logs through the root logger (2)
 │   └── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
@@ -157,12 +158,12 @@ tests/
 │   ├── test_metadata_workflow.py                # Metadata extraction workflows (13)
 │   ├── test_statistics_blocked_path.py          # Block-based statistics (9)
 │   └── test_statistics_native_dtype.py          # Native dtype statistics (9)
-├── e2e/                                         # End-to-end CLI tests (56)
+├── e2e/                                         # End-to-end CLI tests (58)
 │   ├── test_read_command.py                     # `gttk read` (17)
 │   ├── test_compare_command.py                  # `gttk compare` (15)
 │   ├── test_optimize_command.py                 # `gttk optimize` (14)
-│   ├── test_test_command.py                     # `gttk test` (7)
-│   └── test_validate_command.py                 # `gttk validate`, run from outside the repo (3)
+│   ├── test_test_command.py                     # `gttk test` (8)
+│   └── test_validate_command.py                 # `gttk validate`, run from outside the repo (4)
 ├── benchmarks/                                  # Not collected by pytest
 │   └── benchmark_statistics.py                  # Statistics performance benchmarks
 └── validation/                                  # Not collected by pytest

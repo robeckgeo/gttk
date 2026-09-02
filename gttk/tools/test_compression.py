@@ -26,6 +26,7 @@ import gc
 import logging
 import os
 import sys
+import tempfile
 import time
 import traceback
 import warnings
@@ -1338,8 +1339,12 @@ def _test_compression_inner(args: TestArguments):
 
     if not args.temp_dir:
         args.temp_dir = default_temp_dir(source_path, args.output_path)
-    temp_directory = Path(args.temp_dir).resolve()
-    temp_directory.mkdir(parents=True, exist_ok=True)
+    scratch_root = Path(args.temp_dir).resolve()
+    scratch_root.mkdir(parents=True, exist_ok=True)
+    # Each run gets its own directory under the scratch root. Candidate names are
+    # deterministic (input stem plus the settings), so two runs sharing a directory used
+    # to delete and overwrite each other's files mid-benchmark.
+    temp_directory = Path(tempfile.mkdtemp(prefix='run_', dir=scratch_root))
 
     # --- Logging Setup ---
     log_file_path = args.log_file or temp_directory / "test_compression_debug.log"
@@ -1398,9 +1403,9 @@ def _test_compression_inner(args: TestArguments):
         geotiff_files = [Path(p) for p in geotiff_files_str]
         # A scratch directory inside the input tree (a directory input puts the workbook,
         # and so the scratch, in it) must not feed its own candidates back in on a rerun.
-        inside_scratch = [p for p in geotiff_files if p.resolve().is_relative_to(temp_directory)]
+        inside_scratch = [p for p in geotiff_files if p.resolve().is_relative_to(scratch_root)]
         if inside_scratch:
-            logger.info(f"Skipping {len(inside_scratch)} file(s) under the scratch directory {temp_directory}")
+            logger.info(f"Skipping {len(inside_scratch)} file(s) under the scratch directory {scratch_root}")
             geotiff_files = [p for p in geotiff_files if p not in inside_scratch]
 
         for file_path in geotiff_files:

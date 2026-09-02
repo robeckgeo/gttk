@@ -598,18 +598,7 @@ def _optimize_compression_inner(args: OptimizeArguments, tracker: Optional[Perfo
         logger.error("A valid input path is required.")
         return 1
 
-    # The input_path can be a single Path or a list of Paths (directory case)
-    if isinstance(args.input_path, list):  # directory case
-        for file_path in args.input_path:
-            current_args = OptimizeArguments(**vars(args))
-            current_args.input_path = file_path
-            current_args.output_path = file_path
-            try:
-                _process_single_file(current_args, tracker)
-            except Exception as e:
-                logger.error(f"Error processing {file_path.name}: {e}")
-                continue
-    elif isinstance(args.input_path, Path):
+    if isinstance(args.input_path, Path):
         if args.input_path.is_dir():
             output_dir = Path(args.output_path) if args.output_path else args.input_path
             if not output_dir.exists():

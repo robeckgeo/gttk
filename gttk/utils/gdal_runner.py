@@ -478,7 +478,15 @@ def get_projection_info_from_osgeo4w(filepath: str) -> Tuple[Optional[Dict[str, 
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
             )
             
-            stdout, stderr = process.communicate(input=payload, timeout=30)
+            try:
+                stdout, stderr = process.communicate(input=payload, timeout=30)
+            except subprocess.TimeoutExpired:
+                # communicate() leaves the child running on timeout; reap it, or an
+                # OSGeo4W interpreter outlives the request that started it.
+                process.kill()
+                process.communicate()
+                logger.warning(f"gdal_runner did not answer within 30 s for {filepath}; killed")
+                return (None, None, None)
             
             logger.info(f"gdal_runner return code: {process.returncode}")
             

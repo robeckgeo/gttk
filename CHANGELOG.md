@@ -107,6 +107,27 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **`gttk optimize` refuses to write onto its input.** Nothing stopped `-o` from naming the
+  input file or the input directory; the run exited 0 and the data survived only because
+  the pipeline stages through `/vsimem/`. Both are now refused before any work starts, and
+  the unreachable branch that set the output to the input for a list of files is gone.
+- **The single-band check for DEM, error and thematic products fails loudly.** It caught its
+  own error and re-raised it only when the message contained the words "Multi-band
+  rasters", so any other failure of `gdal.Open` -- an unreadable input included -- passed
+  validation without a word; it also skipped releasing the dataset on the path that
+  raised. It now re-raises by type, logs an input it cannot open, and releases the handle.
+- **`gttk validate` finds `.TIF` files on Linux.** Three directory scans used
+  `glob('*.tif')`, which is case-sensitive on Linux and not on Windows, so a directory of
+  upper-case extensions validated completely on one platform and reported "no GeoTIFF
+  files" on the other. All three match by lower-cased suffix.
+- **Two `gttk test` runs sharing a scratch directory no longer delete each other's
+  candidates.** Candidate names are deterministic, so concurrent runs on one input used
+  to unlink and overwrite each other's files mid-benchmark; each run now works in its own
+  `run_*` directory under the scratch root.
+- A GeoPackage that cannot be replaced (Windows refuses the unlink while ArcGIS Pro has it
+  open) is reported by name instead of raising, and a projection-info request to OSGeo4W
+  that does not answer within 30 s now kills the interpreter it started instead of leaving
+  it running.
 - **A compression efficiency that could not be computed is reported as unknown, not as
   0.0.** `calculate_compression_efficiency` returned 0.0 for any exception, at debug level,
   and 0.0 is also the honest answer for an uncompressed file; nothing downstream could tell

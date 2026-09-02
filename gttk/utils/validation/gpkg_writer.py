@@ -144,9 +144,14 @@ def write_validation_gpkg(
         logger.error("GPKG driver not available")
         return None
 
-    # Remove existing file if present
+    # Replace an existing file. Under ArcGIS Pro the previous run's GeoPackage may still
+    # be open in a map, and Windows then refuses the unlink; say which file, not a traceback.
     if output_path.exists():
-        output_path.unlink()
+        try:
+            output_path.unlink()
+        except OSError as e:
+            logger.error(f"Cannot replace the existing GeoPackage {output_path}: {e}")
+            return None
 
     data_source = driver.CreateDataSource(str(output_path))
     if data_source is None:

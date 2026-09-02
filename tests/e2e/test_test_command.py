@@ -211,3 +211,25 @@ class TestTestCommandEdgeCases:
         # Assert
         assert result.returncode == 0
         assert output_file.exists()
+
+@pytest.mark.slow
+class TestConcurrentRuns:
+
+    def test_two_runs_on_one_input_do_not_disturb_each_other(self, tmp_path):
+        """Candidate names are deterministic, so two runs sharing a scratch directory used
+        to delete and overwrite each other's files; each run now works in its own
+        subdirectory of the scratch root."""
+        input_file = tmp_path / 'shared.tif'
+        MockGeoTIFF(width=64, height=64, data_type=gdal.GDT_Float32, crs='EPSG:32610').save_to_file(input_file)
+        runs = []
+        for label in ('one', 'two'):
+            runs.append(subprocess.Popen([
+                sys.executable, '-m', 'gttk', 'test', '-i', str(input_file),
+                '-o', str(tmp_path / f'{label}.xlsx'), '-t', 'dem',
+                '--delete-test-files', 'true', '--open-report', 'false',
+            ], cwd=tmp_path, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True))
+        outputs = [run.communicate(timeout=900)[0] for run in runs]
+        assert [run.returncode for run in runs] == [0, 0], outputs
+        assert (tmp_path / 'one.xlsx').exists() and (tmp_path / 'two.xlsx').exists()
+        run_dirs = sorted(p.name for p in (tmp_path / 'shared_gttk_test').iterdir() if p.is_dir())
+        assert len(run_dirs) == 2 and all(name.startswith('run_') for name in run_dirs)

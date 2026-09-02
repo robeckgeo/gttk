@@ -74,3 +74,37 @@ def test_a_large_captured_output_reaches_the_parent_as_one_json_line(monkeypatch
 def test_a_small_captured_output_still_arrives(monkeypatch, tmp_path):
     out = _run_runner(monkeypatch, tmp_path, '{"description": "x.tif"}')
     assert _parse_as_the_parent_does(out) == [{"command_index": 0, "stdout": '{"description": "x.tif"}'}]
+
+
+class TestProjectionExtractionTimeout:
+    """communicate(timeout=30) raises TimeoutExpired but leaves the child running; the
+    caller used to swallow it under `except Exception` and return, with an OSGeo4W
+    interpreter still alive behind it."""
+
+    def test_a_hung_runner_is_killed(self, tmp_path, monkeypatch):
+        import subprocess
+        from gttk.utils.config_loader import config
+        osgeo4w = tmp_path / 'OSGeo4W'
+        (osgeo4w / 'bin').mkdir(parents=True)
+        (osgeo4w / 'bin' / 'python.exe').touch()
+        monkeypatch.setattr(config, 'get', lambda key, default=None: str(osgeo4w) if key == 'paths.osgeo4w' else default)
+
+        events = []
+
+        class Hung:
+            returncode = None
+
+            def communicate(self, input=None, timeout=None):
+                if timeout is not None and not events:
+                    events.append('timeout')
+                    raise subprocess.TimeoutExpired(cmd='python', timeout=timeout)
+                events.append('reaped')
+                return ('', '')
+
+            def kill(self):
+                events.append('killed')
+
+        monkeypatch.setattr(subprocess, 'Popen', lambda *a, **k: Hung())
+        result = gdal_runner.get_projection_info_from_osgeo4w(str(tmp_path / 'x.tif'))
+        assert result == (None, None, None)
+        assert events == ['timeout', 'killed', 'reaped']

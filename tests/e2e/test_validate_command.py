@@ -88,3 +88,15 @@ class TestValidateCommand:
 
         assert code != 0
         assert 'No TOML rule files found' in output
+
+
+    def test_a_directory_of_upper_case_extensions_is_validated(self, tmp_path):
+        """glob('*.tif') found nothing here for A.TIF while Windows found everything."""
+        tiles = tmp_path / 'tiles'
+        tiles.mkdir()
+        MockGeoTIFF(width=16, height=16, crs='EPSG:32610').save_to_file(tiles / 'A.TIF')
+        code, output = run_validate(tmp_path, '-i', 'tiles', '-p', 'DGED5', '-w', 'false')
+        assert code == 0, output
+        results = list(tmp_path.rglob('*_validation_results.json'))
+        assert results, output
+        assert any('A.TIF' in r.read_text(encoding='utf-8') for r in results)
