@@ -169,7 +169,6 @@ A compression report is also generated each time `gttk optimize` is run, compari
 | -------- | ----- | ---- | -------- | ------- | ----------- |
 | `--input` | `-i` | Path | Yes | - | The baseline (or original) GeoTIFF for comparison |
 | `--output` | `-o` | Path | Yes | - | The comparison (or processed) GeoTIFF |
-| `--config` | `-c` | str | No | `config.toml` | Path to a custom configuration file |
 | `--report-format` | `-f` | str | No | `html` | Output format for the report file (`html` or `md`) |
 | `--open-report` | - | bool | No | `True` | Open the report automatically after generation |
 | `--verbose` | `-v` | flag | No | `False` | Enable verbose logging |
@@ -640,7 +639,19 @@ file = "gttk.log"
 - **CLI Users**: Generally no configuration needed; all settings can be passed as command-line arguments
 - **Batch Processing**: Customize defaults in `config.toml` to streamline repetitive tasks
 
-**Location**: `config.toml` in the project root directory
+**Location**: GTTK reads the first of these that applies:
+
+1. The file named by the `GTTK_CONFIG` environment variable (it must exist).
+2. `config.toml` at the root of a source checkout, when GTTK runs from one -- the file the ArcGIS Pro toolbox reads.
+3. The packaged default, `gttk/resources/config.toml`, for an installed copy.
+
+### Environment Variables
+
+| Variable | Effect |
+|---|---|
+| `GTTK_CONFIG` | Path of the `config.toml` to use, ahead of a checkout's own and the packaged default |
+| `GTTK_LANG` | Language of the ArcGIS Pro toolbox, `en` or `es`, ahead of `config.toml` |
+| `PROJ_DATA` (or the older `PROJ_LIB`) | Directory holding PROJ's `proj.db`. A conda-forge environment sets it on activation; `gttk` warns at startup when neither is set, because EPSG lookups fail without it |
 
 ---
 

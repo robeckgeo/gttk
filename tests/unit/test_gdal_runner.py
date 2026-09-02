@@ -36,16 +36,15 @@ def _run_runner(monkeypatch, tmp_path, captured: str) -> str:
     raw = io.BytesIO()
     stdout = io.TextIOWrapper(io.BufferedWriter(raw), encoding='utf-8')
     monkeypatch.setattr(sys, 'stdout', stdout)
-    payload = {"commands": [{"command": ["gdalinfo", "-json", "x.tif"], "capture_output": True}]}
-    monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps(payload)))
     osgeo4w = tmp_path / "OSGeo4W"
     osgeo4w.mkdir()
-    monkeypatch.setattr(gdal_runner, 'get_config', lambda: {'paths': {'osgeo4w': str(osgeo4w)}})
+    payload = {"osgeo4w_root": str(osgeo4w),
+               "commands": [{"command": ["gdalinfo", "-json", "x.tif"], "capture_output": True}]}
+    monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps(payload)))
     monkeypatch.setattr(gdal_runner, 'create_isolated_env', lambda osgeo4w_dir: {})
     monkeypatch.setattr(gdal_runner, 'run_gdal_command',
                         lambda command, env, capture_output=False: captured)
-    monkeypatch.setattr(gdal_runner, 'SCRIPT_DIR', tmp_path / 'utils')  # its log goes under tmp
-    monkeypatch.setattr(gdal_runner, 'logger', gdal_runner._configure_script_logging())
+    monkeypatch.setattr(gdal_runner, 'logger', gdal_runner._configure_script_logging(tmp_path / 'logs'))
     gdal_runner.main()
     stdout.flush()
     return raw.getvalue().decode('utf-8')

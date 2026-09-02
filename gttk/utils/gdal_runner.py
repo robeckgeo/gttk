@@ -26,22 +26,21 @@ import subprocess
 import logging
 import shlex
 import tempfile
-import tomllib
 from pathlib import Path
 from typing import List, Dict, Optional, Any, Tuple
 
-# --- Configuration ---
-# Add the project's root directory to the Python path to allow imports of the 'gttk' package
-# THIS MUST HAPPEN BEFORE ANY gttk IMPORTS
 SCRIPT_DIR = Path(__file__).resolve().parent
-sys.path.insert(0, str(SCRIPT_DIR.parent.parent))  # Go up to project root where gttk package is
+
+if __name__ == "__main__":
+    # Run by path from OSGeo4W's interpreter, this file sits in gttk/utils/ and the gttk
+    # package is not importable until its parent directory is on the path. As an import
+    # it already is -- and prepending the checkout root to every importer's sys.path put
+    # the repository's tests/, toolbox/ and plans/ ahead of the host's own modules.
+    sys.path.insert(0, str(SCRIPT_DIR.parent.parent))
 
 from gttk.utils.exceptions import GdalExecutionError
 from gttk.utils.log_helpers import setup_logger, shutdown_logger
 from gttk.utils.gdal_scripts import build_script, python_command
-
-# Load config to find the OSGeo4W path
-CONFIG_PATH = SCRIPT_DIR.parent.parent / 'config.toml'  # Project root
 
 # --- Logger ---
 # This module doubles as a standalone script run in the OSGeo4W environment. Configuring
@@ -51,23 +50,25 @@ CONFIG_PATH = SCRIPT_DIR.parent.parent / 'config.toml'  # Project root
 logger = logging.getLogger(__name__)
 
 
-def _configure_script_logging() -> logging.Logger:
-    """Configure logging for the standalone-script entry points."""
-    log_dir = SCRIPT_DIR.parent / 'logs'
-    log_dir.mkdir(exist_ok=True)
-    return setup_logger(log_file=str(log_dir / 'gdal_runner_debug.log'))
+def _configure_script_logging(log_dir: Optional[Path] = None) -> logging.Logger:
+    """Configure logging for the standalone-script entry point.
 
-def get_config() -> Dict[str, Any]:
-    """Loads the main configuration file (TOML format)."""
-    try:
-        with open(CONFIG_PATH, "rb") as f:  # tomllib needs binary mode
-            return tomllib.load(f)
-    except FileNotFoundError:
-        logger.error(f"Configuration file not found at: {CONFIG_PATH}")
-        raise
-    except tomllib.TOMLDecodeError:
-        logger.error(f"Error decoding TOML syntax from: {CONFIG_PATH}")
-        raise
+    The log lives under the temporary directory. It used to go to gttk/logs/ beside the
+    package, which for an installed copy is inside site-packages -- not necessarily
+    writable, and never where anyone would look.
+    """
+    log_dir = Path(log_dir) if log_dir else Path(tempfile.gettempdir()) / 'gttk'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / 'gdal_runner_debug.log'
+    script_logger = setup_logger(log_file=str(log_path))
+    script_logger.info(f"gdal_runner log: {log_path}")
+    return script_logger
+
+
+def _osgeo4w_root_from_config() -> Optional[str]:
+    """The OSGeo4W root from config.toml, for a payload that did not carry one."""
+    from gttk.utils.config_loader import config
+    return config.get('paths.osgeo4w')
 
 def create_isolated_env(osgeo4w_dir: Path) -> Dict[str, str]:
     """
@@ -450,7 +451,7 @@ def get_projection_info_from_osgeo4w(filepath: str) -> Tuple[Optional[Dict[str, 
             # Build command to run the Python script via gdal_runner
             extract_command = python_command(temp_script_path, filepath, capture_output=True)
 
-            payload = json.dumps({"commands": [extract_command]})
+            payload = json.dumps({"osgeo4w_root": str(osgeo4w_dir), "commands": [extract_command]})
             
             # Create isolated environment
             logger.info("Creating isolated OSGeo4W environment...")
@@ -532,10 +533,18 @@ def get_projection_info_from_osgeo4w(filepath: str) -> Tuple[Optional[Dict[str, 
 def main():
     """Main entry point for the gdal_runner script."""
     try:
-        config = get_config()
-        osgeo4w_path_str = config.get('paths', {}).get('osgeo4w')
+        # Read commands from stdin
+        payload_json = sys.stdin.read()
+        if not payload_json:
+            raise ValueError("No JSON payload received from stdin.")
+
+        payload = json.loads(payload_json)
+
+        # The parent launched this interpreter from the OSGeo4W root, so it knows the
+        # root and says so in the payload; config.toml is the fallback for an older caller.
+        osgeo4w_path_str = payload.get("osgeo4w_root") or _osgeo4w_root_from_config()
         if not osgeo4w_path_str:
-            raise ValueError("'osgeo4w' not found or is empty in config.toml under [paths] section.")
+            raise ValueError("No OSGeo4W root in the payload, and 'osgeo4w' is not set under [paths] in config.toml.")
 
         osgeo4w_dir = Path(osgeo4w_path_str)
         if not osgeo4w_dir.is_dir():
@@ -544,12 +553,6 @@ def main():
         # Create the isolated environment
         isolated_env = create_isolated_env(osgeo4w_dir)
 
-        # Read commands from stdin
-        payload_json = sys.stdin.read()
-        if not payload_json:
-            raise ValueError("No JSON payload received from stdin.")
-
-        payload = json.loads(payload_json)
         commands = payload.get("commands", [])
 
         if not isinstance(commands, list):

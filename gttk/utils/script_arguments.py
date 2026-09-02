@@ -57,7 +57,6 @@ class BaseArguments:
 @dataclass
 class CompareArguments(BaseArguments):
     """Arguments for the compare_compression tool."""
-    config: str = 'config.toml'
     quality: Optional[int] = oc.DEFAULT_QUALITY
     decimals: Optional[int] = None
     report_format: str = 'html'

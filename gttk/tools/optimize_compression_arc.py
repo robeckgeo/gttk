@@ -31,7 +31,6 @@ import traceback
 import json
 from contextlib import contextmanager
 import subprocess
-import tomllib
 import uuid
 from importlib import metadata
 from osgeo import gdal, osr
@@ -42,6 +41,7 @@ from gttk.utils.exceptions import ProcessingStepFailedError
 from gttk.utils.optimize_constants import (CompressionAlgorithm as CA, ProductType as PT,
                                            default_raster_type_for, resolve_predictor)
 from gttk.utils.cli_help import render_resolved_settings
+from gttk.utils.config_loader import config
 from gttk.utils.gdal_env import gdal_env, GDAL_OPTIONS_ARC
 from gttk.utils.gdal_runner import create_isolated_env
 from gttk.utils.gdal_scripts import python_command, write_script
@@ -59,10 +59,6 @@ try:
     __version__ = metadata.version("geotiff-toolkit")
 except metadata.PackageNotFoundError:
     __version__ = "0.0.0-dev"
-
-# --- Configuration ---
-with open(Path(__file__).resolve().parent.parent.parent / 'config.toml', 'rb') as f:
-    config = tomllib.load(f)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 GDAL_RUNNER_SCRIPT = SCRIPT_DIR.parent / 'utils' / 'gdal_runner.py'
@@ -145,9 +141,9 @@ def run_gdal_commands(commands: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     Executes a list of GDAL commands in an isolated OSGeo4W environment
     by calling the gdal_runner.py script as a subprocess.
     """
-    osgeo4w_path_str = config['paths']['osgeo4w']
+    osgeo4w_path_str = config.get('paths.osgeo4w')
     if not osgeo4w_path_str:
-        raise ValueError("'osgeo4w' not found in config.toml.")
+        raise ValueError(f"'osgeo4w' is not set under [paths] in {config.path}.")
     
     osgeo4w_dir = Path(osgeo4w_path_str)
     python_executable = osgeo4w_dir / "bin" / "python.exe"
@@ -156,7 +152,7 @@ def run_gdal_commands(commands: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         raise FileNotFoundError(f"OSGeo4W Python executable not found at: {python_executable}")
     
     command = [str(python_executable), str(GDAL_RUNNER_SCRIPT)]
-    payload = json.dumps({"commands": commands})
+    payload = json.dumps({"osgeo4w_root": str(osgeo4w_dir), "commands": commands})
     
     logger.info(f"Executing {len(commands)} GDAL command(s) in isolated environment via {python_executable}...")
     

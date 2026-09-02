@@ -83,6 +83,8 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
+- `gttk compare --config`. Declared with a cwd-relative default, stored on the arguments
+  and read by nothing.
 - `gttk/utils/xml_helpers.py`, a leftover from a Qt GUI this repository does not contain.
   It imported PyQt6 at module scope, which was declared in neither `pyproject.toml`,
   `environment.yml` nor `requirements.txt` and installed nowhere, so the module could not
@@ -91,6 +93,16 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **An installed copy finds its configuration.** `config.toml` lives outside the package,
+  and three modules looked for it three directories above their own file -- the checkout
+  root in a checkout, `site-packages` in a wheel, where nothing is. `gttk test` and
+  `gttk optimize-arc` crashed at dispatch with `FileNotFoundError`, and every other command
+  began its stdout with `Warning: config.toml not found`. The loader now reads `GTTK_CONFIG`
+  if it is set, then a checkout's own `config.toml`, then a packaged default that ships in
+  the wheel; it reads nothing until a value is asked for and never prints. The OSGeo4W-side
+  runner takes the OSGeo4W root from the payload its parent sends instead of reading any
+  file, writes its debug log under the temporary directory rather than inside the package,
+  and no longer prepends the checkout root to the importing process's `sys.path`.
 - **Importing GTTK no longer changes the host's matplotlib backend, its root logger or
   PROJ's network setting.** The histogram module forced the Agg backend at import (the
   cure for a headless stall under WSLg), which replaced whatever backend an application

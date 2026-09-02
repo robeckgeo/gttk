@@ -1,0 +1,31 @@
+# GeoTIFF ToolKit -- packaged default configuration.
+#
+# This is the configuration an installed copy of GTTK runs with. It is found last:
+# GTTK reads the file named by the GTTK_CONFIG environment variable if that is set,
+# then config.toml at the root of a source checkout when the package is imported from
+# one, and this file otherwise. Only settings that the code reads are listed here.
+
+[paths]
+# OSGeo4W installation root, used by the ArcGIS Pro path to run a standalone GDAL.
+osgeo4w = "C:/OSGeo4W"
+
+[gui]
+# Language of the ArcGIS Pro toolbox: "auto" follows ArcGIS Pro's display language,
+# then Windows'; "en" or "es" forces one. The GTTK_LANG environment variable overrides.
+language = "auto"
+
+[statistics]
+# Maximum pixels per band for the fast (in-memory) path; 0 = auto-detect from RAM.
+max_pixels_fast_path = 0
+# Block size [height, width] for the blocked path.
+block_size = [4096, 4096]
+# Force a strategy: "auto", "fast" or "blocked".
+force_strategy = "auto"
+# Read alpha and transparency-mask blocks once and reuse them.
+cache_alpha_blocks = true
+cache_transparency_masks = true
+# Fraction of pixels that must be 0 or max for an alpha band to count as binary.
+alpha_binary_threshold = 0.999
+alpha_near_binary_threshold = 0.99
+# Treat near-binary alpha as a mask rather than computing full statistics for it.
+treat_near_binary_as_mask = true

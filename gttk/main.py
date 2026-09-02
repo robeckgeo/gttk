@@ -107,7 +107,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     compare_parser.add_argument('-i', '--input', '--baseline', required=True, type=Path, metavar='PATH', dest='input_path', help='The baseline (or original) GeoTIFF for comparison.')
     compare_parser.add_argument('-o', '--output', '--comparison', required=True, type=Path, metavar='PATH', dest='output_path', help='The comparison (or processed) GeoTIFF.')
-    compare_parser.add_argument('-c', '--config', default='config.toml', help='Path to a custom configuration file.')
     # '--report_format' is the historic spelling; every other subcommand and the README
     # use the hyphen, so that is the primary name and the underscore stays as an alias.
     compare_parser.add_argument('-f', '--report-format', '--report_format', type=str.lower, default='html', choices=['html', 'md'], dest='report_format', help='Output format for the report file.')

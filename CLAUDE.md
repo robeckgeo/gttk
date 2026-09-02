@@ -93,7 +93,7 @@ Located in `gttk/utils/validation/`:
 - `gttk/i18n.py` - Toolbox language: detection (`GTTK_LANG` → `config.toml` `[gui] language` → Pro's `ARCGISPRO_UILANGID` registry value → Windows display language), `_()` over TOML catalogs in `gttk/resources/i18n/<lang>.toml` (keyed by the English string), `Picklist` for translated dialog choices that stay codes internally, and `sync_sidecars()` which copies `toolbox/i18n/<lang>/*.pyt.xml` beside the toolbox on load (copies are gitignored). Spanish user docs: `README.es.md`, `toolbox/README.es.md`
 
 ## Configuration Files
-- `config.toml` - Runtime configuration (OSGeo4W path, logging, statistics tuning)
+- `config.toml` - Runtime configuration (OSGeo4W path, toolbox language, statistics tuning). Found by `gttk/utils/config_loader.py`: `GTTK_CONFIG`, then the checkout root, then the packaged default `gttk/resources/config.toml`
 - `pyproject.toml` - Package metadata, dependencies, entry point
 - `pytest.ini` - Test configuration with markers (`slow`, `unit`, `integration`, `e2e`, `renderer`, `models`); no coverage flags, those live in `pyproject.toml` `[tool.coverage]`
 - `.github/workflows/tests.yml` - CI: the fast suite (`-m "not slow"`) on every push and pull request, the full suite on `main`, `coverage.xml` kept as a run artifact
@@ -101,7 +101,7 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1551 tests total (1342 unit, 51 integration, 56 E2E, 102 doctests -- 93 in `gttk/`
+1563 tests total (1354 unit, 51 integration, 56 E2E, 102 doctests -- 93 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 328 validation tests
 - `tests/integration/` - Component interaction tests

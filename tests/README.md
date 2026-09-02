@@ -47,10 +47,10 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,551
+- **Total Tests**: 1,563
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,342 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,354 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 102 (93 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 51 tests (metadata workflows, statistics validation)
   - E2E Tests: 56 tests (CLI commands)
@@ -103,7 +103,7 @@ tests/
 │   ├── custom_vertical_crs.py                   # A vertical CRS with no EPSG code
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,342)
+├── unit/                                        # Unit tests (1,354)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (95)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
@@ -121,7 +121,7 @@ tests/
 │   ├── test_validation_phase5.py                # JSONPath & extended data types (36)
 │   ├── test_validation_validator.py             # ValidationEngine (33)
 │   ├── test_statistics_type_utilities.py        # Native dtype utilities (32)
-│   ├── test_import_side_effects.py              # Importing GTTK leaves the host process alone (35)
+│   ├── test_import_side_effects.py              # Importing GTTK leaves the host process alone (36)
 │   ├── test_discard_lsb.py                      # DISCARD_LSB decimals-to-bits helper (30)
 │   ├── test_report_formatters.py                # Report formatting (30)
 │   ├── test_validation_loader.py                # TOML rule loading (28)
@@ -134,6 +134,7 @@ tests/
 │   ├── test_statistics_strategy_selection.py    # Fast vs blocked strategy selection (16)
 │   ├── test_validation_output.py                # Output folder & report path construction (14)
 │   ├── test_statistics_phase2.py                # Phase 2 statistics optimizations (13)
+│   ├── test_config_loader.py                    # Where config.toml comes from, quietly (11)
 │   ├── test_section_renderers.py                # Section rendering (11)
 │   ├── test_log_helpers.py                      # Logging helpers & startup env checks (9)
 │   ├── test_i18n_catalog.py                     # Spanish catalog pinned to the toolbox (8)

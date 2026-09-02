@@ -90,6 +90,19 @@ class TestImportLeavesGdalAlone:
         """)
         assert out == "SAME", out
 
+    def test_import_does_not_change_sys_path(self):
+        """gdal_runner prepended the checkout root to sys.path at import, so the
+        repository's tests/, toolbox/ and plans/ shadowed the host's own modules."""
+        out = _in_subprocess(f"""
+            import sys
+            before = list(sys.path)
+            for m in {GTTK_MODULES!r}:
+                __import__(m)
+            added = [p for p in sys.path if p not in before]
+            print("SAME" if not added else f"ADDED {{added}}")
+        """)
+        assert out == "SAME", out
+
     def test_import_does_not_change_the_environment(self):
         """geokey_parser used to write PROJ_NETWORK=OFF into os.environ at import, which
         switched PROJ's network off for every transformation in the host process."""

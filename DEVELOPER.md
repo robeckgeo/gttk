@@ -155,7 +155,7 @@ When running within ArcGIS Pro, the toolkit uses an isolation strategy to ensure
 2. **Solution**: The `optimize-arc` tool acts as a bridge.
     * It runs within the ArcGIS Pro Python environment to handle the GUI and argument parsing.
     * It then constructs a payload of GDAL commands.
-    * It executes a standalone `gdal_runner.py` script in a separate, fully-featured OSGeo4W environment (configured in `config.toml`).
+    * It executes a standalone `gdal_runner.py` script in a separate, fully-featured OSGeo4W environment (configured in `config.toml`). The payload names the OSGeo4W root, so the runner reads no configuration of its own.
     * This ensures that the heavy lifting (compression, COG creation) is done by a modern, standard GDAL stack, while the user interface remains integrated with ArcGIS Pro.
 3. **Dependencies**: To use the isolated environment capability, **OSGeo4W** must be installed on the system. It is commonly installed alongside QGIS but can also be installed independently.
     * **Download Installer:** [OSGeo4W Network Installer](https://trac.osgeo.org/osgeo4w/)
