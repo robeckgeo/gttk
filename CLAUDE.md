@@ -33,7 +33,7 @@ pytest tests/unit/test_data_models.py::TestTiffTag::test_instantiation
 # Run tests matching pattern
 pytest -k "statistics"
 
-# Coverage report
+# Coverage report (opt-in: a plain `pytest` writes no coverage files)
 pytest --cov=gttk --cov-report=html
 ```
 
@@ -99,7 +99,7 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1445 tests total (1240 unit, 51 integration, 56 E2E, 98 doctests -- 89 in `gttk/`
+1448 tests total (1243 unit, 51 integration, 56 E2E, 98 doctests -- 89 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 328 validation tests
 - `tests/integration/` - Component interaction tests

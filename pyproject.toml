@@ -89,3 +89,12 @@ gttk = [
     "resources/**/*.html"
 ]
 
+
+[tool.coverage.run]
+# What `pytest --cov` measures. pytest.ini deliberately carries no coverage flags, so a
+# plain `pytest` never rewrites the report; this is the one file coverage.py reads.
+source = ["gttk"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true

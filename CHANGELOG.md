@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Coverage is opt-in.** The `--cov` flags sat in `pytest.ini`'s `addopts`, so every
+  invocation -- one test file, `pytest --collect-only`, a subprocess run of a single module --
+  rewrote `.coverage`, `coverage.xml` and `htmlcov/`, and the table on disk described whatever
+  had run last rather than the suite. That is how a wrong claim about an `omit` pattern hiding
+  a 1,400-line module survived two reports. `pytest --cov=gttk --cov-report=html` produces the
+  same report on request, with the settings in `pyproject.toml` `[tool.coverage]` where
+  coverage.py reads them, and `tests/unit/test_pytest_config.py` keeps the flags out of
+  `addopts`.
+
 - **Every `Example:` block in a docstring now runs as part of the test suite.** They were
   all written in doctest form, but `--doctest-modules` had never been passed, so none of
   them had ever been executed -- which is how v0.10.0 came to ship seven docstrings

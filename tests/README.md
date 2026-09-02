@@ -47,10 +47,10 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,445
+- **Total Tests**: 1,448
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,240 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,243 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 98 (89 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 51 tests (metadata workflows, statistics validation)
   - E2E Tests: 56 tests (CLI commands)
@@ -103,7 +103,7 @@ tests/
 │   ├── custom_vertical_crs.py                   # A vertical CRS with no EPSG code
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,240)
+├── unit/                                        # Unit tests (1,243)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (95)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
@@ -139,6 +139,7 @@ tests/
 │   ├── test_optimize_arc_wiring.py              # ArcGIS optimize path wiring (6)
 │   ├── test_toolbox_load.py                     # Loading the .pyt the way ArcGIS Pro does (6)
 │   ├── test_developer_guide.py                  # DEVELOPER.md's worked examples, executed (3)
+│   ├── test_pytest_config.py                    # Coverage opt-in pinned to the config (3)
 │   ├── test_gdal_runner.py                      # gdal_runner's stdout protocol (2)
 │   ├── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
 │   └── test_histogram_generator.py              # Headless matplotlib backend (1)
