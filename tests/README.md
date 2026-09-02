@@ -47,10 +47,10 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,677
+- **Total Tests**: 1,678
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,423 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,424 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 106 (97 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 80 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
@@ -105,7 +105,7 @@ tests/
 │   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,423)
+├── unit/                                        # Unit tests (1,424)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (99)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
@@ -140,7 +140,7 @@ tests/
 │   ├── test_path_helpers.py                     # Report opening, output tree, sidecar search order (11)
 │   ├── test_config_loader.py                    # Where config.toml comes from, quietly (11)
 │   ├── test_section_renderers.py                # Section rendering (11)
-│   ├── test_log_helpers.py                      # Logging helpers & startup env checks (9)
+│   ├── test_log_helpers.py                      # Logging helpers, startup env checks, no arcpy initialiser (10)
 │   ├── test_i18n_catalog.py                     # Spanish catalog pinned to the toolbox (8)
 │   ├── test_script_arguments.py                 # optimize's guards: no in-place writes, band check (8)
 │   ├── test_custom_vertical_crs_compound.py     # Custom vertical CRS into a compound CRS (7)

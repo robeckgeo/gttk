@@ -130,6 +130,12 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
+- **`init_arcpy()` and `gttk/utils/arcgis_proj_config.py`.** The first imported a top-level
+  `utils` package that has never existed, and the `ImportError` it swallowed ended it before
+  the one line it was for, `arcpy.env.overwriteOutput = True`, could run -- so the three
+  tools that called it under ArcGIS Pro got nothing from it, and nothing else read that
+  setting; GTTK writes through GDAL. The second configured `PROJ_LIB` for ArcGIS's GDAL and
+  had no caller: the toolbox carries its own copy of the logic, and that copy is what runs.
 - `gttk compare --config`. Declared with a cwd-relative default, stored on the arguments
   and read by nothing.
 - `gttk/utils/xml_helpers.py`, a leftover from a Qt GUI this repository does not contain.

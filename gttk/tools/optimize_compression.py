@@ -37,7 +37,6 @@ from gttk.tools.compare_compression import generate_report_for_datasets
 from gttk.utils.exceptions import ProcessingStepFailedError
 from gttk.utils.gdal_env import gdal_env
 from gttk.utils.geotiff_processor import read_geotiff
-from gttk.utils.log_helpers import init_arcpy
 from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
 import gttk.utils.optimize_constants as oc
 from gttk.utils.cli_help import render_resolved_settings
@@ -591,8 +590,6 @@ def optimize_compression(args: OptimizeArguments, tracker: Optional[PerformanceT
 def _optimize_compression_inner(args: OptimizeArguments, tracker: Optional[PerformanceTracker] = None):
     global arcMode
     arcMode = args.arc_mode or False
-    if arcMode:
-        init_arcpy()
 
     if not args.input_path:
         logger.error("A valid input path is required.")

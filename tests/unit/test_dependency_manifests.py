@@ -35,9 +35,6 @@ NOT_PIP = {
     'arcpy': 'provided by ArcGIS Pro',
     'gttk': 'ourselves',
     'tests': 'the suite',
-    # log_helpers.init_arcpy() imports a top-level `utils` that has never existed; the
-    # ImportError it raises is swallowed on the spot. Removed in Phase 4 of the hardening pass.
-    'utils': 'a dead import, see gttk/utils/log_helpers.py',
 }
 
 #: Import name -> distribution name, where they differ.
