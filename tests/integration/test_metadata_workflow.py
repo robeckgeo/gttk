@@ -236,7 +236,7 @@ class TestMetadataExtractionWorkflow:
         """Test that the workflow handles corrupted files gracefully."""
         # Arrange: Create a corrupted file
         test_file = tmp_path / "corrupted.tif"
-        test_file.write_text("This is not a valid TIFF file")
+        test_file.write_text("This is not a valid TIFF file", encoding='utf-8')
         
         # Act & Assert: Should raise appropriate exception
         with pytest.raises((FileNotFoundError, ValueError, RuntimeError)):

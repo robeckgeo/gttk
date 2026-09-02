@@ -47,10 +47,10 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,743
+- **Total Tests**: 1,750
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,489 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,496 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 106 (97 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 80 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
@@ -105,7 +105,7 @@ tests/
 │   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,489)
+├── unit/                                        # Unit tests (1,496)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (99)
 │   ├── test_readme_option_tables.py             # README option tables pinned to the parser (14)
@@ -150,7 +150,7 @@ tests/
 │   ├── test_optimize_arc_wiring.py              # ArcGIS optimize path wiring (6)
 │   ├── test_versions.py                         # One version number, in every place it is written (7)
 │   ├── test_pytest_config.py                    # Coverage opt-in & the CI policy pinned (6)
-│   ├── test_toolbox_load.py                     # Loading the .pyt the way ArcGIS Pro does (6)
+│   ├── test_toolbox_load.py                     # Loading the .pyt the way ArcGIS Pro does; PROJ under both names (9)
 │   ├── test_scratch_locations.py                # Scratch files never land in the working directory (4)
 │   ├── test_statistics_accuracy.py              # OnlineStatistics against NumPy, block by block (4)
 │   ├── test_tiff_tag_parser.py                  # Unparsable tags stay, a missing lookup says so (4)
@@ -159,6 +159,7 @@ tests/
 │   ├── test_gdal_runner.py                      # gdal_runner's stdout protocol and its timeout (4)
 │   ├── test_histogram_generator.py              # Histograms render headless and pick no backend (2)
 │   ├── test_logging_hygiene.py                  # Nothing logs through the root logger, nothing prints (3)
+│   ├── test_encoding_hygiene.py                 # Every text read and write names its encoding; the PAM sidecar is bytes (4)
 │   ├── test_shipped_resources.py                # Every icon asked for ships; nothing ships unasked (3)
 │   ├── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
 │   ├── test_compare_compression.py              # compare releases both datasets on every path (1)

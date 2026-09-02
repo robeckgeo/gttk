@@ -136,7 +136,7 @@ class TestThisCheckoutWins:
     def other_checkout(self, tmp_path):
         other = tmp_path / 'other' / 'gttk'
         other.mkdir(parents=True)
-        (other / '__init__.py').write_text('')
+        (other / '__init__.py').write_text('', encoding='utf-8')
         return other
 
     def test_a_gttk_loaded_earlier_from_elsewhere_is_released(self, other_checkout):
@@ -191,3 +191,48 @@ class TestThisCheckoutWins:
         assert Path(report['gttk_file']).resolve() == (ROOT / 'gttk' / '__init__.py').resolve()
         assert report['finder_gone']
         assert len(report['notice']) == 1
+
+
+class TestProjConfiguration:
+    """The toolbox points PROJ at OSGeo4W's proj.db before GDAL loads. It used to check and
+    set PROJ_LIB only: a Pro process that exported PROJ_DATA -- the name PROJ 8+ reads first
+    -- got PROJ_LIB pointed somewhere else and kept its own database, while the toolbox
+    reported success. Both names are checked, and both are set together."""
+
+    @pytest.fixture
+    def osgeo4w(self, tmp_path):
+        """A config naming a fake OSGeo4W root that has a proj.db."""
+        (tmp_path / 'OSGeo4W' / 'share' / 'proj').mkdir(parents=True)
+        (tmp_path / 'OSGeo4W' / 'share' / 'proj' / 'proj.db').write_bytes(b'')
+        config = tmp_path / 'config.toml'
+        config.write_text(f'[paths]\nosgeo4w = "{(tmp_path / "OSGeo4W").as_posix()}"\n', encoding='utf-8')
+        return config
+
+    @staticmethod
+    def _scenario(config, **env):
+        clear = "; ".join(f"os.environ.pop({k!r}, None)" for k in ('PROJ_DATA', 'PROJ_LIB'))
+        setenv = "; ".join(f"os.environ[{k!r}] = {v!r}" for k, v in env.items())
+        return f"""
+            {clear}
+            os.environ['GTTK_CONFIG'] = {str(config)!r}
+            {setenv}
+            module = load({str(PYT)!r})
+            print(json.dumps({{"PROJ_DATA": os.environ.get("PROJ_DATA"), "PROJ_LIB": os.environ.get("PROJ_LIB"),
+                               "warnings": [m for kind, m in messages if kind == "warning" and "PROJ" in m]}}))
+        """
+
+    def test_sets_both_names_from_the_config(self, osgeo4w):
+        report = run(self._scenario(osgeo4w))
+        expected = str(osgeo4w.parent / 'OSGeo4W' / 'share' / 'proj')
+        assert (report['PROJ_DATA'], report['PROJ_LIB']) == (expected, expected)
+        assert report['warnings'] == []
+
+    def test_leaves_a_process_that_exported_proj_data_alone(self, osgeo4w):
+        report = run(self._scenario(osgeo4w, PROJ_DATA='/pro/proj'))
+        assert (report['PROJ_DATA'], report['PROJ_LIB']) == ('/pro/proj', None)
+
+    def test_names_the_missing_proj_db(self, osgeo4w, tmp_path):
+        (tmp_path / 'OSGeo4W' / 'share' / 'proj' / 'proj.db').unlink()
+        report = run(self._scenario(osgeo4w))
+        assert (report['PROJ_DATA'], report['PROJ_LIB']) == (None, None)
+        assert any('proj.db not found' in w for w in report['warnings'])

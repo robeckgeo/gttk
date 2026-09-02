@@ -89,26 +89,26 @@ class TestSidecarSearchOrder:
         return raster
 
     def test_beside_the_raster_the_exact_name_wins(self, tree):
-        (tree.parent / 'tile_meta.xml').write_text('<a/>')
-        (tree.parent / 'tile.xml').write_text('<a/>')
+        (tree.parent / 'tile_meta.xml').write_text('<a/>', encoding='utf-8')
+        (tree.parent / 'tile.xml').write_text('<a/>', encoding='utf-8')
         assert ph.find_xml_metadata_file(tree) == tree.parent / 'tile.xml'
 
     def test_then_the_meta_suffix(self, tree):
-        (tree.parent / 'tile_meta.xml').write_text('<a/>')
+        (tree.parent / 'tile_meta.xml').write_text('<a/>', encoding='utf-8')
         assert ph.find_xml_metadata_file(tree) == tree.parent / 'tile_meta.xml'
 
     def test_then_the_parent_directory(self, tree):
-        (tree.parent.parent / 'tile.xml').write_text('<a/>')
+        (tree.parent.parent / 'tile.xml').write_text('<a/>', encoding='utf-8')
         assert ph.find_xml_metadata_file(tree) == tree.parent.parent / 'tile.xml'
 
     def test_then_a_metadatos_directory_beside_the_rasters_directory(self, tree):
         metadatos = tree.parent.parent / 'metadatos'
         metadatos.mkdir()
-        (metadatos / 'tile.xml').write_text('<a/>')
+        (metadatos / 'tile.xml').write_text('<a/>', encoding='utf-8')
         assert ph.find_xml_metadata_file(tree) == metadatos / 'tile.xml'
 
     def test_nothing_further_afield(self, tree):
-        (tree.parent.parent.parent / 'tile.xml').write_text('<a/>')
+        (tree.parent.parent.parent / 'tile.xml').write_text('<a/>', encoding='utf-8')
         assert ph.find_xml_metadata_file(tree) is None
 
 

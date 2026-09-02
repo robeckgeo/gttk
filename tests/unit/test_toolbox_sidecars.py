@@ -120,7 +120,7 @@ class TestLayout:
                                         + [f'GTTK_Toolbox.{t}.pyt.xml' for t in TOOLS])
 
     def test_generated_copies_beside_the_toolbox_are_ignored(self):
-        assert '/toolbox/GTTK_Toolbox*.pyt.xml' in (ROOT / '.gitignore').read_text().splitlines()
+        assert '/toolbox/GTTK_Toolbox*.pyt.xml' in (ROOT / '.gitignore').read_text(encoding='utf-8').splitlines()
 
     def test_toolbox_copies_the_active_language_on_load(self):
         source = PYT.read_text(encoding='utf-8')

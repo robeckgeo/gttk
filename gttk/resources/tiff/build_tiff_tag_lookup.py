@@ -303,7 +303,7 @@ def main():
     try:
         logging.info(f"Writing lookup file to {args.out_path}...")
         args.out_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(args.out_path, 'w') as f:
+        with open(args.out_path, 'w', encoding='utf-8') as f:
             json.dump(lookup_data, f, indent=2)
         logging.info("Done.")
     except IOError as e:

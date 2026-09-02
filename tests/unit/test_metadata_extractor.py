@@ -929,7 +929,7 @@ class TestXmlMetadataExtraction:
         ds = None
         
         # Create PAM file
-        with open(pam_filepath, 'w') as f:
+        with open(pam_filepath, 'w', encoding='utf-8') as f:
             f.write('<?xml version="1.0"?><PAMDataset><Metadata><MDI>test</MDI></Metadata></PAMDataset>')
         
         with MetadataExtractor(str(filepath)) as extractor:

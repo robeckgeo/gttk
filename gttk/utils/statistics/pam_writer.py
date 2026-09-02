@@ -21,6 +21,7 @@ Functions:
 """
 
 import logging
+from pathlib import Path
 import xml.etree.ElementTree as ET
 from xml.dom import minidom
 from typing import Union, List
@@ -129,10 +130,10 @@ def write_pam_xml(filename: str, pam_data: dict):
 
     pam_filename = filename + '.aux.xml'
     try:
-        with open(pam_filename, 'w', encoding='utf-8') as f:
-            f.write(pretty_xml_no_decl)
+        # Bytes, not text: text mode would turn every newline into CRLF on Windows.
+        Path(pam_filename).write_bytes(pretty_xml_no_decl.encode('utf-8'))
         logger.info(f"Successfully wrote statistics to {pam_filename}")
-    except IOError as e:
+    except OSError as e:
         logger.error(f"Failed to write .aux.xml file: {e}")
 
 

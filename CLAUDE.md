@@ -101,7 +101,7 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1743 tests total (1489 unit, 80 integration, 58 E2E, 10 benchmark smoke, 106 doctests -- 97 in `gttk/`
+1750 tests total (1496 unit, 80 integration, 58 E2E, 10 benchmark smoke, 106 doctests -- 97 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 326 validation tests
 - `tests/integration/` - Component interaction tests
@@ -174,6 +174,7 @@ Toolbox language coverage:
 - `test_i18n_catalog.py` - every `_()` string in the `.pyt` has a Spanish entry, no orphans, placeholders intact
 - `test_toolbox_sidecars.py` - each language's `.pyt.xml` documents exactly the dialog's parameters and labels
 - `test_optimize_arc_wiring.py` - the ArcGIS optimize path binds its GDAL options and logs to the GP pane
+- `test_toolbox_load.py` - the `.pyt` loads under a fake `arcpy` in both languages, prefers its own checkout, and points PROJ at OSGeo4W's `proj.db` under both `PROJ_DATA` and `PROJ_LIB`
 
 ArcGIS path coverage (POSIX, through `tests/fixtures/fake_osgeo4w.py`, an OSGeo4W-shaped tree whose
 tools are the conda environment's; skipped on Windows, where the real OSGeo4W is the fixture):

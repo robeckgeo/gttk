@@ -38,7 +38,7 @@ def _is_wsl() -> bool:
         bool: True if running in WSL, False otherwise
     """
     try:
-        with open('/proc/version', 'r') as f:
+        with open('/proc/version', 'r', encoding='utf-8') as f:
             return 'microsoft' in f.read().lower()
     except (OSError, IOError):
         return False

@@ -192,6 +192,17 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **The ArcGIS Pro toolbox configures PROJ under both of its names.** It checked and set
+  `PROJ_LIB` only. PROJ 8 and later read `PROJ_DATA` first, so a Pro process that exported
+  `PROJ_DATA` got `PROJ_LIB` pointed at OSGeo4W's database and went on using its own, while
+  the toolbox reported success. Both names are now checked before anything is done and
+  set together, `GTTK_CONFIG` names the toolbox's `config.toml` as it does the CLI's, and
+  the `tomli` fallback for Pythons GTTK no longer supports is gone.
+- **The `.aux.xml` statistics sidecar is written as bytes**, so it carries bare newlines on
+  Windows as it does elsewhere; text mode would have turned each into CRLF. Every text read
+  and write in the package and the test suite now names its encoding -- twenty-nine test
+  calls and three library calls relied on the platform default -- and
+  `tests/unit/test_encoding_hygiene.py` keeps it that way.
 - **The PAM section has its icon back.** The section registry asked for `aux`; the file
   that draws it is `pam.svg`, so every metadata report logged a missing icon and showed
   none. The validation-summary section's icon, which was also missing, ships too.
