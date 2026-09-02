@@ -47,11 +47,11 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,451
+- **Total Tests**: 1,513
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,246 tests (models, processors, extractors, formatters, utilities)
-  - Doctests: 98 (89 in `gttk/`, 9 in `tests/`)
+  - Unit Tests: 1,306 tests (models, processors, extractors, formatters, utilities)
+  - Doctests: 100 (91 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 51 tests (metadata workflows, statistics validation)
   - E2E Tests: 56 tests (CLI commands)
 
@@ -103,12 +103,13 @@ tests/
 │   ├── custom_vertical_crs.py                   # A vertical CRS with no EPSG code
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,246)
+├── unit/                                        # Unit tests (1,306)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (95)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
 │   ├── test_i18n.py                             # Toolbox language detection & catalogs (67)
 │   ├── test_overview_control.py                 # Overview & thread control on the COG path (61)
+│   ├── test_gdal_scripts.py                     # Scripts run under OSGeo4W take paths from argv (59)
 │   ├── test_srs_logic.py                        # SRS/CRS logic (58)
 │   ├── test_validation_extractors.py            # Validation value extraction (58)
 │   ├── test_toolbox_sidecars.py                 # .pyt.xml help sidecars pinned to the dialog (51)

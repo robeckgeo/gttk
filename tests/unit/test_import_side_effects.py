@@ -43,6 +43,7 @@ GTTK_MODULES = [
     "gttk.tools.test_compression",
     "gttk.tools.validate_metadata",
     "gttk.utils.gdal_runner",
+    "gttk.utils.gdal_scripts",
     "gttk.utils.validation.gpkg_writer",
     # Not part of the library surface, but pytest --doctest-modules walks all of
     # gttk/ and imports them, so their import must be as quiet as everything else.

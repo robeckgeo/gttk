@@ -38,6 +38,7 @@ sys.path.insert(0, str(SCRIPT_DIR.parent.parent))  # Go up to project root where
 
 from gttk.utils.exceptions import GdalExecutionError
 from gttk.utils.log_helpers import setup_logger, shutdown_logger
+from gttk.utils.gdal_scripts import build_script, python_command
 
 # Load config to find the OSGeo4W path
 CONFIG_PATH = SCRIPT_DIR.parent.parent / 'config.toml'  # Project root
@@ -262,60 +263,14 @@ def run_gdal_command(command: List[str], env: Dict[str, str], capture_output: bo
         logging.error(f"An unexpected error occurred: {e}")
         raise
 
-def get_projection_info_from_osgeo4w(filepath: str) -> Tuple[Optional[Dict[str, Any]], Optional[str], Optional[str]]:
-    """
-    Get complete projection info, WKT, and PROJJSON from OSGeo4W using GDAL Python bindings.
-    
-    Executes _retrieve_projection_info logic directly in the clean OSGeo4W environment,
-    avoiding the crippled ArcGIS Pro Python env, which lacks the `PROJ_LIB` variable.
-    
-    Args:
-        filepath: Path to GeoTIFF file
-        
-    Returns:
-        Tuple of (projection_info dict, wkt_string, projjson_string) or (None, None, None) if execution fails
-    """
-    try:
-        from gttk.utils.config_loader import config
-        osgeo4w_root = config.get('paths.osgeo4w')
-        
-        logger.info(f"OSGeo4W root from config: {osgeo4w_root}")
-        
-        if not osgeo4w_root:
-            logger.warning("OSGeo4W path not configured in config.toml")
-            return (None, None, None)
-        
-        osgeo4w_dir = Path(osgeo4w_root)
-        if not osgeo4w_dir.is_dir():
-            logger.warning(f"OSGeo4W directory does not exist: {osgeo4w_dir}")
-            return (None, None, None)
-        
-        python_executable = osgeo4w_dir / "bin" / "python.exe"
-        if not python_executable.exists():
-            logger.warning(f"OSGeo4W Python executable not found at: {python_executable}")
-            return (None, None, None)
-        
-        # Get path to gdal_runner.py (this file's sibling)
-        gdal_runner_script = Path(__file__).resolve().parent / "gdal_runner.py"
-        if not gdal_runner_script.exists():
-            logger.warning(f"gdal_runner.py not found at: {gdal_runner_script}")
-            return (None, None, None)
-        
-        logger.info(f"Extracting projection info for: {filepath}")
-        logger.info("Using gdal_runner subprocess with Python bindings")
-        
-        # Create a Python script that uses GDAL bindings to extract projection info, WKT, and PROJJSON
-        # Escape backslashes for the python string
-        filepath_esc = str(filepath).replace('\\', '\\\\')
-        
-        extract_script_content = f'''
+_PROJECTION_INFO_SCRIPT = '''
 import sys
 import json
 from osgeo import gdal, osr
 
 def extract_projection_info():
     """Extract projection info, WKT, and PROJJSON using same logic as _retrieve_projection_info."""
-    filepath = "{filepath_esc}"
+    filepath = sys.argv[1]
     
     ds = gdal.Open(filepath)
     if not ds:
@@ -438,6 +393,53 @@ def extract_projection_info():
 if __name__ == "__main__":
     extract_projection_info()
 '''
+
+
+def get_projection_info_from_osgeo4w(filepath: str) -> Tuple[Optional[Dict[str, Any]], Optional[str], Optional[str]]:
+    """
+    Get complete projection info, WKT, and PROJJSON from OSGeo4W using GDAL Python bindings.
+    
+    Executes _retrieve_projection_info logic directly in the clean OSGeo4W environment,
+    avoiding the crippled ArcGIS Pro Python env, which lacks the `PROJ_LIB` variable.
+    
+    Args:
+        filepath: Path to GeoTIFF file
+        
+    Returns:
+        Tuple of (projection_info dict, wkt_string, projjson_string) or (None, None, None) if execution fails
+    """
+    try:
+        from gttk.utils.config_loader import config
+        osgeo4w_root = config.get('paths.osgeo4w')
+        
+        logger.info(f"OSGeo4W root from config: {osgeo4w_root}")
+        
+        if not osgeo4w_root:
+            logger.warning("OSGeo4W path not configured in config.toml")
+            return (None, None, None)
+        
+        osgeo4w_dir = Path(osgeo4w_root)
+        if not osgeo4w_dir.is_dir():
+            logger.warning(f"OSGeo4W directory does not exist: {osgeo4w_dir}")
+            return (None, None, None)
+        
+        python_executable = osgeo4w_dir / "bin" / "python.exe"
+        if not python_executable.exists():
+            logger.warning(f"OSGeo4W Python executable not found at: {python_executable}")
+            return (None, None, None)
+        
+        # Get path to gdal_runner.py (this file's sibling)
+        gdal_runner_script = Path(__file__).resolve().parent / "gdal_runner.py"
+        if not gdal_runner_script.exists():
+            logger.warning(f"gdal_runner.py not found at: {gdal_runner_script}")
+            return (None, None, None)
+        
+        logger.info(f"Extracting projection info for: {filepath}")
+        logger.info("Using gdal_runner subprocess with Python bindings")
+        
+        # The script that extracts projection info, WKT and PROJJSON with the GDAL
+        # bindings. The file path is its argv[1]; it is never part of the source.
+        extract_script_content = build_script(_PROJECTION_INFO_SCRIPT)
         
         # Write extraction script to temp file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, encoding='utf-8') as tmp_script:
@@ -446,12 +448,9 @@ if __name__ == "__main__":
         
         try:
             # Build command to run the Python script via gdal_runner
-            python_command = {
-                "command": ["python", temp_script_path],
-                "capture_output": True
-            }
-            
-            payload = json.dumps({"commands": [python_command]})
+            extract_command = python_command(temp_script_path, filepath, capture_output=True)
+
+            payload = json.dumps({"commands": [extract_command]})
             
             # Create isolated environment
             logger.info("Creating isolated OSGeo4W environment...")

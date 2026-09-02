@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Security
+
+- **File paths no longer reach the Python scripts GTTK runs under OSGeo4W.** Six generated
+  scripts -- the projection reader `gttk read` uses inside ArcGIS Pro, and the five that
+  `optimize-arc` writes for NoData remapping, mask attachment, rounding and translation --
+  embedded the input, output, mask and XML paths in their source with only the backslashes
+  escaped. A `"` in a filename ended the string literal and the rest of the name ran as
+  Python in the OSGeo4W interpreter, on every toolbox Optimize Compression run: a raster
+  named `x"; open("MARKER", "w").close() #.tif` created the marker and produced no output.
+  Paths now travel on the script's argv, and every other value (NoData numbers, decimals,
+  translate options) is rendered by `gttk.utils.gdal_scripts.literal`, which produces a
+  Python literal by construction. `tests/unit/test_gdal_scripts.py` runs the real scripts
+  against that filename.
+
 ### Added
 
 - **The test suite runs in GitHub Actions.** There was no CI at all, so every guard in the

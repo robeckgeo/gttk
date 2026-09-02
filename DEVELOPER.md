@@ -163,6 +163,11 @@ When running within ArcGIS Pro, the toolkit uses an isolation strategy to ensure
         * The `gdal_runner.py` script relies on a standard OSGeo4W installation.
         * Ensure the `gdal`, `python3-gdal`, `numpy`, and `python3-numpy` packages are selected during installation (typically included in the "Express Desktop" install).
         * The path to the OSGeo4W root directory (e.g., `C:\OSGeo4W`) must be correctly set in `config.toml`.
+4. **Generated scripts**: the Python scripts GTTK writes for that interpreter follow two rules, kept in
+   `gttk/utils/gdal_scripts.py`. A script takes its file paths from `sys.argv` and never carries one in
+   its source, and every other value is rendered by `literal()`, which produces a Python literal by
+   construction. `tests/unit/test_gdal_scripts.py` runs each script on a raster whose name is a Python
+   statement.
 
 ## GTTK as a Library: No Import Side Effects
 

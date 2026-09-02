@@ -44,6 +44,7 @@ from gttk.utils.optimize_constants import (CompressionAlgorithm as CA, ProductTy
 from gttk.utils.cli_help import render_resolved_settings
 from gttk.utils.gdal_env import gdal_env, GDAL_OPTIONS_ARC
 from gttk.utils.gdal_runner import create_isolated_env
+from gttk.utils.gdal_scripts import python_command, write_script
 from gttk.utils.geo_metadata_writer import prepare_xml_for_gdal
 from gttk.utils.geotiff_processor import is_nodata_valid, GeoTiffInfo
 from gttk.utils.log_helpers import init_arcpy, ArcpyLogHandler, PACKAGE_LOGGER
@@ -334,73 +335,18 @@ def _determine_target_nodata_and_remap_status(
     # Valid source NoData, keep it
     return input_info.nodata, False
 
-def _write_nodata_remap_script(
-    script_path: Path,
-    input_file: str,
-    output_file: str,
-    source_nodata: Union[float, str],
-    target_nodata: Union[float, str],
-    data_type: str
-):
-    """
-    Writes a temporary Python script to remap NoData values for all bands.
-    This replaces gdal_calc.py to support multi-band files properly.
-    
-    Args:
-        script_path: Path where the script will be written
-        input_file: Path to the input GeoTIFF file
-        output_file: Path to the output GeoTIFF file
-        source_nodata: Source NoData value to remap from
-        target_nodata: Target NoData value to remap to
-        data_type: GDAL data type string (e.g., 'Float32', 'Int16')
-    """
-    # Escape backslashes for the python string
-    input_file_esc = str(input_file).replace('\\', '\\\\')
-    output_file_esc = str(output_file).replace('\\', '\\\\')
-
-    # Normalize string "nan"/"NaN" to numpy.nan
-    if isinstance(source_nodata, str) and source_nodata.lower() == 'nan':
-        source_nodata = np.nan
-    if isinstance(target_nodata, str) and target_nodata.lower() == 'nan':
-        target_nodata = np.nan
-
-    # Check if this is float data
-    is_float_type = 'Float' in data_type
-
-    # Check for NaN values after normalization
-    source_is_nan = (isinstance(source_nodata, float) and np.isnan(source_nodata))
-    target_is_nan = (isinstance(target_nodata, float) and np.isnan(target_nodata))
-    
-    # For non-float types, NaN cannot be used
-    if not is_float_type and (source_is_nan or target_is_nan):
-        raise ValueError(f"Cannot use NaN as NoData value for non-float data type: {data_type}")
-    
-    # Build the remap logic
-    if is_float_type:
-        if source_is_nan:
-            remap_expr = "np.where(np.isnan(array), np.nan, array)" if target_is_nan else f"np.where(np.isnan(array), {target_nodata}, array)"
-        else:
-            remap_expr = f"np.where(array == {source_nodata}, np.nan, array)" if target_is_nan else f"np.where(array == {source_nodata}, {target_nodata}, array)"
-    else:
-        remap_expr = f"np.where(array == {source_nodata}, {target_nodata}, array)"
-    
-    # Build target NoData setting code
-    if target_is_nan:
-        set_nodata_code = "dst_band.SetNoDataValue(float('nan'))"
-    else:
-        set_nodata_code = f"dst_band.SetNoDataValue({target_nodata})"
-    
-    script_content = f"""
+_REMAP_NODATA_SCRIPT = """
 import sys
 import numpy as np
 from osgeo import gdal
 
 gdal.UseExceptions()
 
-def remap_nodata():
-    input_path = "{input_file_esc}"
-    output_path = "{output_file_esc}"
-    
+# NaN arrives as float('nan'); every other value is a plain literal.
+SOURCE_NODATA = {source_nodata}
+TARGET_NODATA = {target_nodata}
+
+def remap_nodata(input_path, output_path):
     print(f"Opening input dataset: {{input_path}}")
     src_ds = gdal.Open(input_path, gdal.GA_ReadOnly)
     if not src_ds:
@@ -429,8 +375,12 @@ def remap_nodata():
             print(f"  Warning: Failed to read band {{band_idx}}")
             continue
         
-        # Remap the NoData values
-        remapped_array = {remap_expr}
+        # NaN is the one value that is not equal to itself, so it needs isnan()
+        if SOURCE_NODATA != SOURCE_NODATA:
+            nodata_mask = np.isnan(array)
+        else:
+            nodata_mask = array == SOURCE_NODATA
+        remapped_array = np.where(nodata_mask, TARGET_NODATA, array)
         
         # Write back the remapped data
         result = dst_band.WriteArray(remapped_array)
@@ -439,7 +389,7 @@ def remap_nodata():
             continue
         
         # Set the NoData value
-        {set_nodata_code}
+        dst_band.SetNoDataValue(TARGET_NODATA)
         
         dst_band.FlushCache()
         print(f"  Band {{band_idx}}: NoData remapped successfully")
@@ -451,10 +401,56 @@ def remap_nodata():
     print("NoData remapping complete.")
 
 if __name__ == "__main__":
-    remap_nodata()
+    remap_nodata(sys.argv[1], sys.argv[2])
 """
-    with open(script_path, 'w', encoding='utf-8') as f:
-        f.write(script_content)
+
+
+def _write_nodata_remap_script(
+    script_path: Path,
+    source_nodata: Union[float, str],
+    target_nodata: Union[float, str],
+    data_type: str
+) -> Path:
+    """
+    Writes a temporary Python script to remap NoData values for all bands.
+    This replaces gdal_calc.py to support multi-band files properly.
+
+    The input and output paths are not part of the script: the command that runs it
+    passes them as its two arguments (see ``python_command``).
+
+    Args:
+        script_path: Path where the script will be written
+        source_nodata: Source NoData value to remap from
+        target_nodata: Target NoData value to remap to
+        data_type: GDAL data type string (e.g., 'Float32', 'Int16')
+    """
+    source_nodata = _nodata_number(source_nodata)
+    target_nodata = _nodata_number(target_nodata)
+
+    # Check if this is float data
+    is_float_type = 'Float' in data_type
+
+    source_is_nan = isinstance(source_nodata, float) and np.isnan(source_nodata)
+    target_is_nan = isinstance(target_nodata, float) and np.isnan(target_nodata)
+
+    # For non-float types, NaN cannot be used
+    if not is_float_type and (source_is_nan or target_is_nan):
+        raise ValueError(f"Cannot use NaN as NoData value for non-float data type: {data_type}")
+
+    return write_script(script_path, _REMAP_NODATA_SCRIPT,
+                        source_nodata=source_nodata, target_nodata=target_nodata)
+
+
+def _nodata_number(value: Union[float, int, str, None]) -> Union[float, int, None]:
+    """A NoData value as a number: 'nan' becomes NaN, numeric strings become floats."""
+    if isinstance(value, str):
+        if value.strip().lower() == 'nan':
+            return np.nan
+        try:
+            return float(value)
+        except ValueError:
+            raise ValueError(f"NoData value is not a number: {value!r}") from None
+    return value
 
 def _build_alpha_threshold_command(
     input_file: str,
@@ -531,19 +527,7 @@ def _calculate_overview_levels(x_size: int, y_size: int, tile_size: int = 512) -
     logger.debug(f"Calculated overview levels for {x_size}x{y_size}: {levels}")
     return levels
 
-def _write_mask_attachment_script(script_path: Path, target_tif: str, mask_tif: str):
-    """
-    Writes a temporary Python script to attach or merge a mask to a dataset.
-    This script is intended to be executed by the gdal_runner in the isolated environment.
-    
-    If the target already has an internal mask, this will merge the new mask with the
-    existing one using logical AND (a pixel is valid only if both masks mark it as valid).
-    """
-    # Escape backslashes for the python string
-    target_tif_esc = str(target_tif).replace('\\', '\\\\')
-    mask_tif_esc = str(mask_tif).replace('\\', '\\\\')
-    
-    script_content = f"""
+_ATTACH_MASK_SCRIPT = """
 import sys
 import os
 import numpy as np
@@ -551,10 +535,7 @@ from osgeo import gdal
 
 gdal.UseExceptions()
 
-def attach_mask():
-    target_path = "{target_tif_esc}"
-    mask_path = "{mask_tif_esc}"
-    
+def attach_mask(target_path, mask_path):
     print(f"Opening target: {{target_path}}")
     ds = gdal.Open(target_path, gdal.GA_Update)
     if not ds:
@@ -606,35 +587,29 @@ def attach_mask():
     print("Mask attachment complete.")
 
 if __name__ == "__main__":
-    attach_mask()
+    attach_mask(sys.argv[1], sys.argv[2])
 """
-    with open(script_path, 'w', encoding='utf-8') as f:
-        f.write(script_content)
 
-def _write_round_overviews_script(script_path: Path, target_tif: str, decimals: int):
+
+def _write_mask_attachment_script(script_path: Path) -> Path:
     """
-    Writes a temporary Python script to round overview values in-place.
-    This script is intended to be executed by the gdal_runner in the isolated environment.
-    
-    Args:
-        script_path: Path where the script will be written
-        target_tif: Path to the GeoTIFF file containing overviews to round
-        decimals: Number of decimal places to round to
+    Writes a temporary Python script to attach a mask band to a target GeoTIFF.
+    The command that runs it passes the target and the mask raster as its two arguments.
     """
-    # Escape backslashes for the python string
-    target_tif_esc = str(target_tif).replace('\\', '\\\\')
-    
-    script_content = f"""
+    return write_script(script_path, _ATTACH_MASK_SCRIPT)
+
+_ROUND_OVERVIEWS_SCRIPT = """
 import sys
 import numpy as np
 from osgeo import gdal
 
 gdal.UseExceptions()
 
-def round_overviews():
-    filepath = "{target_tif_esc}"
-    decimals = {decimals}
-    
+DECIMALS = {decimals}
+
+def round_overviews(filepath):
+    decimals = DECIMALS
+
     print(f"Opening dataset for overview rounding: {{filepath}}")
     ds = gdal.Open(filepath, gdal.GA_Update)
     if not ds:
@@ -693,21 +668,23 @@ def round_overviews():
     print("Overview rounding complete.")
 
 if __name__ == "__main__":
-    round_overviews()
+    round_overviews(sys.argv[1])
 """
-    with open(script_path, 'w', encoding='utf-8') as f:
-        f.write(script_content)
 
-def _write_translate_script(script_path: Path, input_path: str, output_path: str, options: List[str], xml_path: Optional[str] = None):
+
+def _write_round_overviews_script(script_path: Path, decimals: int) -> Path:
     """
-    Writes a temporary Python script to perform gdal_translate.
-    This bypasses Windows command line length limits by using the Python API.
+    Writes a temporary Python script to round overview values in-place.
+    This script is intended to be executed by the gdal_runner in the isolated environment;
+    the command that runs it passes the GeoTIFF as its one argument.
+
+    Args:
+        script_path: Path where the script will be written
+        decimals: Number of decimal places to round to
     """
-    input_esc = str(input_path).replace('\\', '\\\\')
-    output_esc = str(output_path).replace('\\', '\\\\')
-    xml_path_esc = str(xml_path).replace('\\', '\\\\') if xml_path else None
-    
-    script_content = f"""
+    return write_script(script_path, _ROUND_OVERVIEWS_SCRIPT, decimals=decimals)
+
+_RUN_TRANSLATE_SCRIPT = """
 import sys
 import json
 from osgeo import gdal
@@ -717,16 +694,14 @@ gdal.SetConfigOption('OSR_WKT_FORMAT','WKT2_2019')
 gdal.SetConfigOption('GTIFF_WRITE_SRS_WKT2','YES')
 gdal.SetConfigOption('GTIFF_SRS_SOURCE','WKT')
 
-def run_translate():
-    input_path = "{input_esc}"
-    output_path = "{output_esc}"
-    
+OPTIONS = {options}
+
+def run_translate(input_path, output_path, xml_file=None):
     # Load base options
-    options = {json.dumps(options)}
-    
+    options = list(OPTIONS)
+
     # Inject metadata if provided
-    xml_file = "{xml_path_esc}"
-    if xml_file and xml_file != "None":
+    if xml_file:
         try:
             with open(xml_file, 'r', encoding='utf-8') as f:
                 xml_content = f.read()
@@ -753,36 +728,32 @@ def run_translate():
         sys.exit(1)
 
 if __name__ == "__main__":
-    run_translate()
+    run_translate(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
 """
-    with open(script_path, 'w', encoding='utf-8') as f:
-        f.write(script_content)
+
+
+def _write_translate_script(script_path: Path, options: List[str]) -> Path:
+    """
+    Writes a temporary Python script to perform gdal_translate.
+    This bypasses Windows command line length limits by using the Python API.
+    The command that runs it passes the input, the output and, optionally, the XML
+    metadata file as its arguments.
+    """
+    return write_script(script_path, _RUN_TRANSLATE_SCRIPT, options=list(options))
 
     
-def _write_round_data_script(script_path: Path, target_tif: str, decimals: int):
-    """
-    Writes a temporary Python script to round raster values in-place.
-    This replaces gdal_calc.py for the main data rounding to support multi-band files easily.
-    
-    Args:
-        script_path: Path where the script will be written
-        target_tif: Path to the GeoTIFF file to round
-        decimals: Number of decimal places to round to
-    """
-    # Escape backslashes for the python string
-    target_tif_esc = str(target_tif).replace('\\', '\\\\')
-    
-    script_content = f"""
+_ROUND_DATASET_SCRIPT = """
 import sys
 import numpy as np
 from osgeo import gdal
 
 gdal.UseExceptions()
 
-def round_dataset():
-    filepath = "{target_tif_esc}"
-    decimals = {decimals}
-    
+DECIMALS = {decimals}
+
+def round_dataset(filepath):
+    decimals = DECIMALS
+
     print(f"Opening dataset for rounding: {{filepath}}")
     ds = gdal.Open(filepath, gdal.GA_Update)
     if not ds:
@@ -820,10 +791,21 @@ def round_dataset():
     print("Dataset rounding complete.")
 
 if __name__ == "__main__":
-    round_dataset()
+    round_dataset(sys.argv[1])
 """
-    with open(script_path, 'w', encoding='utf-8') as f:
-        f.write(script_content)
+
+
+def _write_round_data_script(script_path: Path, decimals: int) -> Path:
+    """
+    Writes a temporary Python script to round raster values in-place.
+    This replaces gdal_calc.py for the main data rounding to support multi-band files easily.
+    The command that runs it passes the GeoTIFF as its one argument.
+
+    Args:
+        script_path: Path where the script will be written
+        decimals: Number of decimal places to round to
+    """
+    return write_script(script_path, _ROUND_DATASET_SCRIPT, decimals=decimals)
 
 def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional[PerformanceTracker] = None):
     """Builds and executes a sequence of GDAL commands."""
@@ -924,13 +906,11 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
             remap_script_path = tfm.get_temp_path("remap_nodata.py")
             _write_nodata_remap_script(
                 remap_script_path,
-                str(current_input),
-                str(remapped_file),
                 input_info.nodata,
                 target_nodata,
                 input_info.data_type or "Float32"
             )
-            commands.append({"command": ["python", str(remap_script_path)]})
+            commands.append(python_command(remap_script_path, current_input, remapped_file))
             current_input = remapped_file
             
             if tracker:
@@ -1022,8 +1002,8 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
             
             logger.info(f"Step 3a: Rounding data to {args.decimals} decimal places...")
             round_data_script_path = tfm.get_temp_path("round_data.py")
-            _write_round_data_script(round_data_script_path, str(current_input), args.decimals or 0)
-            commands.append({"command": ["python", str(round_data_script_path)]})
+            _write_round_data_script(round_data_script_path, args.decimals or 0)
+            commands.append(python_command(round_data_script_path, current_input))
             
             if tracker:
                 tracker.stop("rounding")
@@ -1105,10 +1085,10 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
             logger.info(f"Step 3c: Attaching internal mask to {current_input}...")
             
             attach_script_path = tfm.get_temp_path("attach_mask.py")
-            _write_mask_attachment_script(attach_script_path, str(current_input), str(mask_source_file))
-            
+            _write_mask_attachment_script(attach_script_path)
+
             # Run the python script via gdal_runner
-            commands.append({"command": ["python", str(attach_script_path)]})
+            commands.append(python_command(attach_script_path, current_input, mask_source_file))
             
             if tracker:
                 tracker.stop("mask_attachment")
@@ -1183,8 +1163,8 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
             # Round the overviews
             logger.info(f"Rounding overviews to {args.decimals} decimal places...")
             round_overviews_script_path = tfm.get_temp_path("round_overviews.py")
-            _write_round_overviews_script(round_overviews_script_path, str(current_input), args.decimals)
-            commands.append({"command": ["python", str(round_overviews_script_path)]})
+            _write_round_overviews_script(round_overviews_script_path, args.decimals)
+            commands.append(python_command(round_overviews_script_path, current_input))
             
             if tracker:
                 tracker.stop("overview_creation")
@@ -1337,14 +1317,9 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
         if xml_metadata_temp_path:
             # Use Python script to bypass CLI limits
             translate_script_path = tfm.get_temp_path("run_translate.py")
-            _write_translate_script(
-                translate_script_path,
-                str(current_input),
-                str(args.output_path),
-                translate_options,
-                str(xml_metadata_temp_path)
-            )
-            commands.append({"command": ["python", str(translate_script_path)]})
+            _write_translate_script(translate_script_path, translate_options)
+            commands.append(python_command(translate_script_path, current_input, args.output_path,
+                                           xml_metadata_temp_path))
         else:
             # Use standard CLI
             final_translate_cmd = ["gdal_translate",
