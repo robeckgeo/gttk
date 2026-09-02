@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-09-02
+
 ### Security
 
 - **File paths no longer reach the Python scripts GTTK runs under OSGeo4W.** Six generated
