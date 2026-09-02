@@ -17,6 +17,11 @@ All notable changes to this project will be documented in this file.
   translate options) is rendered by `gttk.utils.gdal_scripts.literal`, which produces a
   Python literal by construction. `tests/unit/test_gdal_scripts.py` runs the real scripts
   against that filename.
+- **Opening a report from WSL no longer hands its path to PowerShell unquoted.** `open_file`
+  built `Start-Process "<path>"` with an f-string; inside PowerShell's double quotes `$(...)`
+  is evaluated, a backtick escapes and a `"` ends the string, and the path comes from the
+  input raster's name. The path is now a single-quoted PowerShell literal carried as
+  `-EncodedCommand`, so neither PowerShell nor the Windows command line ever parses it.
 
 ### Added
 

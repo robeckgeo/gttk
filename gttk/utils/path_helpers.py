@@ -16,6 +16,7 @@ recursively finding GeoTIFF files, preparing output paths while preserving
 directory structures, and locating associated XML metadata files based on
 common naming conventions.
 """
+import base64
 import os
 import sys
 import subprocess
@@ -69,6 +70,29 @@ def _convert_wsl_path_to_windows(wsl_path: str) -> str:
         wsl_path_string = wsl_path.replace('/', '\\')
         windows_path = f"\\\\wsl.localhost\\Ubuntu{wsl_path_string}"
         return windows_path
+
+def _powershell_open_command(windows_path: str) -> List[str]:
+    r"""
+    The argv that opens ``windows_path`` with its Windows default application.
+
+    The path goes into a single-quoted PowerShell string -- the only character with a
+    meaning there is the quote itself, written twice -- and the whole command travels
+    base64-encoded as ``-EncodedCommand``, so neither PowerShell's parser nor the Windows
+    command line ever sees the path unquoted. The previous form interpolated the path into
+    a double-quoted string, where ``$(...)``, a backtick or a ``"`` in a report name ran as
+    PowerShell.
+
+    Example:
+        >>> argv = _powershell_open_command(r"C:\r\it's $(x).html")
+        >>> argv[:4]
+        ['powershell.exe', '-NoProfile', '-NonInteractive', '-EncodedCommand']
+        >>> import base64
+        >>> base64.b64decode(argv[4]).decode('utf-16-le')
+        "Start-Process -LiteralPath 'C:\\r\\it''s $(x).html'"
+    """
+    command = "Start-Process -LiteralPath '" + windows_path.replace("'", "''") + "'"
+    encoded = base64.b64encode(command.encode('utf-16-le')).decode('ascii')
+    return ['powershell.exe', '-NoProfile', '-NonInteractive', '-EncodedCommand', encoded]
 
 def open_file(filename: str) -> None:
     """
@@ -129,7 +153,7 @@ def open_file(filename: str) -> None:
                 logger.debug(f"Opening {windows_path} with Windows default application")
                 # Use Popen to avoid waiting for the app to close
                 subprocess.Popen(
-                    ['powershell.exe', '-Command', f'Start-Process "{windows_path}"'],
+                    _powershell_open_command(windows_path),
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL
                 )
