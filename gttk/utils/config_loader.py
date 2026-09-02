@@ -130,21 +130,6 @@ class Config:
                 return default
         return value
 
-    def get_section(self, section: str) -> Dict[str, Any]:
-        """Get entire configuration section
-
-        Args:
-            section: Section name (e.g., "gui", "paths")
-
-        Returns:
-            Dictionary containing the section configuration
-
-        Example:
-            >>> config.get_section("paths")["osgeo4w"]
-            'C:/OSGeo4W'
-        """
-        return self._ensure_loaded().get(section, {})
-
     def set(self, key: str, value: Any):
         """Set configuration value using dot notation
 

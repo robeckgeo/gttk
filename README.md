@@ -640,17 +640,16 @@ osgeo4w = "C:/OSGeo4W"
 # Language of the ArcGIS Pro toolbox: "auto" (follow ArcGIS Pro, then Windows), "en" or "es"
 language = "auto"
 
-[logging]
-# Logging Configuration
-level = "INFO"
-file = "gttk.log"
+[statistics]
+# Tuning for the statistics calculator; the file lists every key with its meaning
+max_pixels_fast_path = 0
 ```
 
 ### When to Edit
 
 - **ArcGIS Pro Users**: Update `osgeo4w` path in `config.toml` to match your OSGeo4W installation; set `language` to force the toolbox's language
 - **CLI Users**: Generally no configuration needed; all settings can be passed as command-line arguments
-- **Batch Processing**: Customize defaults in `config.toml` to streamline repetitive tasks
+- **Large rasters**: the `[statistics]` keys choose between in-memory and blocked statistics and size the blocks
 
 **Location**: GTTK reads the first of these that applies:
 

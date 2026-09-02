@@ -47,11 +47,11 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,704
+- **Total Tests**: 1,713
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,449 tests (models, processors, extractors, formatters, utilities)
-  - Doctests: 107 (98 in `gttk/`, 9 in `tests/`)
+  - Unit Tests: 1,459 tests (models, processors, extractors, formatters, utilities)
+  - Doctests: 106 (97 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 80 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
   - Benchmark smoke tests: 10 tests (every statistics benchmark, once at 256×256)
@@ -105,7 +105,7 @@ tests/
 │   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,449)
+├── unit/                                        # Unit tests (1,459)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (99)
 │   ├── test_readme_option_tables.py             # README option tables pinned to the parser (14)
@@ -139,7 +139,8 @@ tests/
 │   ├── test_statistics_phase2.py                # Phase 2 statistics optimizations (13)
 │   ├── test_compression_efficiency.py           # An error is not 0.0 (15)
 │   ├── test_path_helpers.py                     # Report opening on every platform, output tree, sidecar search order (21)
-│   ├── test_config_loader.py                    # Where config.toml comes from, quietly (11)
+│   ├── test_config_loader.py                    # Where config.toml comes from, quietly, and only live keys (12)
+│   ├── test_cli_defaults.py                     # One default per option: command line, dataclass, dialog (9)
 │   ├── test_section_renderers.py                # Section rendering (11)
 │   ├── test_log_helpers.py                      # Logging helpers, startup env checks, no arcpy initialiser (10)
 │   ├── test_i18n_catalog.py                     # Spanish catalog pinned to the toolbox (8)

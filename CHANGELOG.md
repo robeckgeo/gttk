@@ -141,6 +141,12 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
+- **Eleven `config.toml` keys nothing read.** `[api]`, `[logging]`, four `[gui]` keys
+  (`default_layout`, `default_theme`, `window_size`, `enable_dark_mode`) and
+  `statistics.alpha_artifact_tolerance` had no reader anywhere in the code; the README
+  documented `[logging]` as live. The checkout's `config.toml` now carries the same keys
+  as the packaged default, a test keeps it that way, and `Config.get_section()`, whose
+  only caller was its own docstring, is gone.
 - **`init_arcpy()` and `gttk/utils/arcgis_proj_config.py`.** The first imported a top-level
   `utils` package that has never existed, and the `ImportError` it swallowed ended it before
   the one line it was for, `arcpy.env.overwriteOutput = True`, could run -- so the three
@@ -157,6 +163,14 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **A library caller gets the command line's defaults.** `TestArguments.delete_test_files`
+  defaulted to `False` where `gttk test` defaults to `True`, and `ReadArguments` left
+  `reader_type`, `xml_type` and `tag_scope` unset for the tool to fill in -- with `text`
+  for `xml_type`, where `gttk read` and the README say `table`. The dataclasses now
+  declare the command line's values, and `tests/unit/test_cli_defaults.py` holds every
+  argparse default equal to its dataclass default, names the two divergences that are
+  meant (`optimize-arc --arc-mode`, `read --write-pam-xml`), and pins the three
+  documented places where the ArcGIS dialog differs from the command line.
 - **Help text that contradicted the code.** `--log-file` said no log is written by default;
   `gttk test` always writes `test_compression_debug.log` in its temporary directory.
   `--delete-test-files` said it deletes temporary files; it deletes the candidate rasters and
