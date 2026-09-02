@@ -156,8 +156,8 @@ def build_parser() -> argparse.ArgumentParser:
                                       f"Thematic LERC must stay lossless: a non-zero value is rejected "
                                       f"because it merges adjacent class codes.")
         compression.add_argument('-d', '--decimals', type=parse_decimals, dest='decimals',
-                                 help=f"Decimal places to round DEM/error/scientific data, or 'none' to keep "
-                                      f"full precision. Applies to LZW/DEFLATE/ZSTD only. Default: "
+                                 help=f"Decimal places to round DEM/error/scientific data, or 'none' (also 'off' or 'keep') "
+                                      f"to keep full precision. Applies to LZW/DEFLATE/ZSTD only. Default: "
                                       f"{ch.default_clause('decimals', algorithm='DEFLATE')}. Values "
                                       f"finer than the data type can represent are treated as 'none'.")
 
@@ -177,7 +177,7 @@ def build_parser() -> argparse.ArgumentParser:
         overviews.add_argument('--overview-predictor', type=int, choices=[1, 2, 3], dest='overview_predictor', help='Predictor for overviews. Default: same as --predictor.')
 
         masking = p.add_argument_group('masking and nodata')
-        masking.add_argument('-n', '--nodata', type=float_nodata, default=None, dest='nodata', help="NoData value for 'dem' or 'error' type. Default: inherited from the input file.")
+        masking.add_argument('-n', '--nodata', type=float_nodata, default=None, dest='nodata', help="NoData value, for any product type; 'nan' selects NaN. Default: inherited from the input file.")
         # default=None, not True: _resolve_defaults already supplies True (and forces
         # False for thematic), and argparse pre-empting it made every run look as though
         # the caller had asked for the value.
@@ -245,8 +245,8 @@ def build_parser() -> argparse.ArgumentParser:
     csv_group.add_argument('-c', '--csv-params', type=Path, metavar='PATH', dest='csv_path', help='Path to a CSV file with compression parameters to test.')
     csv_group.add_argument('-t', '--product-type', type=str.lower, choices=['dem', 'image', 'error', 'scientific', 'thematic'], dest='product_type', help='Use a preset template of compression parameters for the specified product type.')
     test_compression_parser.add_argument('--temp-dir', type=Path, default=None, metavar='PATH', dest='temp_dir', help='Directory for the temporary compressed GeoTIFFs; each run uses a run_* subdirectory of it. Default: a <input stem>_gttk_test directory beside the output workbook.')
-    test_compression_parser.add_argument('--log-file', type=Path, metavar='PATH', dest='log_file', help='Path to a log file for debugging. Default: no log file is written.')
-    test_compression_parser.add_argument('--delete-test-files', type=str2bool, default=True, metavar='BOOL', dest='delete_test_files', help='Delete temporary files after the test is complete.')
+    test_compression_parser.add_argument('--log-file', type=Path, metavar='PATH', dest='log_file', help='Path to a log file for debugging. Default: test_compression_debug.log in the temporary directory.')
+    test_compression_parser.add_argument('--delete-test-files', type=str2bool, default=True, metavar='BOOL', dest='delete_test_files', help='Delete the temporary compressed GeoTIFFs after the test. Default: True. Each candidate\'s comparison report stays in the run directory.')
     test_compression_parser.add_argument('--open-report', type=str2bool, default=True, metavar='BOOL', dest='open_report', help='Open the Excel report automatically after generation.')
     test_compression_parser.add_argument('--arc-mode', type=str2bool, default=False, metavar='BOOL', dest='arc_mode', help='Flag to indicate ArcPy execution mode.')
     test_compression_parser.add_argument('--optimize-script', type=Path, metavar='PATH', dest='optimize_script_path', help='Path to the optimize_compression.py script. Default: the installed gttk package is used directly.')
@@ -313,7 +313,7 @@ def build_parser() -> argparse.ArgumentParser:
         nargs='*',
         dest='sections',
         help='Specific sections to validate (e.g., tag geokey gdal xml). '
-             'If not provided, all sections with rules will be validated.'
+             'Default: all sections with rules.'
     )
     validate_parser.add_argument(
         '-n', '--name-filter',
@@ -323,7 +323,7 @@ def build_parser() -> argparse.ArgumentParser:
         help='Filter files by name substring when processing directories. '
              'Only files containing this string will be validated. '
              'Example: --name-filter DSM processes only files with "DSM" in the name. '
-             'Only applicable when --input is a directory.'
+             'Only applicable when --input is a directory. Default: no filter.'
     )
     validate_parser.add_argument(
         '-o', '--output-dir',
@@ -331,9 +331,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar='PATH',
         default=None,
         dest='output_dir',
-        help='Parent directory for validation output folder. '
-             'If not specified, creates {basename}_validation/ alongside input. '
-             'Output folder contains JSON results and optional HTML/MD reports.'
+        help='Parent directory for the validation output folder, which holds the JSON results '
+             'and the optional HTML/MD reports. Default: <basename>_validation/ beside the input.'
     )
     validate_parser.add_argument(
         '-w', '--write-reports',

@@ -279,7 +279,10 @@ That property is what everything else hangs off. `gttk/utils/cli_help.py` expose
 **When you change a default, change it in `optimize_constants.py` or `_resolve_defaults`
 and nowhere else.** Help text, the epilog table, the ArcGIS dialog and
 `--show-defaults` all follow. `tests/unit/test_cli_help.py` pins the epilog table and the
-README table to the resolver, so a hand-edit that disagrees fails the suite.
+README's profile table to the resolver, and `tests/unit/test_readme_option_tables.py` pins
+each subcommand's option table in the README to `build_parser()` -- the default column is
+what the option's own `Default:` clause says, or `Profile` when that varies by product type
+-- so a hand-edit that disagrees with either fails the suite.
 
 ### Known ArcGIS toolbox divergences
 

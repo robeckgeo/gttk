@@ -101,7 +101,7 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1690 tests total (1435 unit, 80 integration, 58 E2E, 10 benchmark smoke, 107 doctests -- 98 in `gttk/`
+1704 tests total (1449 unit, 80 integration, 58 E2E, 10 benchmark smoke, 107 doctests -- 98 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 328 validation tests
 - `tests/integration/` - Component interaction tests
@@ -186,6 +186,7 @@ Statistics accuracy:
 
 Documentation coverage:
 - `test_developer_guide.py` - runs DEVELOPER.md's two worked examples straight out of the markdown
+- `test_readme_option_tables.py` - every subcommand's option table in README.md against `build_parser()`: option, short flag, type, required, and the default as `--help` states it
 
 ## Key Dependencies
 - **GDAL** (>=3.11) - Core geospatial operations

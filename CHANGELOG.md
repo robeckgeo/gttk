@@ -80,6 +80,17 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **The README's option tables are pinned to the parser.** Each tool's table is now
+  compared, row by row, with `build_parser()` by `tests/unit/test_readme_option_tables.py`:
+  option, short flag, type, whether it is required, and the default exactly as `--help`
+  states it (`Profile` where that varies by product type). Bringing the tables into line
+  added the `--arc-mode` and `--optimize-script` rows `test` and `read` were missing, gave
+  `optimize-arc` a table of what it adds to `optimize`, listed it in the `--help` tour,
+  corrected `--mask-alpha`'s default (`True` except for thematic), `--level`'s (per codec,
+  not per product type) and `--show-defaults`'s type (an optional value), named the
+  `--baseline`/`--comparison` aliases, and replaced the `optimize-arc` command-log sample,
+  which showed four commands from v0.8.0 with one of them cut off mid-path, with the five
+  a real run stages today.
 - **The external XML metadata lookup is documented where it is used.** `gttk read`,
   `gttk validate`, `gttk optimize` and `gttk optimize-arc` look for `<stem>.xml`, then
   `<stem>_meta.xml`, beside the raster, then in its parent directory, then in a sibling
@@ -146,6 +157,13 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Help text that contradicted the code.** `--log-file` said no log is written by default;
+  `gttk test` always writes `test_compression_debug.log` in its temporary directory.
+  `--delete-test-files` said it deletes temporary files; it deletes the candidate rasters and
+  keeps each candidate's comparison report. `--nodata` claimed to apply to `dem` and `error`
+  only; every product type accepts it, and `nan` is a value. `--decimals` also takes `off`
+  and `keep`. `validate`'s `--sections`, `--name-filter` and `--output-dir` now state their
+  defaults.
 - **Rule files are read in name order.** The validation loader took `*.toml` files in
   whatever order the filesystem listed them, so which file answered for a product, and
   whether a broken file was reported before a match ended the search, differed from one

@@ -47,10 +47,10 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,690
+- **Total Tests**: 1,704
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,435 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,449 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 107 (98 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 80 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
@@ -105,9 +105,10 @@ tests/
 │   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,435)
+├── unit/                                        # Unit tests (1,449)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (99)
+│   ├── test_readme_option_tables.py             # README option tables pinned to the parser (14)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
 │   ├── test_i18n.py                             # Toolbox language detection & catalogs (67)
 │   ├── test_overview_control.py                 # Overview & thread control on the COG path (61)
