@@ -101,7 +101,7 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1750 tests total (1496 unit, 80 integration, 58 E2E, 10 benchmark smoke, 106 doctests -- 97 in `gttk/`
+1755 tests total (1501 unit, 80 integration, 58 E2E, 10 benchmark smoke, 106 doctests -- 97 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 326 validation tests
 - `tests/integration/` - Component interaction tests
@@ -182,6 +182,7 @@ tools are the conda environment's; skipped on Windows, where the real OSGeo4W is
 - `test_optimize_arc_on_linux.py` - `optimize-arc`'s orchestration end to end: a DEM to a COG with a compound CRS and PAM statistics, an RGBA image to an internal mask, an input named like a Python statement
 
 Statistics accuracy:
+- `test_statistics_passes.py` - `gttk optimize` computes statistics once for the write; `--report` is what adds the other two
 - `test_statistics_accuracy.py` - `OnlineStatistics` against NumPy, fed block by block
 - `test_statistics_phase2_accuracy.py` - the blocked path against NumPy and against the fast path on four rasters
 

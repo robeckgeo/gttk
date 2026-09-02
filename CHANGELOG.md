@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`gttk optimize` reads the raster once for the statistics it writes, not twice.**
+  `preprocess_geotiff` ended with a full statistics pass whose only product was
+  STATISTICS_* band metadata on the intermediate -- metadata in a domain that neither the
+  COG driver nor `CreateCopy` propagates, on a file deleted at the end of the run, holding
+  numbers the caller then computed a second time for the `.aux.xml`. For a raster too large
+  for memory that is a complete extra read: on a 4.9 gigapixel orthophoto, a quarter of an
+  hour. The output is byte-identical without it, in both the COG and the GeoTIFF paths, and
+  `tests/unit/test_statistics_passes.py` pins the count at one.
+
 ## [0.11.0] - 2026-09-02
 
 ### Security

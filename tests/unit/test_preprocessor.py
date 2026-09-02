@@ -795,8 +795,11 @@ class TestMainPreprocessingPipeline:
             assert compound_wkt2 is not None
             assert 'Test Local' in compound_wkt2
     
-    def test_preprocess_geotiff_statistics_embedded(self, mock_geotiff_info):
-        """Band statistics calculated and embedded in output."""
+    def test_preprocess_geotiff_computes_no_statistics(self, mock_geotiff_info):
+        """The preprocessor used to end with a full statistics pass over the intermediate,
+        writing STATISTICS_* into a metadata domain that neither the COG driver nor
+        CreateCopy propagates -- on a raster too large for memory that read cost as much as
+        the one the caller then made for the .aux.xml. The caller's pass is the only one."""
         args = Mock(spec=OptimizeArguments)
         args.algorithm = 'DEFLATE'
         args.product_type = 'dem'
@@ -808,39 +811,15 @@ class TestMainPreprocessingPipeline:
         args.raster_type = None
         args.geo_metadata = False
         args.discard_lsb = False
-        
+
         driver = gdal.GetDriverByName('MEM')
         original_ds = driver.Create('', 100, 100, 1, gdal.GDT_Float32)
-        
-        # Known data with calculable statistics
-        data = np.arange(10000, dtype=np.float32).reshape(100, 100)
-        original_ds.GetRasterBand(1).WriteArray(data)
-        
+        original_ds.GetRasterBand(1).WriteArray(np.arange(10000, dtype=np.float32).reshape(100, 100))
+
         with VirtualFileManager() as vfm:
             result_ds = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, None, {})
-            
-            # Check statistics metadata
-            band = result_ds.GetRasterBand(1)
-            stats = band.GetMetadata('STATISTICS')
-            
-            assert 'STATISTICS_MINIMUM' in stats
-            assert 'STATISTICS_MAXIMUM' in stats
-            assert 'STATISTICS_MEAN' in stats
-            assert 'STATISTICS_STDDEV' in stats
-            
-            # Verify values are reasonable
-            assert float(stats['STATISTICS_MINIMUM']) == 0.0
-            assert float(stats['STATISTICS_MAXIMUM']) == 9999.0
-            assert 4000.0 < float(stats['STATISTICS_MEAN']) < 5000.0
+            assert result_ds.GetRasterBand(1).GetMetadata('STATISTICS') == {}
 
-
-# ==============================================================================
-# CATEGORY 6: ERROR HANDLING TESTS (3 TESTS)
-# ==============================================================================
-
-class TestErrorHandling:
-    """Test error handling and robustness of preprocessing operations."""
-    
     def test_preprocess_geotiff_invalid_dataset_raises_error(self, mock_geotiff_info):
         """None or invalid dataset raises ProcessingStepFailedError."""
         args = Mock(spec=OptimizeArguments)

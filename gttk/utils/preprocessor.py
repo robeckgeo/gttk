@@ -32,7 +32,6 @@ from gttk.utils.geotiff_processor import remap_nodata_value, mask_nodata_value, 
 from gttk.utils.geo_metadata_writer import write_geo_metadata
 from gttk.utils.path_helpers import find_xml_metadata_file
 from gttk.utils.script_arguments import OptimizeArguments
-from gttk.utils.statistics import calculate_statistics
 
 logger = logging.getLogger(__name__)
 
@@ -528,19 +527,10 @@ def preprocess_geotiff(
         else:
             logger.info("XML metadata file not found. Skipping metadata embedding.")
 
-    # --- 8. Embed Statistics ---
-    stats = calculate_statistics(ds)
-    if stats:
-        for i, band_stats in enumerate(stats, 1):
-            band = ds.GetRasterBand(i)
-            if band:
-                stats_dict = {
-                    'STATISTICS_MINIMUM': str(band_stats.minimum),
-                    'STATISTICS_MAXIMUM': str(band_stats.maximum),
-                    'STATISTICS_MEAN': str(band_stats.mean),
-                    'STATISTICS_STDDEV': str(band_stats.std_dev),
-                }
-                band.SetMetadata(stats_dict, 'STATISTICS')
-
+    # The intermediate carried STATISTICS_* band metadata from here, computed by a full
+    # read of it. Nothing consumed that: the metadata sat in a named domain that neither
+    # the COG driver nor CreateCopy propagates, the intermediate is deleted at the end of
+    # the run, and the caller computes the same numbers again for the .aux.xml. The
+    # output is byte-identical without it; see tests/unit/test_statistics_passes.py.
     ds.FlushCache()
     return ds

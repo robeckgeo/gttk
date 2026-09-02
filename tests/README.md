@@ -47,10 +47,10 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,750
+- **Total Tests**: 1,755
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,496 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,501 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 106 (97 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 80 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
@@ -105,7 +105,7 @@ tests/
 │   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,496)
+├── unit/                                        # Unit tests (1,501)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (99)
 │   ├── test_readme_option_tables.py             # README option tables pinned to the parser (14)
@@ -153,6 +153,7 @@ tests/
 │   ├── test_toolbox_load.py                     # Loading the .pyt the way ArcGIS Pro does; PROJ under both names (9)
 │   ├── test_scratch_locations.py                # Scratch files never land in the working directory (4)
 │   ├── test_statistics_accuracy.py              # OnlineStatistics against NumPy, block by block (4)
+│   ├── test_statistics_passes.py                # optimize reads the raster once for statistics (5)
 │   ├── test_tiff_tag_parser.py                  # Unparsable tags stay, a missing lookup says so (4)
 │   ├── test_docs_pinned.py                      # Counts, markers, paths and dotted names in the docs, held to the tree (13)
 │   ├── test_developer_guide.py                  # DEVELOPER.md's worked examples, executed (3)
