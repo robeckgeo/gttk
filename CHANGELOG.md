@@ -34,6 +34,13 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Two validation scripts nothing ran are tests now.** `tests/validation/` held the checks
+  that Welford's accumulator reproduces NumPy and that the blocked statistics path reproduces
+  the fast path. pytest did not collect them and no document named them, so the second had
+  only ever been run by hand -- and it never called the comparison function it defined. They
+  are `tests/unit/test_statistics_accuracy.py` and
+  `tests/integration/test_statistics_phase2_accuracy.py`, with the comparison made for real;
+  that is what found the alpha-band difference under Fixed.
 - **The ArcGIS Pro path runs on Linux, against a fake OSGeo4W.** `gdal_runner` launches
   OSGeo4W's Python on a JSON payload of GDAL commands and resolves each one against
   `<OSGeo4W>/bin`, so outside Windows none of it ran, and its tests stubbed the functions
@@ -125,6 +132,12 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **An alpha band's statistics are the same whichever path computes them.** For a raster
+  small enough for the in-memory path -- nearly every RGBA image a report is run on -- the
+  alpha band was masked with itself, so a binary alpha reported a minimum of 255, a mean of
+  255, a standard deviation of zero and 80% valid pixels while its own histogram showed the
+  zeros. The blocked path for large files had never done that. Both now keep the alpha
+  band's own pixels in its statistics; the colour bands still exclude transparent pixels.
 - **`optimize-arc` no longer assumes OSGeo4W's Python is 3.12.** `gdal_runner` hard-coded
   `apps/Python312`, both for `PYTHONHOME` and for the `Scripts` directory that holds
   `gdal_calc.py`, so an OSGeo4W that ships a newer Python pointed the isolated interpreter at

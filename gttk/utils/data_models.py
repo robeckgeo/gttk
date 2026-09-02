@@ -757,7 +757,8 @@ class StatisticsBand:
     Attributes:
         band_name: Name or identifier of the band (e.g., 'Band 1', 'Red')
         valid_percent: Percentage of valid (non-NoData) pixels
-        valid_count: Number of valid pixels (non-NoData, unmasked, alpha != 0)
+        valid_count: Number of valid pixels: non-NoData, unmasked, and for a colour band
+            alpha != 0. An alpha band's own statistics cover all of its pixels.
         mask_count: Number of pixels with transparency mask
         alpha_0_count: Number of pixels with alpha value 0
         nodata_count: Number of NoData pixels

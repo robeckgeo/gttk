@@ -47,12 +47,12 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,651
+- **Total Tests**: 1,667
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,419 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,423 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 106 (97 in `gttk/`, 9 in `tests/`)
-  - Integration Tests: 68 tests (metadata workflows, statistics validation)
+  - Integration Tests: 80 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
 
 Counts here and in the tree below are from `pytest --collect-only`; doctests
@@ -104,7 +104,7 @@ tests/
 │   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,419)
+├── unit/                                        # Unit tests (1,423)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (99)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
@@ -148,6 +148,7 @@ tests/
 │   ├── test_pytest_config.py                    # Coverage opt-in & the CI policy pinned (6)
 │   ├── test_toolbox_load.py                     # Loading the .pyt the way ArcGIS Pro does (6)
 │   ├── test_scratch_locations.py                # Scratch files never land in the working directory (4)
+│   ├── test_statistics_accuracy.py              # OnlineStatistics against NumPy, block by block (4)
 │   ├── test_tiff_tag_parser.py                  # Unparsable tags stay, a missing lookup says so (4)
 │   ├── test_developer_guide.py                  # DEVELOPER.md's worked examples, executed (3)
 │   ├── test_gdal_runner.py                      # gdal_runner's stdout protocol and its timeout (4)
@@ -156,10 +157,11 @@ tests/
 │   ├── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
 │   ├── test_compare_compression.py              # compare releases both datasets on every path (1)
 │   └── test_statistics_nodata_warnings.py       # An unreadable per-band NoData is reported (1)
-├── integration/                                 # Integration tests (68)
+├── integration/                                 # Integration tests (80)
 │   ├── test_validation_integration.py           # End-to-end validation workflows (20)
 │   ├── test_installed_wheel.py                  # GTTK works from an installed wheel (6)
 │   ├── test_metadata_workflow.py                # Metadata extraction workflows (13)
+│   ├── test_statistics_phase2_accuracy.py       # Blocked path against NumPy and the fast path (12)
 │   ├── test_gdal_runner_fake_osgeo4w.py         # gdal_runner run for real through a fake OSGeo4W (8)
 │   ├── test_optimize_arc_on_linux.py            # optimize-arc's orchestration, end to end, on Linux (3)
 │   ├── test_statistics_blocked_path.py          # Block-based statistics (9)
@@ -170,11 +172,8 @@ tests/
 │   ├── test_optimize_command.py                 # `gttk optimize` (14)
 │   ├── test_test_command.py                     # `gttk test` (8)
 │   └── test_validate_command.py                 # `gttk validate`, run from outside the repo (4)
-├── benchmarks/                                  # Not collected by pytest
-│   └── benchmark_statistics.py                  # Statistics performance benchmarks
-└── validation/                                  # Not collected by pytest
-    ├── validate_block_statistics_accuracy.py    # Block-statistics accuracy script
-    └── validate_phase2_accuracy.py              # Phase 2 accuracy script
+└── benchmarks/                                  # Not collected by pytest
+    └── benchmark_statistics.py                  # Statistics performance benchmarks
 ```
 
 ---
