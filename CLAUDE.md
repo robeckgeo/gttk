@@ -101,11 +101,12 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1667 tests total (1423 unit, 80 integration, 58 E2E, 106 doctests -- 97 in `gttk/`
+1677 tests total (1423 unit, 80 integration, 58 E2E, 10 benchmark smoke, 106 doctests -- 97 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 328 validation tests
 - `tests/integration/` - Component interaction tests
 - `tests/e2e/` - Full CLI workflow tests
+- `tests/benchmarks/` - The statistics benchmarks, hand-run at full size, and a smoke test that runs each at 256×256
 - `tests/fixtures/` - Mock GeoTIFF factory (`mock_geotiff_factory.py`) and the fake OSGeo4W tree (`fake_osgeo4w.py`)
 - `tests/conftest.py` - Mock GeoTIFF fixtures and assertion formatting
 - `conftest.py` (repo root) - `PROJ_LIB` bootstrap, `gdal.UseExceptions()`, and the doctest sandbox

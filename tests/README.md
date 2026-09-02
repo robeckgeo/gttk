@@ -47,13 +47,14 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,667
+- **Total Tests**: 1,677
 - **Success Rate**: 100%
 - **Test Categories**:
   - Unit Tests: 1,423 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 106 (97 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 80 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
+  - Benchmark smoke tests: 10 tests (every statistics benchmark, once at 256×256)
 
 Counts here and in the tree below are from `pytest --collect-only`; doctests
 live in the source modules and are not listed per file.
@@ -172,8 +173,9 @@ tests/
 │   ├── test_optimize_command.py                 # `gttk optimize` (14)
 │   ├── test_test_command.py                     # `gttk test` (8)
 │   └── test_validate_command.py                 # `gttk validate`, run from outside the repo (4)
-└── benchmarks/                                  # Not collected by pytest
-    └── benchmark_statistics.py                  # Statistics performance benchmarks
+└── benchmarks/                                  # Statistics benchmarks and their smoke test (10)
+    ├── benchmark_statistics.py                  # Hand-run: python -m tests.benchmarks.benchmark_statistics
+    └── test_benchmarks_smoke.py                 # Every benchmark once at 256×256 (10)
 ```
 
 ---

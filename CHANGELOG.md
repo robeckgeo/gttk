@@ -41,6 +41,14 @@ All notable changes to this project will be documented in this file.
   are `tests/unit/test_statistics_accuracy.py` and
   `tests/integration/test_statistics_phase2_accuracy.py`, with the comparison made for real;
   that is what found the alpha-band difference under Fixed.
+- **The statistics benchmarks run once, small, on every test run.**
+  `tests/benchmarks/benchmark_statistics.py` is a hand-run tool whose default sizes take
+  minutes and gigabytes. Nothing imported it, so the functions it calls could change under
+  it unnoticed, and its docstring named a module that did not exist. Every benchmark now
+  takes its sizes as parameters and returns what it measured, and
+  `tests/benchmarks/test_benchmarks_smoke.py` runs each at 256×256. The near-binary alpha
+  the classifier is shown carries 0.5% artifacts rather than 1%, which sat exactly on the
+  classifier's 99% threshold and came out either way depending on the draw.
 - **The ArcGIS Pro path runs on Linux, against a fake OSGeo4W.** `gdal_runner` launches
   OSGeo4W's Python on a JSON payload of GDAL commands and resolves each one against
   `<OSGeo4W>/bin`, so outside Windows none of it ran, and its tests stubbed the functions
