@@ -113,6 +113,19 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Failures inside the extractors are reported, not rendered as clean results.** A crash
+  in the COG validator came back as no validation at all, which the report showed as a
+  file without issues; it is now an error entry, "Validation could not run". An IFD field
+  that could not be read (block size, byte counts, dimensions, band count, compressed
+  size) showed a blank cell indistinguishable from a file that has no such value; the
+  cells stay blank and one warning per IFD names the fields and why. A TIFF tag that could
+  not be parsed vanished from the Tags table with a debug line; it stays, valued
+  "(unparsed)" with the reason. When the tag lookup file itself is missing, every unnamed
+  tag now says "tag lookup unavailable" instead of presenting a broken installation as a
+  file full of unknown tags. A file a batch drops because GDAL cannot open it, or because
+  the georeferencing check raised, is logged at warning rather than debug. And
+  `gttk validate` records the compression algorithm as "unknown", not "NONE", when it has
+  no dataset to ask.
 - **Handles and scratch files are released on the failure paths too.** `MetadataExtractor`
   opened the GDAL dataset and then the TIFF; if the second raised, the context manager never
   exited and the dataset -- a lock on the file, on Windows -- outlived the failure. The

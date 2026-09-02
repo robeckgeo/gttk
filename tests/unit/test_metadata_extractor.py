@@ -1044,3 +1044,61 @@ class TestEnterReleasesOnFailure:
         with pytest.raises(RuntimeError, match='refused'):
             extractor.__enter__()
         assert extractor.gdal_ds is None
+
+
+class TestFailuresAreReportedNotHidden:
+    """A crash inside an extractor used to render as "no issues" or as blank cells."""
+
+    @pytest.fixture
+    def raster(self, tmp_path):
+        from tests.fixtures.mock_geotiff_factory import MockGeoTIFF
+        path = tmp_path / 'x.tif'
+        MockGeoTIFF(width=32, height=32, crs='EPSG:32610').save_to_file(path)
+        return path
+
+    def test_a_cog_validation_that_crashes_is_an_error_not_a_pass(self, raster, monkeypatch, caplog):
+        import logging
+        import gttk.utils.metadata_extractor as me
+
+        def broken(*args, **kwargs):
+            raise RuntimeError('validator blew up')
+
+        monkeypatch.setattr(me, 'validate_cog', broken)
+        with me.MetadataExtractor(raster) as extractor, caplog.at_level(logging.WARNING):
+            result = extractor.validate_cog()
+        assert result is not None and not result.is_valid()
+        assert result.errors == ['Validation could not run: validator blew up']
+        assert 'could not run' in caplog.text
+
+    def test_an_ifd_field_that_cannot_be_read_is_reported_once(self, raster, monkeypatch, caplog):
+        """Make the raw byte-count read fail: the row still renders, with one warning
+        naming the field."""
+        import logging
+        import gttk.utils.metadata_extractor as me
+
+        def broken(tif, page_index, code):
+            raise RuntimeError('byte counts unreadable')
+
+        # The byte counts are only read for a compressed IFD (an uncompressed one is 0%).
+        from tests.fixtures.mock_geotiff_factory import MockGeoTIFF
+        compressed = raster.with_name('deflate.tif')
+        MockGeoTIFF(width=32, height=32, crs='EPSG:32610', compression='DEFLATE').save_to_file(compressed)
+        monkeypatch.setattr(me, '_raw_tag_value', broken)
+        with me.MetadataExtractor(compressed) as extractor, caplog.at_level(logging.WARNING):
+            table = extractor.extract_ifd_info()
+        assert table is not None and len(table) >= 1
+        assert 'could not be read and show as N/A' in caplog.text
+        assert 'byte counts' in caplog.text and 'byte counts unreadable' in caplog.text
+
+    def test_an_ifd_table_that_cannot_be_built_says_so(self, raster, monkeypatch, caplog):
+        import logging
+        from gttk.utils.tiff_tag_parser import TiffTagParser
+        import gttk.utils.metadata_extractor as me
+
+        def broken(self, page_index=0, tag_scope='complete'):
+            raise RuntimeError('tags unreadable')
+
+        monkeypatch.setattr(TiffTagParser, 'get_tags', broken)
+        with me.MetadataExtractor(raster) as extractor, caplog.at_level(logging.WARNING):
+            assert extractor.extract_ifd_info() is None
+        assert 'IFD table unavailable' in caplog.text

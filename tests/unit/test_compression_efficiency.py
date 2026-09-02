@@ -184,3 +184,13 @@ class TestBaselineScratchDirectory:
         efficiency = gp.calculate_compression_efficiency(str(deflate), generate_baseline=True)
         assert efficiency is not None and 0 < efficiency < 100
         assert self._baseline_dirs() == before
+
+
+class TestAlgorithmNaming:
+
+    def test_validate_says_unknown_when_it_has_no_dataset(self, deflate):
+        """'NONE' means uncompressed; a dataset that would not open is not that."""
+        with MetadataExtractor(deflate) as extractor:
+            extractor.gdal_ds = None
+            info = vm.extract_compression_info(extractor, deflate)
+        assert info['algorithm'] == 'unknown'

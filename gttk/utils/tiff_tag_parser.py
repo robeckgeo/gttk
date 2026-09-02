@@ -46,6 +46,7 @@ def _load_tiff_tag_lookup() -> tuple[Dict[int, str], Dict[int, str]]:
     Returns:
         Tuple of (TIFF_TAGS dict, EXIF_RELATED_TAGS dict)
     """
+    global TAG_LOOKUP_ERROR
     # Path to the JSON lookup file
     lookup_file = resources.files('gttk.resources.tiff').joinpath('tiff_tag_lookup.json')
     
@@ -75,8 +76,8 @@ def _load_tiff_tag_lookup() -> tuple[Dict[int, str], Dict[int, str]]:
         return tiff_tags, exif_tags
         
     except FileNotFoundError:
-        logger.warning(f"TIFF tag lookup file not found: {lookup_file}")
-        logger.warning("Falling back to minimal tag definitions")
+        TAG_LOOKUP_ERROR = f"tag lookup file not found: {lookup_file}"
+        logger.error(f"TIFF {TAG_LOOKUP_ERROR}; only four tags can be named")
         # Return minimal fallback definitions
         return {
             256: 'ImageWidth',
@@ -85,11 +86,28 @@ def _load_tiff_tag_lookup() -> tuple[Dict[int, str], Dict[int, str]]:
             259: 'Compression',
         }, {}
     except Exception as e:
-        logger.error(f"Error loading TIFF tag lookup: {e}")
+        TAG_LOOKUP_ERROR = f"tag lookup could not be loaded: {e}"
+        logger.error(f"TIFF {TAG_LOOKUP_ERROR}; no tag can be named")
         return {}, {}
+
+
+#: Why the tag lookup is missing, when it is. A report then says so in every tag name it
+#: cannot resolve, rather than presenting a broken installation as a file full of
+#: unknown tags.
+TAG_LOOKUP_ERROR: Optional[str] = None
 
 # Load TIFF tag definitions from the Library of Congress-based lookup file
 TIFF_TAGS, EXIF_RELATED_TAGS = _load_tiff_tag_lookup()
+
+
+def tag_name_for(code: int) -> str:
+    """The name of TIFF tag ``code``, or an "unknown" that says whether the lookup was there."""
+    name = TIFF_TAGS.get(code)
+    if name:
+        return name
+    if TAG_LOOKUP_ERROR:
+        return f'UnknownTag ({code}; tag lookup unavailable)'
+    return f'UnknownTag ({code})'
 
 # Tag value interpretation mappings
 TAG_VALUE_MAPPINGS = {
@@ -604,7 +622,7 @@ class TiffTagParser:
         for tag in page_tags:
             if tag_scope == 'compact' and tag.code in EXCLUDED_TAGS:
                 continue
-            tag_name = TIFF_TAGS.get(tag.code, f'UnknownTag ({tag.code})')
+            tag_name = tag_name_for(tag.code)
             try:
                 raw_value = deepcopy(tag.value)
                 fundamental_value: Any
@@ -708,7 +726,14 @@ class TiffTagParser:
                     interpretation=interpretation,
                 ))
             except Exception as e:
-                logger.warning(f"Skipping tag {tag.code} ({tag_name}) due to parsing error: {e}")
+                # Keep the tag in the table, marked, rather than making it vanish.
+                logger.warning(f"Tag {tag.code} ({tag_name}) could not be parsed and is shown as unparsed: {e}")
+                tags_info.append(TiffTag(
+                    code=tag.code,
+                    name=tag_name,
+                    value='(unparsed)',
+                    interpretation=f"unparsed: {e}",
+                ))
                 continue
 
         if not tags_info:

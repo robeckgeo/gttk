@@ -54,6 +54,13 @@ GDAL_METADATA_TAG = 42112
 GEO_METADATA_TAG = 50909
 XMP_TAG = 700
 
+def _raw_tag_value(tif: tifffile.TiffFile, page_index: int, code: int) -> Any:
+    """The raw tifffile value of tag ``code`` on page ``page_index``, or None if absent."""
+    page_tags = getattr(tif.pages[page_index], 'tags', None)
+    raw_tag = page_tags.get(code) if page_tags is not None else None
+    return raw_tag.value if raw_tag is not None else None
+
+
 class MetadataExtractor:
     """Orchestrates the extraction of metadata from a GeoTIFF file."""
 
@@ -370,8 +377,10 @@ class MetadataExtractor:
                 details=details,
                 headers_size=headers_size
             )
-        except Exception:
-            return None
+        except Exception as e:
+            # A crash in the validator is not "no issues": report it as one.
+            logger.warning(f"COG validation could not run for {self.filepath.name}: {e}")
+            return CogValidation(errors=[f"Validation could not run: {e}"])
 
     def extract_esri_pe_string(self) -> Optional[WktString]:
         """Extracts the ESRI_PE_STRING as a multiline WKT string."""
@@ -670,6 +679,7 @@ class MetadataExtractor:
             num_pages = len(tiff.tif.pages)
 
             for i in range(num_pages):
+                problems: List[str] = []   # fields that could not be read for this IFD
                 tags_list = tiff.get_tags(page_index=i)
                 tags = {tag.code: tag for tag in tags_list}
 
@@ -810,7 +820,8 @@ class MetadataExtractor:
                             if h > 0:
                                 rps_val = min(max(rps_val, 1), h)
                             block_size_str = f'{w} x {rps_val}'
-                        except Exception:
+                        except Exception as e:
+                            problems.append(f'block size ({e})')
                             block_size_str = ''
                 
                 # Final fallback for block size if still empty
@@ -824,8 +835,8 @@ class MetadataExtractor:
                             if ovr:
                                 bx, by = ovr.GetBlockSize()
                                 block_size_str = f'{bx} x {by}'
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        problems.append(f'block size from GDAL ({e})')
 
                 compression_str = 'N/A'
                 ratio_str = 'N/A'
@@ -839,15 +850,10 @@ class MetadataExtractor:
                         byte_counts_tag_code = 325 if is_ifd_tiled else 279
                         raw_byte_counts = None
                         try:
-                            # Access the underlying tifffile page tag value directly to avoid
-                            # the summarized/display text that TiffTagParser produces
-                            page_obj = tiff.tif.pages[i]
-                            page_tags = getattr(page_obj, 'tags', None)
-                            raw_tag = page_tags.get(byte_counts_tag_code) if page_tags is not None else None
-                            if raw_tag is not None:
-                                raw_byte_counts = raw_tag.value
-                        except Exception:
-                            raw_byte_counts = None
+                            # The raw tifffile value, not the summarized text TiffTagParser shows
+                            raw_byte_counts = _raw_tag_value(tiff.tif, i, byte_counts_tag_code)
+                        except Exception as e:
+                            problems.append(f'byte counts ({e})')
 
                         # Fall back to the parsed/display value only if raw access failed
                         byte_counts_tag = tags.get(byte_counts_tag_code)
@@ -857,13 +863,15 @@ class MetadataExtractor:
                         try:
                             w_val = int(width) if width is not None else int(ds.RasterXSize)
                             h_val = int(height) if height is not None else int(ds.RasterYSize)
-                        except Exception:
+                        except Exception as e:
+                            problems.append(f'dimensions ({e})')
                             w_val = None
                             h_val = None
 
                         try:
                             bands_val = int(band_count) if band_count is not None else None
-                        except Exception:
+                        except Exception as e:
+                            problems.append(f'band count ({e})')
                             bands_val = None
 
                         if byte_counts and w_val and h_val and bands_val and bit_count:
@@ -873,7 +881,8 @@ class MetadataExtractor:
                             else:
                                 try:
                                     bits_per_sample = int(bit_count)
-                                except Exception:
+                                except Exception as e:
+                                    problems.append(f'bits per sample ({e})')
                                     bits_per_sample = None
 
                             # Compute compressed size
@@ -883,7 +892,8 @@ class MetadataExtractor:
                                 # If it's a single int/float
                                 try:
                                     compressed_size = int(byte_counts)
-                                except Exception:
+                                except Exception as e:
+                                    problems.append(f'compressed size ({e})')
                                     compressed_size = None
 
                             if bits_per_sample and compressed_size is not None:
@@ -892,9 +902,9 @@ class MetadataExtractor:
                                     efficiency = (1 - (compressed_size / uncompressed_size)) * 100
                                     ratio_str = f"{(100 / (100 - efficiency)):.2f}x"
                                     compression_str = f"{efficiency:.2f}%"
-                except Exception:
-                    # Swallow errors here but leave compression_str & ratio_str as 'N/A'
-                    pass
+                except Exception as e:
+                    # compression_str and ratio_str stay 'N/A', and the reader is told why
+                    problems.append(f'compression ({e})')
 
                 lerc_mze_str = ""
                 has_lerc_mze = False
@@ -911,6 +921,9 @@ class MetadataExtractor:
                     if not predictor_unsupported and any(k in algo_low for k in ["lzw", "deflate", "zstd"]):
                         predictor_display = "None"
                 
+                if problems:
+                    logger.warning(f"{self.filepath.name}: IFD {i} fields could not be read and show as N/A: "
+                                   + '; '.join(problems))
                 ifds.append(IfdInfo(
                     ifd=i,
                     ifd_type=self._get_ifd_type_from_tags(tags_list, i),
@@ -928,7 +941,8 @@ class MetadataExtractor:
                     ratio=ratio_str
                 ))
 
-        except Exception:
+        except Exception as e:
+            logger.warning(f"IFD table unavailable for {self.filepath.name}: {e}")
             return None
         finally:
             if tiff:

@@ -423,9 +423,11 @@ def extract_compression_info(extractor: MetadataExtractor, filepath: Path) -> Di
     Returns:
         Dict containing compression info
     """
-    algorithm = 'NONE'
     if extractor.gdal_ds:
+        # GDAL reports no COMPRESSION item for an uncompressed GeoTIFF, so None is "NONE" here.
         algorithm = extractor.gdal_ds.GetMetadataItem('COMPRESSION', 'IMAGE_STRUCTURE') or 'NONE'
+    else:
+        algorithm = 'unknown'
 
     # Calculate efficiency
     # None means the efficiency could not be determined; 0.0 is a real answer (an

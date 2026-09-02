@@ -519,7 +519,7 @@ def is_geotiff(filepath: Path) -> bool:
         gdal.PopErrorHandler()
 
         if ds is None:
-            logger.debug(f"is_geotiff: GDAL could not open file: {filepath}")
+            logger.warning(f"{filepath}: GDAL could not open it; skipped")
             return False
 
         # 1. Check if the driver is for the TIFF format
@@ -555,7 +555,8 @@ def is_geotiff(filepath: Path) -> bool:
         return False
 
     except Exception as e:
-        logger.debug(f"is_geotiff: Exception during check: {e}")
+        # A file dropped from a batch for an error should not be dropped in silence.
+        logger.warning(f"{filepath}: could not be checked for georeferencing and is skipped: {e}")
         # Ensure the dataset is closed if an error occurs after opening
         ds = None
         return False

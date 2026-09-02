@@ -109,3 +109,19 @@ class TestSidecarSearchOrder:
     def test_nothing_further_afield(self, tree):
         (tree.parent.parent.parent / 'tile.xml').write_text('<a/>')
         assert ph.find_xml_metadata_file(tree) is None
+
+
+class TestBatchCollection:
+
+    def test_a_file_gdal_cannot_open_is_skipped_with_a_warning(self, tmp_path, caplog):
+        """A batch used to drop such a file at debug level, so a run over a directory
+        could quietly test fewer files than it was given."""
+        import logging
+        from pathlib import Path
+        from tests.fixtures.mock_geotiff_factory import MockGeoTIFF
+        MockGeoTIFF(width=16, height=16, crs='EPSG:32610').save_to_file(tmp_path / 'ok.tif')
+        (tmp_path / 'bad.tif').write_bytes(b'not a raster')
+        with caplog.at_level(logging.WARNING):
+            found = ph.get_geotiff_files(str(tmp_path))
+        assert [Path(f).name for f in found] == ['ok.tif']
+        assert 'bad.tif' in caplog.text and 'skipped' in caplog.text
