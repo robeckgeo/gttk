@@ -26,6 +26,7 @@ import gttk.utils.cli_help as ch
 from gttk.utils.cli_help import GttkHelpFormatter, ShowDefaultsAction
 from osgeo import gdal
 from gttk.utils.script_arguments import CompareArguments, ReadArguments, OptimizeArguments, TestArguments, ValidateArguments
+from gttk.utils.validation.loader import bundled_rules_dir
 
 
 def _check_proj_env() -> None:
@@ -291,9 +292,10 @@ def build_parser() -> argparse.ArgumentParser:
         '-r', '--rules-dir',
         type=Path,
         metavar='PATH',
-        default=Path('gttk/resources/rules'),
+        default=bundled_rules_dir(),
         dest='rules_dir',
-        help='Directory containing TOML validation rule files.'
+        help='Directory containing TOML validation rule files. '
+             'Default: the rules bundled with GTTK.'
     )
     validate_parser.add_argument(
         '-s', '--sections',

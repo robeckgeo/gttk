@@ -1,6 +1,6 @@
 # GeoTIFF Toolkit - Testing Guide
 
-**Status**: ✅ **1,437 tests passing** | **Doctests enabled** | **Production Ready**
+**Status**: ✅ **1,445 tests passing** | **Doctests enabled** | **Production Ready**
 
 This guide provides comprehensive information about testing GTTK (GeoTIFF ToolKit).
 
@@ -47,13 +47,13 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,437
+- **Total Tests**: 1,445
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,236 tests (models, processors, extractors, formatters, utilities)
-  - Doctests: 97 (88 in `gttk/`, 9 in `tests/`)
+  - Unit Tests: 1,240 tests (models, processors, extractors, formatters, utilities)
+  - Doctests: 98 (89 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 51 tests (metadata workflows, statistics validation)
-  - E2E Tests: 53 tests (CLI commands)
+  - E2E Tests: 56 tests (CLI commands)
 
 > The per-file counts in the directory tree below have not been kept current and are
 > indicative only. The category totals above are from `pytest --collect-only`.

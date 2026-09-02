@@ -99,7 +99,7 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1437 tests total (1236 unit, 51 integration, 53 E2E, 97 doctests -- 88 in `gttk/`
+1445 tests total (1240 unit, 51 integration, 56 E2E, 98 doctests -- 89 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 328 validation tests
 - `tests/integration/` - Component interaction tests
@@ -135,7 +135,7 @@ House rules, learned from the 52 examples that had to be repaired:
   `WindowsPath(...)` on Windows, and this project ships an ArcGIS Pro toolbox.
   Compare `p.name` or `p.as_posix()` instead.
 - **No repo-relative paths.** `Path('gttk/resources/rules')` only resolves when
-  pytest happens to run from the repo root; derive it from `gttk.__file__`.
+  pytest happens to run from the repo root; use `bundled_rules_dir()`.
 - **Format floats explicitly** - `f"{x:.4f}"`, not a bare repr.
 - **Sort anything unordered** before printing it.
 - **Loop bodies use `...`, not `>>>`.**

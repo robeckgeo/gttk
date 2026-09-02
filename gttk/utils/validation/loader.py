@@ -22,6 +22,7 @@ Functions:
 
 import logging
 import tomllib
+from importlib import resources
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -42,6 +43,22 @@ KEY_FIELD_MAP = {
 
 # Valid section types
 VALID_SECTIONS = list(KEY_FIELD_MAP.keys())
+
+
+def bundled_rules_dir() -> Path:
+    """
+    The directory of rule files that ships inside the package.
+
+    This is the default for ``gttk validate --rules-dir`` and for the toolbox's
+    Rules Directory parameter. It is located through the package rather than the
+    working directory, so the default holds wherever GTTK is run from and
+    whether it is a checkout or an installed wheel.
+
+    Example:
+        >>> sorted(p.name for p in bundled_rules_dir().glob('*.toml'))
+        ['example_rules.toml']
+    """
+    return Path(str(resources.files('gttk.resources').joinpath('rules')))
 
 
 def load_validation_rules(
@@ -70,8 +87,7 @@ def load_validation_rules(
         ValueError: If product not found or duplicate products detected
 
     Example:
-        >>> import gttk
-        >>> rules_dir = Path(gttk.__file__).parent / 'resources' / 'rules'
+        >>> rules_dir = bundled_rules_dir()
         >>> rules, filename = load_validation_rules(
         ...     rules_dir,
         ...     'DGED5',
@@ -244,8 +260,7 @@ def get_available_products(rules_dir: Path) -> Dict[str, str]:
         ValueError: If duplicate products are detected
 
     Example:
-        >>> import gttk
-        >>> rules_dir = Path(gttk.__file__).parent / 'resources' / 'rules'
+        >>> rules_dir = bundled_rules_dir()
         >>> products = get_available_products(rules_dir)
         >>> products['DGED5']
         'example_rules.toml'

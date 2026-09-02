@@ -158,7 +158,7 @@ try:
     from gttk.utils.cli_help import probe_defaults
     from gttk.utils.script_arguments import OptimizeArguments, CompareArguments, TestArguments, ReadArguments, ValidateArguments
     from gttk.utils.validation import get_available_products
-    from gttk.utils.validation.loader import VALID_SECTIONS as VALIDATION_SECTIONS
+    from gttk.utils.validation.loader import VALID_SECTIONS as VALIDATION_SECTIONS, bundled_rules_dir
 except ImportError as e:
     missing = getattr(e, 'name', None)
     if isinstance(e, ModuleNotFoundError) and missing and not missing.startswith('gttk'):
@@ -1649,11 +1649,8 @@ class ValidateMetadata:
             datatype="DEFolder",
             parameterType="Optional",
             direction="Input")
-        # Set default to gttk/resources/rules relative to toolbox
-        project_root = Path(__file__).parent.parent
-        default_rules_path = project_root / "gttk" / "resources" / "rules"
-        if default_rules_path.exists():
-            param_rules_dir.value = str(default_rules_path)
+        # The rules that ship with the package, wherever it was imported from.
+        param_rules_dir.value = str(bundled_rules_dir())
 
         # --- Parameter 2: Product ---
         param_product = arcpy.Parameter(
@@ -1863,7 +1860,7 @@ class ValidateMetadata:
             # Build arguments
             args = ValidateArguments(
                 input_path=Path(input_path),
-                rules_dir=Path(rules_dir) if rules_dir else Path('gttk/resources/rules'),
+                rules_dir=Path(rules_dir) if rules_dir else bundled_rules_dir(),
                 product=product,
                 sections=sections_list,
                 name_filter=name_filter,

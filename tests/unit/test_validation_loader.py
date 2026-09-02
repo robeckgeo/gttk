@@ -22,6 +22,7 @@ Organization:
 - Conflict detection is thoroughly tested
 """
 
+import dataclasses
 import pytest
 from pathlib import Path
 import tempfile
@@ -33,6 +34,7 @@ from gttk.utils.validation.loader import (
     get_available_products,
     get_product_metadata,
     KEY_FIELD_MAP,
+    bundled_rules_dir,
 )
 from gttk.utils.validation.models import ValidationRule
 
@@ -515,3 +517,31 @@ class TestKeyFieldMap:
         assert KEY_FIELD_MAP['xmp'] == 'xpath'
         assert KEY_FIELD_MAP['xml'] == 'xpath'
         assert KEY_FIELD_MAP['projjson'] == 'jsonpath'
+
+
+class TestBundledRulesDir:
+    """The default rules directory is located through the package, not the cwd."""
+
+    def test_is_the_packaged_rules_directory(self):
+        import gttk
+        assert bundled_rules_dir() == Path(gttk.__file__).parent / 'resources' / 'rules'
+
+    def test_is_absolute_and_holds_the_shipped_rules(self):
+        rules_dir = bundled_rules_dir()
+        assert rules_dir.is_absolute()
+        assert rules_dir.is_dir()
+        assert 'example_rules.toml' in {p.name for p in rules_dir.glob('*.toml')}
+
+    def test_does_not_depend_on_the_working_directory(self, tmp_path, monkeypatch):
+        before = bundled_rules_dir()
+        monkeypatch.chdir(tmp_path)
+        assert bundled_rules_dir() == before
+
+    def test_validate_arguments_default_to_it(self):
+        """
+        Read off the dataclass field rather than constructing ValidateArguments,
+        whose __post_init__ demands a real input file.
+        """
+        from gttk.utils.script_arguments import ValidateArguments
+        field = {f.name: f for f in dataclasses.fields(ValidateArguments)}['rules_dir']
+        assert field.default_factory() == bundled_rules_dir()

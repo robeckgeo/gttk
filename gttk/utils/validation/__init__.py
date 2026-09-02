@@ -34,7 +34,9 @@ from gttk.utils.validation.models import (
     get_section_display_name,
     get_section_icon,
 )
-from gttk.utils.validation.loader import load_validation_rules, parse_rule, get_available_products
+from gttk.utils.validation.loader import (
+    load_validation_rules, parse_rule, get_available_products, bundled_rules_dir
+)
 from gttk.utils.validation.constraints import (
     validate_exact,
     validate_enum,
@@ -70,6 +72,7 @@ __all__ = [
     'load_validation_rules',
     'parse_rule',
     'get_available_products',
+    'bundled_rules_dir',
     # Constraints
     'validate_exact',
     'validate_enum',

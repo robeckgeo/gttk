@@ -318,6 +318,12 @@ class ReadArguments(BaseArguments):
     write_pam_xml: bool = True
 
 
+def _bundled_rules_dir() -> Path:
+    """The packaged rule files; imported lazily, as generate_output_paths is below."""
+    from gttk.utils.validation.loader import bundled_rules_dir
+    return bundled_rules_dir()
+
+
 @dataclass
 class ValidateArguments(BaseArguments):
     """
@@ -339,7 +345,7 @@ class ValidateArguments(BaseArguments):
         gpkg_output_path: Computed path to GeoPackage output file (set in __post_init__)
     """
     product: Optional[str] = None
-    rules_dir: Path = field(default_factory=lambda: Path('gttk/resources/rules'))
+    rules_dir: Path = field(default_factory=lambda: _bundled_rules_dir())
     sections: Optional[List[str]] = None
     name_filter: str = ''
     output_dir: Optional[Path] = None

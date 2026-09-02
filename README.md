@@ -514,7 +514,7 @@ Rules are defined in TOML format and organized by data product (e.g., 3DEP, NAIP
 | -------- | ----- | ---- | -------- | ------- | ----------- |
 | `--input` | `-i` | Path | Yes | - | Input GeoTIFF file or directory to validate |
 | `--product` | `-p` | str | Yes | - | Product name to validate against (must exist in rules file) |
-| `--rules-dir` | `-r` | Path | No | `gttk/resources/rules` | Directory containing TOML validation rule files |
+| `--rules-dir` | `-r` | Path | No | bundled with GTTK | Directory containing TOML validation rule files |
 | `--sections` | `-s` | str[] | No | All | Specific sections to validate (e.g., `tag geokey gdal`) |
 | `--name-filter` | `-n` | str | No | - | Filter files by name substring (directory mode only) |
 | `--output-dir` | `-o` | Path | No | Auto | Parent directory for validation output folder |
@@ -956,17 +956,17 @@ distance = (100 - quality) × 0.1
 
 ## Testing
 
-GTTK includes a comprehensive test suite with **1,437 tests** covering unit, integration, end-to-end, and validation scenarios. The testing infrastructure ensures code quality, reliability, and maintainability for professional use in enterprise and government environments.
+GTTK includes a comprehensive test suite with **1,445 tests** covering unit, integration, end-to-end, and validation scenarios. The testing infrastructure ensures code quality, reliability, and maintainability for professional use in enterprise and government environments.
 
 ### Test Suite Overview
 
 | Category | Test Count | Percentage | Description |
 | -------- | --------- | ---------- | ----------- |
-| **Unit Tests** | 1,236 | 86% | Isolated component tests |
-| **Doctests** | 97 | 7% | Every `Example:` block in a docstring, executed |
+| **Unit Tests** | 1,240 | 86% | Isolated component tests |
+| **Doctests** | 98 | 7% | Every `Example:` block in a docstring, executed |
 | **Integration Tests** | 51 | 4% | Component interaction tests |
-| **E2E Tests** | 53 | 4% | Full CLI workflow tests |
-| **TOTAL** | **1,437** | **100%** | |
+| **E2E Tests** | 56 | 4% | Full CLI workflow tests |
+| **TOTAL** | **1,445** | **100%** | |
 
 **Test Coverage Includes:**
 - Core tools: Compare, Optimize, Test, Read, Validate

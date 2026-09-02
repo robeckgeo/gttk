@@ -41,6 +41,15 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **`gttk validate` now works from any directory.** Its default `--rules-dir` was the
+  repo-relative `gttk/resources/rules`, so the command worked from a checkout's root and
+  nowhere else: an installed copy run from a data directory failed with "Rules directory
+  not found" unless `--rules-dir` was passed. The default is now `bundled_rules_dir()`,
+  which locates the rule files inside the package wherever it was imported from. The
+  ArcGIS toolbox's Rules Directory parameter and its fallback used the same relative
+  path and use the same function now. `--help` says "the rules bundled with GTTK" rather
+  than printing an absolute path into site-packages.
+
 - The two lookup-table build scripts under `gttk/resources/` called
   `logging.basicConfig()` at module scope, claiming the root logger of any process that
   imported them -- which `--doctest-modules gttk/` now does. Moved into `main()`, where a
