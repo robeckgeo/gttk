@@ -244,7 +244,7 @@ def build_parser() -> argparse.ArgumentParser:
     csv_group = test_compression_parser.add_mutually_exclusive_group(required=True)
     csv_group.add_argument('-c', '--csv-params', type=Path, metavar='PATH', dest='csv_path', help='Path to a CSV file with compression parameters to test.')
     csv_group.add_argument('-t', '--product-type', type=str.lower, choices=['dem', 'image', 'error', 'scientific', 'thematic'], dest='product_type', help='Use a preset template of compression parameters for the specified product type.')
-    test_compression_parser.add_argument('--temp-dir', type=Path, default=None, metavar='PATH', dest='temp_dir', help='Directory for the temporary compressed GeoTIFFs. Default: a <input stem>_gttk_test directory beside the output workbook.')
+    test_compression_parser.add_argument('--temp-dir', type=Path, default=None, metavar='PATH', dest='temp_dir', help='Directory for the temporary compressed GeoTIFFs; each run uses a run_* subdirectory of it. Default: a <input stem>_gttk_test directory beside the output workbook.')
     test_compression_parser.add_argument('--log-file', type=Path, metavar='PATH', dest='log_file', help='Path to a log file for debugging. Default: no log file is written.')
     test_compression_parser.add_argument('--delete-test-files', type=str2bool, default=True, metavar='BOOL', dest='delete_test_files', help='Delete temporary files after the test is complete.')
     test_compression_parser.add_argument('--open-report', type=str2bool, default=True, metavar='BOOL', dest='open_report', help='Open the Excel report automatically after generation.')

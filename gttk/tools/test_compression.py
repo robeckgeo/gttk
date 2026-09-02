@@ -1345,6 +1345,9 @@ def _test_compression_inner(args: TestArguments):
     # deterministic (input stem plus the settings), so two runs sharing a directory used
     # to delete and overwrite each other's files mid-benchmark.
     temp_directory = Path(tempfile.mkdtemp(prefix='run_', dir=scratch_root))
+    # Everything below -- the baseline reference, the candidates, the log -- goes through
+    # args.temp_dir, so it must be the run directory, not the root.
+    args.temp_dir = temp_directory
 
     # --- Logging Setup ---
     log_file_path = args.log_file or temp_directory / "test_compression_debug.log"

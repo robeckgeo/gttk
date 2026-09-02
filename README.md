@@ -365,7 +365,7 @@ File Size and Compression sections also include a `Delta (%)` column, which is t
 | `--output` | `-o` | Path | No | Auto | Path to save the output report table in Excel format (.xlsx) |
 | `--csv-params` | `-c` | Path | Excl.¹ | - | Path to CSV file with compression parameters to test |
 | `--product-type` | `-t` | str | Excl.¹ | - | Use preset template for product type (`dem`, `image`, `error`, `scientific`, `thematic`) |
-| `--temp-dir` | - | Path | No | `<input stem>_gttk_test/` beside the workbook | Directory for the temporary compressed GeoTIFFs |
+| `--temp-dir` | - | Path | No | `<input stem>_gttk_test/` beside the workbook | Directory for the temporary compressed GeoTIFFs; each run uses a `run_*` subdirectory of it |
 | `--log-file` | - | Path | No | Auto | Path to a log file for debugging |
 | `--delete-test-files` | - | bool | No | `True` | Delete temporary files after the test is complete |
 | `--open-report` | - | bool | No | `True` | Open the Excel report automatically after generation |

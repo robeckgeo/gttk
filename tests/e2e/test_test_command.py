@@ -152,7 +152,8 @@ class TestTestCommandOptions:
         assert output_file.exists()
         # Temp directory should still exist with files
         assert temp_dir.exists()
-        temp_files = list(temp_dir.glob('*.tif'))
+        # Each run works in its own run_* directory under --temp-dir
+        temp_files = list(temp_dir.glob('run_*/*.tif'))
         assert len(temp_files) > 0, "Temporary test files should be kept"
 
 
@@ -233,3 +234,5 @@ class TestConcurrentRuns:
         assert (tmp_path / 'one.xlsx').exists() and (tmp_path / 'two.xlsx').exists()
         run_dirs = sorted(p.name for p in (tmp_path / 'shared_gttk_test').iterdir() if p.is_dir())
         assert len(run_dirs) == 2 and all(name.startswith('run_') for name in run_dirs)
+        # Nothing -- the reference baseline included -- is written at the root the runs share.
+        assert list((tmp_path / 'shared_gttk_test').glob('*.tif')) == []
