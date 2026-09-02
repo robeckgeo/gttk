@@ -47,12 +47,12 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,648
+- **Total Tests**: 1,651
 - **Success Rate**: 100%
 - **Test Categories**:
   - Unit Tests: 1,419 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 106 (97 in `gttk/`, 9 in `tests/`)
-  - Integration Tests: 65 tests (metadata workflows, statistics validation)
+  - Integration Tests: 68 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
 
 Counts here and in the tree below are from `pytest --collect-only`; doctests
@@ -156,11 +156,12 @@ tests/
 │   ├── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
 │   ├── test_compare_compression.py              # compare releases both datasets on every path (1)
 │   └── test_statistics_nodata_warnings.py       # An unreadable per-band NoData is reported (1)
-├── integration/                                 # Integration tests (65)
+├── integration/                                 # Integration tests (68)
 │   ├── test_validation_integration.py           # End-to-end validation workflows (20)
 │   ├── test_installed_wheel.py                  # GTTK works from an installed wheel (6)
 │   ├── test_metadata_workflow.py                # Metadata extraction workflows (13)
 │   ├── test_gdal_runner_fake_osgeo4w.py         # gdal_runner run for real through a fake OSGeo4W (8)
+│   ├── test_optimize_arc_on_linux.py            # optimize-arc's orchestration, end to end, on Linux (3)
 │   ├── test_statistics_blocked_path.py          # Block-based statistics (9)
 │   └── test_statistics_native_dtype.py          # Native dtype statistics (9)
 ├── e2e/                                         # End-to-end CLI tests (58)

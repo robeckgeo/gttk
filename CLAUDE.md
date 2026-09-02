@@ -101,7 +101,7 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1648 tests total (1419 unit, 65 integration, 58 E2E, 106 doctests -- 97 in `gttk/`
+1651 tests total (1419 unit, 68 integration, 58 E2E, 106 doctests -- 97 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 328 validation tests
 - `tests/integration/` - Component interaction tests
@@ -177,6 +177,7 @@ Toolbox language coverage:
 ArcGIS path coverage (POSIX, through `tests/fixtures/fake_osgeo4w.py`, an OSGeo4W-shaped tree whose
 tools are the conda environment's; skipped on Windows, where the real OSGeo4W is the fixture):
 - `test_gdal_runner_fake_osgeo4w.py` - the isolated environment, command resolution, the stdin payload protocol and projection extraction, run for real
+- `test_optimize_arc_on_linux.py` - `optimize-arc`'s orchestration end to end: a DEM to a COG with a compound CRS and PAM statistics, an RGBA image to an internal mask, an input named like a Python statement
 
 Documentation coverage:
 - `test_developer_guide.py` - runs DEVELOPER.md's two worked examples straight out of the markdown

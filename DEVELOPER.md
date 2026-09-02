@@ -171,8 +171,9 @@ When running within ArcGIS Pro, the toolkit uses an isolation strategy to ensure
 5. **Running it without Windows**: `tests/fixtures/fake_osgeo4w.py` builds a directory shaped like an
    OSGeo4W installation -- `bin/python.exe`, the GDAL tools, `apps/Python3xx/Scripts/gdal_calc.py`,
    `share/gdal`, `share/proj` -- out of shell shims that run the conda environment's interpreter and
-   tools. With `paths.osgeo4w` pointed at it, `gdal_runner` runs for real on Linux
-   (`tests/integration/test_gdal_runner_fake_osgeo4w.py`). The runner discovers whichever
+   tools. With `paths.osgeo4w` pointed at it, `gdal_runner` and the `optimize-arc` orchestration run for
+   real on Linux (`tests/integration/test_gdal_runner_fake_osgeo4w.py`,
+   `tests/integration/test_optimize_arc_on_linux.py`). The runner discovers whichever
    `apps/Python3*` the installation has, so an OSGeo4W that moves its Python needs no change here.
 
 ## GTTK as a Library: No Import Side Effects

@@ -41,7 +41,11 @@ All notable changes to this project will be documented in this file.
   environment's interpreter and tools, and `tests/integration/test_gdal_runner_fake_osgeo4w.py`
   drives the real runner through it: the isolated environment, `gdalinfo` and `gdal_calc.py`
   resolved by name, the script launched by path with a payload on stdin, and the projection
-  reader on a raster whose name is a Python statement.
+  reader on a raster whose name is a Python statement. `tests/integration/test_optimize_arc_on_linux.py`
+  then runs the whole `optimize-arc` orchestration through it -- the NoData remap, the
+  rounding scripts, `gdaladdo`, the final translate -- and checks what comes out: a DEM
+  becomes a COG with the compound CRS and PAM statistics, an RGBA image gets an internal
+  mask, and an input whose name is a Python statement is optimized rather than executed.
 - **A `dev` extra, and a test that installs the wheel.** `pip install -e ".[dev]"` brings
   `pytest` and `pytest-cov`, which only `environment.yml` and `requirements.txt` listed
   before. `tests/integration/test_installed_wheel.py` builds the wheel from what git would
