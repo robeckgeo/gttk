@@ -1024,3 +1024,23 @@ class TestAdditionalFeatures:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
+
+
+class TestEnterReleasesOnFailure:
+
+    def test_the_dataset_is_released_when_tifffile_raises(self, tmp_path, monkeypatch):
+        """__exit__ never runs when __enter__ raises, so the GDAL dataset -- and on
+        Windows the lock it holds on the file -- used to outlive the failure."""
+        import gttk.utils.metadata_extractor as me
+        from tests.fixtures.mock_geotiff_factory import MockGeoTIFF
+        path = tmp_path / 'x.tif'
+        MockGeoTIFF(width=16, height=16, crs='EPSG:32610').save_to_file(path)
+
+        def broken(*args, **kwargs):
+            raise RuntimeError('tifffile refused the file')
+
+        monkeypatch.setattr(me.tifffile, 'TiffFile', broken)
+        extractor = me.MetadataExtractor(path)
+        with pytest.raises(RuntimeError, match='refused'):
+            extractor.__enter__()
+        assert extractor.gdal_ds is None

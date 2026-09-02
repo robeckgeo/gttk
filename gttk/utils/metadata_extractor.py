@@ -82,7 +82,13 @@ class MetadataExtractor:
     def __enter__(self):
         """Opens file handles and populates GeoTiffInfo if not provided."""
         self.gdal_ds = gdal.Open(str(self.filepath), gdal.GA_ReadOnly)
-        self.tiff = tifffile.TiffFile(self.filepath)
+        try:
+            self.tiff = tifffile.TiffFile(self.filepath)
+        except Exception:
+            # __exit__ never runs when __enter__ raises, so the dataset -- and on
+            # Windows the lock it holds on the file -- would outlive this failure.
+            self.gdal_ds = None
+            raise
         
         # If GeoTiffInfo wasn't provided, populate it now from the open dataset
         if not self.geotiff_info and self.gdal_ds:

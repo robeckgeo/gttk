@@ -212,23 +212,26 @@ def _compare_compression_inner(args: CompareArguments):
         logger.info("=== compare_compression started ===")
         logger.info(f"Arguments: {args}")
 
-        base_ds = gdal.Open(str(args.input_path))
-        comp_ds = gdal.Open(str(args.output_path))
+        base_ds = comp_ds = None
+        try:
+            base_ds = gdal.Open(str(args.input_path))
+            comp_ds = gdal.Open(str(args.output_path))
 
-        if not base_ds or not comp_ds:
-            logger.error("Could not open one or both GeoTIFF files. Aborting.")
-            logger.error(f"Baseline open: {bool(base_ds)} ({args.input_path})")
-            logger.error(f"Comparison open: {bool(comp_ds)} ({args.output_path})")
-            return None
+            if not base_ds or not comp_ds:
+                logger.error("Could not open one or both GeoTIFF files. Aborting.")
+                logger.error(f"Baseline open: {bool(base_ds)} ({args.input_path})")
+                logger.error(f"Comparison open: {bool(comp_ds)} ({args.output_path})")
+                return None
 
-        # Get paths and close datasets immediately to avoid file locking during reporting
-        base_path = base_ds.GetDescription()
-        comp_path = comp_ds.GetDescription()
+            # Get paths; the datasets are released right after, so no file lock is
+            # held while the report is generated (or if the second open raised).
+            base_path = base_ds.GetDescription()
+            comp_path = comp_ds.GetDescription()
+        finally:
+            base_ds = None
+            comp_ds = None
         logger.info(f"Opened baseline: {base_path}")
         logger.info(f"Opened comparison: {comp_path}")
-        
-        base_ds = None
-        comp_ds = None
 
         # Use shared report generation function passing PATHS
         report_path = generate_report_for_datasets(

@@ -47,10 +47,10 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,607
+- **Total Tests**: 1,622
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,387 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,402 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 105 (96 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 57 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
@@ -103,9 +103,9 @@ tests/
 │   ├── custom_vertical_crs.py                   # A vertical CRS with no EPSG code
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,387)
+├── unit/                                        # Unit tests (1,402)
 │   ├── test_data_models.py                      # Data classes (129)
-│   ├── test_cli_help.py                         # Rendered command-line help (95)
+│   ├── test_cli_help.py                         # Rendered command-line help (99)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
 │   ├── test_i18n.py                             # Toolbox language detection & catalogs (67)
 │   ├── test_overview_control.py                 # Overview & thread control on the COG path (61)
@@ -114,7 +114,7 @@ tests/
 │   ├── test_validation_extractors.py            # Validation value extraction (58)
 │   ├── test_toolbox_sidecars.py                 # .pyt.xml help sidecars pinned to the dialog (51)
 │   ├── test_validation_constraints.py           # All 7 constraint types (49)
-│   ├── test_metadata_extractor.py               # Metadata extraction (48)
+│   ├── test_metadata_extractor.py               # Metadata extraction (49)
 │   ├── test_xml_formatter.py                    # XML formatting (44)
 │   ├── test_validation_models.py                # Validation data models (42)
 │   ├── test_validation_xml.py                   # XPath extraction with namespaces (38)
@@ -134,7 +134,8 @@ tests/
 │   ├── test_statistics_strategy_selection.py    # Fast vs blocked strategy selection (16)
 │   ├── test_validation_output.py                # Output folder & report path construction (16)
 │   ├── test_statistics_phase2.py                # Phase 2 statistics optimizations (13)
-│   ├── test_compression_efficiency.py           # An error is not 0.0 (12)
+│   ├── test_compression_efficiency.py           # An error is not 0.0 (14)
+│   ├── test_path_helpers.py                     # Report opening, output tree, sidecar search order (10)
 │   ├── test_config_loader.py                    # Where config.toml comes from, quietly (11)
 │   ├── test_section_renderers.py                # Section rendering (11)
 │   ├── test_log_helpers.py                      # Logging helpers & startup env checks (9)
@@ -147,11 +148,11 @@ tests/
 │   ├── test_toolbox_load.py                     # Loading the .pyt the way ArcGIS Pro does (6)
 │   ├── test_scratch_locations.py                # Scratch files never land in the working directory (4)
 │   ├── test_developer_guide.py                  # DEVELOPER.md's worked examples, executed (3)
-│   ├── test_path_helpers.py                     # Report opening never hands a path to a shell unquoted (3)
 │   ├── test_gdal_runner.py                      # gdal_runner's stdout protocol and its timeout (3)
 │   ├── test_histogram_generator.py              # Histograms render headless and pick no backend (2)
 │   ├── test_logging_hygiene.py                  # Nothing logs through the root logger (2)
-│   └── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
+│   ├── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
+│   └── test_compare_compression.py              # compare releases both datasets on every path (1)
 ├── integration/                                 # Integration tests (57)
 │   ├── test_validation_integration.py           # End-to-end validation workflows (20)
 │   ├── test_installed_wheel.py                  # GTTK works from an installed wheel (6)

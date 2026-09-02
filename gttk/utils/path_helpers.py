@@ -199,8 +199,14 @@ def prepare_output_path(input_path: str, output_path: str, file_path: str) -> st
 
     Returns:
         str: The full path for the corresponding output file.
+
+    Raises:
+        ValueError: if ``file_path`` is not under ``input_path``; the output tree mirrors
+            the input tree and never reaches above it.
     """
     relative_path = os.path.relpath(file_path, input_path)
+    if relative_path == os.pardir or relative_path.startswith(os.pardir + os.sep):
+        raise ValueError(f"{file_path} is not under the input directory {input_path}")
     return os.path.join(output_path, relative_path)
 
 def copy_folder_structure(input_folder: str, output_folder: str):

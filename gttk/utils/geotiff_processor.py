@@ -19,6 +19,8 @@ managing transparency masks.
 import re
 import logging
 import numpy as np
+import shutil
+import tempfile
 from pathlib import Path
 import tifffile
 from decimal import Decimal, DecimalException, getcontext
@@ -936,6 +938,12 @@ def _estimate_ifd_header_size(page_index: int, tiff_file: tifffile.TiffFile, tag
         return None
 
 
+def _remove_baseline_dir(temp_dir: Optional[Path]) -> None:
+    """Remove a directory made by _generate_temp_baseline, whatever it still holds."""
+    if temp_dir is not None and temp_dir.name.startswith("gttk_baseline_"):
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def _generate_temp_baseline(source_file: str, arc_mode: bool = False, debug: bool = False) -> Optional[str]:
     """
     Generate temporary uncompressed baseline file for compression efficiency comparison.
@@ -951,8 +959,7 @@ def _generate_temp_baseline(source_file: str, arc_mode: bool = False, debug: boo
     Returns:
         Path to temporary baseline file, or None if generation failed
     """
-    import tempfile
-    
+    temp_dir: Optional[Path] = None
     try:
         # Import optimization tools and arguments
         from gttk.utils.script_arguments import OptimizeArguments
@@ -989,6 +996,7 @@ def _generate_temp_baseline(source_file: str, arc_mode: bool = False, debug: boo
         
         if return_code != 0 or not baseline_path.exists():
             logger.error(f"Baseline generation failed with return code: {return_code}")
+            _remove_baseline_dir(temp_dir)
             return None
         
         if debug:
@@ -998,6 +1006,7 @@ def _generate_temp_baseline(source_file: str, arc_mode: bool = False, debug: boo
         
     except Exception as e:
         logger.error(f"Error generating baseline file: {e}")
+        _remove_baseline_dir(temp_dir)
         return None
 
 
@@ -1095,7 +1104,9 @@ def calculate_compression_efficiency(
             generate_baseline = False
             baseline_file = None
         
-        # Calculate efficiency using baseline file comparison
+        # Calculate efficiency using baseline file comparison. A generated baseline and
+        # its directory are removed in the finally, on the failure paths as well; they
+        # used to survive any exception with a partial uncompressed raster inside.
         if baseline_path and (generate_baseline or baseline_file):
             try:
                 baseline_size = Path(baseline_path).stat().st_size
@@ -1110,30 +1121,15 @@ def calculate_compression_efficiency(
                         logger.debug(f"  Compressed file: {compressed_size:,} bytes")
                         logger.debug(f"  Efficiency: {efficiency:.2f}%")
                     
-                    # Cleanup temp baseline if needed
-                    if cleanup_baseline:
-                        try:
-                            Path(baseline_path).unlink()
-                            # Also remove temp directory if empty
-                            temp_dir = Path(baseline_path).parent
-                            if temp_dir.name.startswith("gttk_baseline_"):
-                                temp_dir.rmdir()
-                            if debug:
-                                logger.debug(f"Cleaned up temporary baseline: {baseline_path}")
-                        except Exception as e:
-                            logger.warning(f"Could not cleanup temp baseline: {e}")
-                    
                     return max(0.0, min(100.0, efficiency))
                 else:
                     logger.error("Baseline file has zero size")
                     
             except Exception as e:
                 logger.error(f"Error in baseline file comparison: {e}")
-                if cleanup_baseline and baseline_path:
-                    try:
-                        Path(baseline_path).unlink()
-                    except Exception:
-                        pass
+            finally:
+                if cleanup_baseline:
+                    _remove_baseline_dir(Path(baseline_path).parent)
     
     # --- Refined Estimation Mode (Default, Production) ---
     name = Path(filepath).name

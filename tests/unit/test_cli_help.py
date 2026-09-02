@@ -187,6 +187,16 @@ class TestShowDefaults:
 
 # --- The flags themselves ---------------------------------------------------
 
+class TestSidecarSearchOrderIsDocumented:
+    """A batch run reads XML from one level above the directory it was pointed at, on
+    purpose (INEGI's delivery layout); the help of every tool that does so says so."""
+
+    @pytest.mark.parametrize('name', ['read', 'validate', 'optimize', 'optimize-arc'])
+    def test_help_states_the_search_order(self, parsers, name):
+        text = _help_of(parsers, name)
+        assert 'metadatos/' in text and '<stem>_meta.xml' in text
+
+
 class TestOptionSurface:
 
     def test_boolean_options_render_as_bool(self, parsers):

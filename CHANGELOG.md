@@ -53,6 +53,12 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **The external XML metadata lookup is documented where it is used.** `gttk read`,
+  `gttk validate`, `gttk optimize` and `gttk optimize-arc` look for `<stem>.xml`, then
+  `<stem>_meta.xml`, beside the raster, then in its parent directory, then in a sibling
+  `metadatos/` directory (INEGI's delivery layout) -- so a batch run reads XML from one
+  level above the directory it was pointed at, on purpose. The order is now in each tool's
+  `--help`, in the README, and pinned by a test.
 - **`gttk test` keeps its scratch rasters beside the output workbook.** `--temp-dir`
   defaulted to `./temp`, relative to wherever the command was run from, so multi-gigabyte
   candidate rasters piled up in the current directory -- 5.7 GB of them in a checkout root,
@@ -107,6 +113,16 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Handles and scratch files are released on the failure paths too.** `MetadataExtractor`
+  opened the GDAL dataset and then the TIFF; if the second raised, the context manager never
+  exited and the dataset -- a lock on the file, on Windows -- outlived the failure. The
+  dev-only baseline mode of the efficiency calculation left its scratch directory behind,
+  with a partial uncompressed raster in it, on every path but success. `gttk compare` held
+  its baseline open until the frame was collected if the comparison would not open. All
+  three release in a `finally`.
+- **The output tree of a batch run never reaches above the output directory.**
+  `prepare_output_path` joined a relative path with nothing stopping `../`; it now refuses
+  a file that is not under the input directory.
 - **`gttk optimize` refuses to write onto its input.** Nothing stopped `-o` from naming the
   input file or the input directory; the run exited 0 and the data survived only because
   the pipeline stages through `/vsimem/`. Both are now refused before any work starts, and

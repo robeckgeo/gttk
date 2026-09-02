@@ -63,3 +63,49 @@ class TestOpenFileOnWsl:
         assert argv[3] == '-EncodedCommand'
         assert base64.b64decode(argv[4]).decode('utf-16-le').startswith("Start-Process -LiteralPath '")
         assert all('$(' not in element for element in argv)
+
+
+class TestPrepareOutputPath:
+    """The output tree mirrors the input tree and never reaches above it."""
+
+    def test_mirrors_the_relative_path(self, tmp_path):
+        out = ph.prepare_output_path(str(tmp_path / 'in'), str(tmp_path / 'out'), str(tmp_path / 'in' / 'a' / 'b.tif'))
+        assert out == str(tmp_path / 'out' / 'a' / 'b.tif')
+
+    def test_refuses_a_file_outside_the_input_tree(self, tmp_path):
+        with pytest.raises(ValueError, match='not under'):
+            ph.prepare_output_path(str(tmp_path / 'in'), str(tmp_path / 'out'), str(tmp_path / 'elsewhere' / 'b.tif'))
+
+
+class TestSidecarSearchOrder:
+    """The documented order: beside the raster, then its parent, then a sibling metadatos/."""
+
+    @pytest.fixture
+    def tree(self, tmp_path):
+        raster = tmp_path / 'delivery' / 'tiles' / 'tile.tif'
+        raster.parent.mkdir(parents=True)
+        raster.write_bytes(b'')
+        return raster
+
+    def test_beside_the_raster_the_exact_name_wins(self, tree):
+        (tree.parent / 'tile_meta.xml').write_text('<a/>')
+        (tree.parent / 'tile.xml').write_text('<a/>')
+        assert ph.find_xml_metadata_file(tree) == tree.parent / 'tile.xml'
+
+    def test_then_the_meta_suffix(self, tree):
+        (tree.parent / 'tile_meta.xml').write_text('<a/>')
+        assert ph.find_xml_metadata_file(tree) == tree.parent / 'tile_meta.xml'
+
+    def test_then_the_parent_directory(self, tree):
+        (tree.parent.parent / 'tile.xml').write_text('<a/>')
+        assert ph.find_xml_metadata_file(tree) == tree.parent.parent / 'tile.xml'
+
+    def test_then_a_metadatos_directory_beside_the_rasters_directory(self, tree):
+        metadatos = tree.parent.parent / 'metadatos'
+        metadatos.mkdir()
+        (metadatos / 'tile.xml').write_text('<a/>')
+        assert ph.find_xml_metadata_file(tree) == metadatos / 'tile.xml'
+
+    def test_nothing_further_afield(self, tree):
+        (tree.parent.parent.parent / 'tile.xml').write_text('<a/>')
+        assert ph.find_xml_metadata_file(tree) is None

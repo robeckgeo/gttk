@@ -455,6 +455,15 @@ Metadata reports provide comprehensive information about a single GeoTIFF file, 
 
 *¹ Mutually exclusive: If `--sections` is not provided, defaults to use `--reader-type`.*
 
+#### External XML Metadata
+
+`gttk read`, `gttk validate` (its `xml` section), `gttk optimize` and `gttk optimize-arc` look
+for an external XML metadata file by name and use the first match: `<stem>.xml`, then
+`<stem>_meta.xml`, beside the raster; then the same two names in the raster's parent
+directory; then `<stem>.xml` in a `metadatos/` directory beside the raster's directory, which
+is INEGI's delivery layout. A batch run over a directory therefore reads XML from one level
+above the directory it was pointed at, on purpose.
+
 #### Example Usage
 
 ```bash

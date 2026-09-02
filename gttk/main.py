@@ -18,6 +18,7 @@ import argparse
 import logging
 import os
 import sys
+import textwrap
 import numpy as np
 from pathlib import Path
 from gttk.utils.log_helpers import setup_logger
@@ -85,6 +86,14 @@ def valid_quality(value: str) -> int:
     if ivalue < 75 or ivalue > 100:
         raise argparse.ArgumentTypeError(f"Quality must be between 75 and 100, got '{ivalue}'")
     return ivalue
+
+#: How the tools that read an external XML metadata file find it (path_helpers.find_xml_metadata_file).
+SIDECAR_SEARCH = textwrap.fill(
+    "External XML metadata is looked up by name, and the first match is used: <stem>.xml, "
+    "then <stem>_meta.xml, beside the raster; then the same two names in the raster's parent "
+    "directory; then <stem>.xml in a metadatos/ directory beside the raster's directory "
+    "(INEGI's delivery layout).", width=78)
+
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the complete gttk argument parser.
@@ -210,7 +219,7 @@ def build_parser() -> argparse.ArgumentParser:
         'optimize',
         help='Optimize a GeoTIFF using command-line tools.',
         formatter_class=GttkHelpFormatter,
-        epilog=ch.profile_table()
+        epilog=ch.profile_table() + '\n\n' + SIDECAR_SEARCH
     )
     add_optimize_args(optimize_parser)
 
@@ -219,7 +228,7 @@ def build_parser() -> argparse.ArgumentParser:
         'optimize-arc',
         help='Optimize a GeoTIFF from an ArcGIS toolbox using standalone GDAL.',
         formatter_class=GttkHelpFormatter,
-        epilog=ch.profile_table()
+        epilog=ch.profile_table() + '\n\n' + SIDECAR_SEARCH
     )
     add_optimize_args(optimize_arc_parser)
     optimize_arc_parser.add_argument('--arc-mode', type=str2bool, default=True, metavar='BOOL', dest='arc_mode', help='Flag to indicate ArcGIS Pro execution mode.')
@@ -247,7 +256,8 @@ def build_parser() -> argparse.ArgumentParser:
     read_metadata_parser = subparsers.add_parser(
         'read',
         help='Read and report metadata from a GeoTIFF file.',
-        formatter_class=GttkHelpFormatter
+        formatter_class=GttkHelpFormatter,
+        epilog=SIDECAR_SEARCH
     )
     read_metadata_parser.add_argument('-i', '--input', required=True, type=Path, metavar='PATH', dest='input_path', help='Path to the input GeoTIFF file.')
     read_metadata_parser.add_argument('-p', '--page', type=int, default=0, dest='page', help='Image File Directory (IFD) page to read.')
@@ -268,7 +278,8 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser = subparsers.add_parser(
         'validate',
         help='Validate GeoTIFF metadata against product-specific requirements.',
-        formatter_class=GttkHelpFormatter
+        formatter_class=GttkHelpFormatter,
+        epilog=SIDECAR_SEARCH
     )
     validate_parser.add_argument(
         '-i', '--input',

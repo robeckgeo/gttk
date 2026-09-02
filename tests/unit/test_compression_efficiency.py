@@ -161,3 +161,26 @@ class TestLentTiffFilesStayOpen:
             assert not lent.filehandle.closed
             gp.calculate_compression_efficiency(str(deflate), tiff=lent)
             assert not lent.filehandle.closed
+
+
+class TestBaselineScratchDirectory:
+    """The dev-only baseline mode writes an uncompressed copy into a mkdtemp directory;
+    the directory used to survive every failure path with a partial raster inside."""
+
+    @staticmethod
+    def _baseline_dirs():
+        import tempfile
+        return set(Path(tempfile.gettempdir()).glob('gttk_baseline_*'))
+
+    def test_a_failed_baseline_leaves_no_directory(self, deflate, monkeypatch):
+        import gttk.tools.optimize_compression as oc
+        monkeypatch.setattr(oc, 'optimize_compression', lambda args: 1)
+        before = self._baseline_dirs()
+        assert gp._generate_temp_baseline(str(deflate)) is None
+        assert self._baseline_dirs() == before
+
+    def test_a_successful_baseline_is_removed_after_use(self, deflate):
+        before = self._baseline_dirs()
+        efficiency = gp.calculate_compression_efficiency(str(deflate), generate_baseline=True)
+        assert efficiency is not None and 0 < efficiency < 100
+        assert self._baseline_dirs() == before
