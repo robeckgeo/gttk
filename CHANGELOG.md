@@ -34,6 +34,33 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Two validation scripts nothing ran are tests now.** `tests/validation/` held the checks
+  that Welford's accumulator reproduces NumPy and that the blocked statistics path reproduces
+  the fast path. pytest did not collect them and no document named them, so the second had
+  only ever been run by hand -- and it never called the comparison function it defined. They
+  are `tests/unit/test_statistics_accuracy.py` and
+  `tests/integration/test_statistics_phase2_accuracy.py`, with the comparison made for real;
+  that is what found the alpha-band difference under Fixed.
+- **The statistics benchmarks run once, small, on every test run.**
+  `tests/benchmarks/benchmark_statistics.py` is a hand-run tool whose default sizes take
+  minutes and gigabytes. Nothing imported it, so the functions it calls could change under
+  it unnoticed, and its docstring named a module that did not exist. Every benchmark now
+  takes its sizes as parameters and returns what it measured, and
+  `tests/benchmarks/test_benchmarks_smoke.py` runs each at 256×256. The near-binary alpha
+  the classifier is shown carries 0.5% artifacts rather than 1%, which sat exactly on the
+  classifier's 99% threshold and came out either way depending on the draw.
+- **The ArcGIS Pro path runs on Linux, against a fake OSGeo4W.** `gdal_runner` launches
+  OSGeo4W's Python on a JSON payload of GDAL commands and resolves each one against
+  `<OSGeo4W>/bin`, so outside Windows none of it ran, and its tests stubbed the functions
+  under test. `tests/fixtures/fake_osgeo4w.py` lays that directory tree out over the conda
+  environment's interpreter and tools, and `tests/integration/test_gdal_runner_fake_osgeo4w.py`
+  drives the real runner through it: the isolated environment, `gdalinfo` and `gdal_calc.py`
+  resolved by name, the script launched by path with a payload on stdin, and the projection
+  reader on a raster whose name is a Python statement. `tests/integration/test_optimize_arc_on_linux.py`
+  then runs the whole `optimize-arc` orchestration through it -- the NoData remap, the
+  rounding scripts, `gdaladdo`, the final translate -- and checks what comes out: a DEM
+  becomes a COG with the compound CRS and PAM statistics, an RGBA image gets an internal
+  mask, and an input whose name is a Python statement is optimized rather than executed.
 - **A `dev` extra, and a test that installs the wheel.** `pip install -e ".[dev]"` brings
   `pytest` and `pytest-cov`, which only `environment.yml` and `requirements.txt` listed
   before. `tests/integration/test_installed_wheel.py` builds the wheel from what git would
@@ -103,6 +130,12 @@ All notable changes to this project will be documented in this file.
 
 ### Removed
 
+- **`init_arcpy()` and `gttk/utils/arcgis_proj_config.py`.** The first imported a top-level
+  `utils` package that has never existed, and the `ImportError` it swallowed ended it before
+  the one line it was for, `arcpy.env.overwriteOutput = True`, could run -- so the three
+  tools that called it under ArcGIS Pro got nothing from it, and nothing else read that
+  setting; GTTK writes through GDAL. The second configured `PROJ_LIB` for ArcGIS's GDAL and
+  had no caller: the toolbox carries its own copy of the logic, and that copy is what runs.
 - `gttk compare --config`. Declared with a cwd-relative default, stored on the arguments
   and read by nothing.
 - `gttk/utils/xml_helpers.py`, a leftover from a Qt GUI this repository does not contain.
@@ -117,6 +150,24 @@ All notable changes to this project will be documented in this file.
   whatever order the filesystem listed them, so which file answered for a product, and
   whether a broken file was reported before a match ended the search, differed from one
   machine to the next.
+- **Opening a report from WSL without `wslpath` reaches the right place.** The fallback
+  spelled every path through the distribution's network share, and always Ubuntu's, so a
+  report on a Windows drive (`/mnt/c/...`) took the long way round to `C:\` and any other
+  distribution got a share that does not exist. A path under `/mnt/<drive>/` now maps to the
+  drive letter, and the share uses the name WSL puts in `WSL_DISTRO_NAME`. `open_file`,
+  which had no test on any platform, now has one per launcher and per WSL choice.
+- **An alpha band's statistics are the same whichever path computes them.** For a raster
+  small enough for the in-memory path -- nearly every RGBA image a report is run on -- the
+  alpha band was masked with itself, so a binary alpha reported a minimum of 255, a mean of
+  255, a standard deviation of zero and 80% valid pixels while its own histogram showed the
+  zeros. The blocked path for large files had never done that. Both now keep the alpha
+  band's own pixels in its statistics; the colour bands still exclude transparent pixels.
+- **`optimize-arc` no longer assumes OSGeo4W's Python is 3.12.** `gdal_runner` hard-coded
+  `apps/Python312`, both for `PYTHONHOME` and for the `Scripts` directory that holds
+  `gdal_calc.py`, so an OSGeo4W that ships a newer Python pointed the isolated interpreter at
+  a directory that does not exist. The runner now discovers `apps/Python3*` and takes the
+  newest. It also joins and splits `PATH` with the platform's separator instead of a
+  literal `;`.
 - **What a fallback could not read is said, not skipped.** The projection script run under
   OSGeo4W for ArcGIS Pro swallowed seven kinds of failure with `pass` and still exited 0
   with valid JSON; it now lists each one and the parent logs them by file. A per-band NoData

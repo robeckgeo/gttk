@@ -18,9 +18,10 @@ common naming conventions.
 """
 import base64
 import os
+import posixpath
 import sys
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import logging
 from gttk.utils.geokey_parser import is_geotiff
 from typing import List, Optional
@@ -42,18 +43,40 @@ def _is_wsl() -> bool:
     except (OSError, IOError):
         return False
 
-def _convert_wsl_path_to_windows(wsl_path: str) -> str:
+def _windows_path_without_wslpath(wsl_path: str) -> str:
+    r"""
+    The Windows spelling of a WSL path, worked out without ``wslpath``.
+
+    A path under a ``/mnt/<drive>/`` mount is on a Windows drive and becomes
+    ``<DRIVE>:\...``; any other path is reached through the distribution's network share,
+    ``\\wsl.localhost\<distro>\...``, with the distribution's name from ``WSL_DISTRO_NAME``.
+    The previous fallback sent every path through the share, and always through Ubuntu's.
+
+    Example:
+        >>> _windows_path_without_wslpath('/mnt/c/Users/eric/report.html')
+        'C:\\Users\\eric\\report.html'
     """
-    Convert WSL Linux path to Windows path format using wslpath utility.
+    absolute = posixpath.normpath(wsl_path if wsl_path.startswith('/') else os.path.abspath(wsl_path))
+    parts = PurePosixPath(absolute).parts  # ('/', 'mnt', 'c', 'Users', ...)
+    if len(parts) >= 3 and parts[1] == 'mnt' and len(parts[2]) == 1 and parts[2].isalpha():
+        return parts[2].upper() + ':\\' + '\\'.join(parts[3:])
+    distro = os.environ.get('WSL_DISTRO_NAME', 'Ubuntu')
+    return '\\\\wsl.localhost\\' + distro + absolute.replace('/', '\\')
+
+def _convert_wsl_path_to_windows(wsl_path: str) -> str:
+    r"""
+    Convert a WSL path to the Windows spelling the Windows application that opens it needs.
+
+    ``wslpath -w`` knows every mount, so it is asked first; when it is missing or hangs,
+    ``_windows_path_without_wslpath`` works the answer out from the path itself.
 
     Args:
         wsl_path: Linux path in WSL (e.g., /home/user/file.html)
 
     Returns:
-        Windows-formatted path (e.g., \\wsl.localhost\\Ubuntu\\home\\user\\file.html)
+        Windows-formatted path (e.g., \\wsl.localhost\Ubuntu\home\user\file.html)
     """
     try:
-        # Use wslpath utility to convert Linux path to Windows path
         result = subprocess.run(
             ['wslpath', '-w', wsl_path],
             capture_output=True,
@@ -61,15 +84,9 @@ def _convert_wsl_path_to_windows(wsl_path: str) -> str:
             check=True,
             timeout=5
         )
-        windows_path = result.stdout.strip()
-        return windows_path
+        return result.stdout.strip()
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
-        # Fallback: manually construct path
-        # Modern WSL uses wsl.localhost, older versions use wsl$
-        wsl_path = os.path.abspath(wsl_path)
-        wsl_path_string = wsl_path.replace('/', '\\')
-        windows_path = f"\\\\wsl.localhost\\Ubuntu{wsl_path_string}"
-        return windows_path
+        return _windows_path_without_wslpath(wsl_path)
 
 def _powershell_open_command(windows_path: str) -> List[str]:
     r"""

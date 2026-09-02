@@ -47,7 +47,7 @@ from gttk.utils.gdal_runner import create_isolated_env
 from gttk.utils.gdal_scripts import python_command, write_script
 from gttk.utils.geo_metadata_writer import prepare_xml_for_gdal
 from gttk.utils.geotiff_processor import is_nodata_valid, GeoTiffInfo
-from gttk.utils.log_helpers import init_arcpy, ArcpyLogHandler, PACKAGE_LOGGER
+from gttk.utils.log_helpers import ArcpyLogHandler, PACKAGE_LOGGER
 from gttk.utils.path_helpers import get_geotiff_files, prepare_output_path, copy_folder_structure
 from gttk.utils.performance_tracker import PerformanceTracker
 from gttk.utils.preprocessor import find_xml_metadata_file
@@ -1420,10 +1420,6 @@ def optimize_compression(args: OptimizeArguments, tracker: Optional[PerformanceT
 
 def _optimize_compression_arc_inner(args: OptimizeArguments, tracker: Optional[PerformanceTracker] = None):
     """Main entry point for the ArcPy script."""
-    arc_mode = args.arc_mode or False
-    if arc_mode:
-        init_arcpy()
-
     input_path = str(args.input_path)
     output_path = str(args.output_path)
 

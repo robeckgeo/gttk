@@ -70,6 +70,18 @@ def _osgeo4w_root_from_config() -> Optional[str]:
     from gttk.utils.config_loader import config
     return config.get('paths.osgeo4w')
 
+def osgeo4w_python_dir(osgeo4w_dir: Path) -> Path:
+    """
+    OSGeo4W's Python installation directory: ``apps/Python3xx``, whichever is there.
+
+    The version used to be hard-coded as Python312; OSGeo4W moves it with its releases,
+    and PYTHONHOME then pointed at a directory that did not exist. With several present
+    the newest is used; with none, the historical name is returned so the error names it.
+    """
+    candidates = sorted(osgeo4w_dir.glob('apps/Python3*'), key=lambda p: p.name)
+    return candidates[-1] if candidates else osgeo4w_dir / 'apps' / 'Python312'
+
+
 def create_isolated_env(osgeo4w_dir: Path) -> Dict[str, str]:
     """
     Creates a clean environment dictionary configured for a specific OSGeo4W installation.
@@ -114,7 +126,7 @@ def create_isolated_env(osgeo4w_dir: Path) -> Dict[str, str]:
 
     # --- Configure the clean OSGeo4W environment ---
     bin_dir = osgeo4w_dir / "bin"
-    python_dir = osgeo4w_dir / "apps" / "Python312" # Assuming Python 3.12, adjust if needed
+    python_dir = osgeo4w_python_dir(osgeo4w_dir)
     scripts_dir = python_dir / "Scripts"
     share_dir = osgeo4w_dir / "share"
 
@@ -126,7 +138,7 @@ def create_isolated_env(osgeo4w_dir: Path) -> Dict[str, str]:
         str(python_dir),
         str(scripts_dir)
     ]
-    env['PATH'] = ';'.join(new_path_entries) + ';' + existing_path
+    env['PATH'] = os.pathsep.join(new_path_entries) + os.pathsep + existing_path
 
     # Set GDAL-specific variables
     env['GDAL_DATA'] = str(share_dir / "gdal")
@@ -176,7 +188,7 @@ def run_gdal_command(command: List[str], env: Dict[str, str], capture_output: bo
     command_str = [str(item) for item in command]
     
     try:
-        path_dirs = env.get('PATH', '').split(';')
+        path_dirs = env.get('PATH', '').split(os.pathsep)
         if not path_dirs:
             raise GdalExecutionError("PATH environment variable is not set.")
         osgeo4w_bin_dir = Path(path_dirs[0])
@@ -191,7 +203,7 @@ def run_gdal_command(command: List[str], env: Dict[str, str], capture_output: bo
             script_path = osgeo4w_bin_dir / executable_name
             if not script_path.is_file():
                 # Fallback to the Scripts folder for tools like gdal_calc.py
-                script_path = osgeo4w_bin_dir.parent / "apps" / "Python312" / "Scripts" / executable_name
+                script_path = osgeo4w_python_dir(osgeo4w_bin_dir.parent) / "Scripts" / executable_name
                 if not script_path.is_file():
                     raise FileNotFoundError(f"GDAL Python script '{executable_name}' not found in expected OSGeo4W directories.")
             

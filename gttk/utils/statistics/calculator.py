@@ -543,7 +543,14 @@ def _calculate_statistics_full(ds_or_band: Union[gdal.Dataset, gdal.Band]) -> Op
             trans_count = np.count_nonzero(trans_mask)
 
             # --- Valid Data Calculation ---
-            invalid_mask = nodata_mask | trans_mask | alpha_mask
+            # The alpha mask applies to the colour bands, not to the alpha band itself: its
+            # own statistics cover every pixel it holds, zeros included, as its histogram
+            # below already did and as the blocked path has always done. Masking the alpha
+            # band with itself gave a binary alpha a minimum of 255 and a spread of zero.
+            is_alpha_band = color_interp == 'Alpha'
+            invalid_mask = nodata_mask | trans_mask
+            if not is_alpha_band:
+                invalid_mask = invalid_mask | alpha_mask
             valid_data = data[~invalid_mask]
 
             # Ensure infinite values are excluded from valid_data to prevent statistics crashes
@@ -569,8 +576,6 @@ def _calculate_statistics_full(ds_or_band: Union[gdal.Dataset, gdal.Band]) -> Op
             # Calculate histogram bins and counts for visualization
             # For alpha bands: show ALL pixels (including alpha=0) to display the full distribution
             # For RGB bands: show only valid pixels (excluding alpha=0)
-            is_alpha_band = color_interp == 'Alpha'
-            
             hist_counts, hist_bins = None, None
             pam_histogram_data = None
             

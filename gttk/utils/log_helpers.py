@@ -168,17 +168,3 @@ def shutdown_logger(logger: logging.Logger):
         handler.flush()
         handler.close()
         logger.removeHandler(handler)
-
-def init_arcpy() -> None:
-    """
-    Initialize ArcPy module and set overwrite output to True.
-    This function is called when running in ArcGIS environment.
-    """
-    try:
-        import arcpy # type: ignore
-        import importlib
-        from utils import statistics
-        importlib.reload(statistics)
-        arcpy.env.overwriteOutput = True
-    except ImportError:
-        pass

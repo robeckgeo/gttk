@@ -46,7 +46,7 @@ from gttk.utils.accuracy_metrics import compute_error_metrics
 from gttk.utils.exceptions import CSVLoadError, OptimizationError
 from gttk.utils.geotiff_processor import calculate_compression_efficiency, determine_decimal_precision
 from gttk.utils.gdal_env import gdal_env
-from gttk.utils.log_helpers import shutdown_logger, init_arcpy, ArcpyLogHandler
+from gttk.utils.log_helpers import shutdown_logger, ArcpyLogHandler
 from gttk.utils.optimize_constants import CompressionAlgorithm as CA, ProductType as PT
 from gttk.utils.path_helpers import get_geotiff_files, open_file
 from gttk.utils.script_arguments import TestArguments, OptimizeArguments
@@ -1366,7 +1366,6 @@ def _test_compression_inner(args: TestArguments):
 
     arcMode = args.arc_mode or False
     if arcMode:
-        init_arcpy()
         # Add Arcpy handler for real-time feedback in ArcGIS Pro
         try:
             arcpy_handler = ArcpyLogHandler()

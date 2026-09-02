@@ -25,6 +25,7 @@ import sys
 import pytest
 
 from gttk.main import _check_proj_env
+import gttk.utils.log_helpers as log_helpers_module
 from gttk.utils.log_helpers import setup_logger, shutdown_logger
 
 
@@ -195,3 +196,20 @@ class TestUtf8StreamHandlerOrdering:
         finally:
             shutdown_logger(logger)
         assert raw.getvalue().decode('utf-8') == "first\nsecond\n"
+
+
+class TestNoArcpyInitialiser:
+    """``init_arcpy()`` imported a top-level ``utils`` package that has never existed. The
+    ImportError it swallowed ended the function before ``arcpy.env.overwriteOutput`` was
+    set, so the three tools that called it under ArcGIS Pro got nothing from it. It is
+    gone, along with ``arcgis_proj_config``, a module nothing imported."""
+
+    def test_nothing_in_the_package_initialises_arcpy(self):
+        import importlib.util
+        import pathlib
+        package = pathlib.Path(log_helpers_module.__file__).resolve().parents[1]
+        assert not hasattr(log_helpers_module, 'init_arcpy')
+        offenders = [path.name for path in package.rglob('*.py')
+                     if 'init_arcpy' in path.read_text(encoding='utf-8')]
+        assert offenders == []
+        assert importlib.util.find_spec('gttk.utils.arcgis_proj_config') is None

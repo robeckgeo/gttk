@@ -47,13 +47,14 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,640
+- **Total Tests**: 1,690
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,419 tests (models, processors, extractors, formatters, utilities)
-  - Doctests: 106 (97 in `gttk/`, 9 in `tests/`)
-  - Integration Tests: 57 tests (metadata workflows, statistics validation)
+  - Unit Tests: 1,435 tests (models, processors, extractors, formatters, utilities)
+  - Doctests: 107 (98 in `gttk/`, 9 in `tests/`)
+  - Integration Tests: 80 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
+  - Benchmark smoke tests: 10 tests (every statistics benchmark, once at 256×256)
 
 Counts here and in the tree below are from `pytest --collect-only`; doctests
 live in the source modules and are not listed per file.
@@ -101,9 +102,10 @@ tests/
 ├── README.md                                    # This guide
 ├── fixtures/                                    # Mock data factories
 │   ├── custom_vertical_crs.py                   # A vertical CRS with no EPSG code
+│   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,419)
+├── unit/                                        # Unit tests (1,435)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (99)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
@@ -124,7 +126,7 @@ tests/
 │   ├── test_import_side_effects.py              # Importing GTTK leaves the host process alone (36)
 │   ├── test_discard_lsb.py                      # DISCARD_LSB decimals-to-bits helper (30)
 │   ├── test_report_formatters.py                # Report formatting (30)
-│   ├── test_validation_loader.py                # TOML rule loading (29)
+│   ├── test_validation_loader.py                # TOML rule loading, in name order (30)
 │   ├── test_mock_factory.py                     # MockGeoTIFF factory itself (27)
 │   ├── test_preprocessor.py                     # Data preprocessing (25)
 │   ├── test_xml_safety.py                       # XML from rasters and sidecars never reads a file (25)
@@ -135,10 +137,10 @@ tests/
 │   ├── test_validation_output.py                # Output folder & report path construction (16)
 │   ├── test_statistics_phase2.py                # Phase 2 statistics optimizations (13)
 │   ├── test_compression_efficiency.py           # An error is not 0.0 (15)
-│   ├── test_path_helpers.py                     # Report opening, output tree, sidecar search order (11)
+│   ├── test_path_helpers.py                     # Report opening on every platform, output tree, sidecar search order (21)
 │   ├── test_config_loader.py                    # Where config.toml comes from, quietly (11)
 │   ├── test_section_renderers.py                # Section rendering (11)
-│   ├── test_log_helpers.py                      # Logging helpers & startup env checks (9)
+│   ├── test_log_helpers.py                      # Logging helpers, startup env checks, no arcpy initialiser (10)
 │   ├── test_i18n_catalog.py                     # Spanish catalog pinned to the toolbox (8)
 │   ├── test_script_arguments.py                 # optimize's guards: no in-place writes, band check (8)
 │   ├── test_custom_vertical_crs_compound.py     # Custom vertical CRS into a compound CRS (7)
@@ -147,6 +149,7 @@ tests/
 │   ├── test_pytest_config.py                    # Coverage opt-in & the CI policy pinned (6)
 │   ├── test_toolbox_load.py                     # Loading the .pyt the way ArcGIS Pro does (6)
 │   ├── test_scratch_locations.py                # Scratch files never land in the working directory (4)
+│   ├── test_statistics_accuracy.py              # OnlineStatistics against NumPy, block by block (4)
 │   ├── test_tiff_tag_parser.py                  # Unparsable tags stay, a missing lookup says so (4)
 │   ├── test_developer_guide.py                  # DEVELOPER.md's worked examples, executed (3)
 │   ├── test_gdal_runner.py                      # gdal_runner's stdout protocol and its timeout (4)
@@ -155,10 +158,13 @@ tests/
 │   ├── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
 │   ├── test_compare_compression.py              # compare releases both datasets on every path (1)
 │   └── test_statistics_nodata_warnings.py       # An unreadable per-band NoData is reported (1)
-├── integration/                                 # Integration tests (57)
+├── integration/                                 # Integration tests (80)
 │   ├── test_validation_integration.py           # End-to-end validation workflows (20)
 │   ├── test_installed_wheel.py                  # GTTK works from an installed wheel (6)
 │   ├── test_metadata_workflow.py                # Metadata extraction workflows (13)
+│   ├── test_statistics_phase2_accuracy.py       # Blocked path against NumPy and the fast path (12)
+│   ├── test_gdal_runner_fake_osgeo4w.py         # gdal_runner run for real through a fake OSGeo4W (8)
+│   ├── test_optimize_arc_on_linux.py            # optimize-arc's orchestration, end to end, on Linux (3)
 │   ├── test_statistics_blocked_path.py          # Block-based statistics (9)
 │   └── test_statistics_native_dtype.py          # Native dtype statistics (9)
 ├── e2e/                                         # End-to-end CLI tests (58)
@@ -167,11 +173,9 @@ tests/
 │   ├── test_optimize_command.py                 # `gttk optimize` (14)
 │   ├── test_test_command.py                     # `gttk test` (8)
 │   └── test_validate_command.py                 # `gttk validate`, run from outside the repo (4)
-├── benchmarks/                                  # Not collected by pytest
-│   └── benchmark_statistics.py                  # Statistics performance benchmarks
-└── validation/                                  # Not collected by pytest
-    ├── validate_block_statistics_accuracy.py    # Block-statistics accuracy script
-    └── validate_phase2_accuracy.py              # Phase 2 accuracy script
+└── benchmarks/                                  # Statistics benchmarks and their smoke test (10)
+    ├── benchmark_statistics.py                  # Hand-run: python -m tests.benchmarks.benchmark_statistics
+    └── test_benchmarks_smoke.py                 # Every benchmark once at 256×256 (10)
 ```
 
 ---
@@ -551,6 +555,19 @@ def test_with_temp_dir(tmp_path):
 ```
 
 ---
+
+### The fake OSGeo4W tree (`tests/fixtures/fake_osgeo4w.py`)
+
+The ArcGIS Pro path runs GDAL in a separate OSGeo4W interpreter: `gdal_runner`
+launches `<OSGeo4W>/bin/python.exe` on itself with a JSON payload of commands and
+resolves each command against `<OSGeo4W>/bin`. On Linux none of that could run, so it
+was tested through stubs that replaced the functions under test. `build_fake_osgeo4w(root)`
+lays out the directories the code looks for -- `bin/python.exe`, `bin/gdal_translate`,
+`apps/Python312/Scripts/gdal_calc.py`, `share/gdal`, `share/proj` -- as shell shims that
+`exec` the conda environment's interpreter and tools, and symlinks to its data
+directories. Point `paths.osgeo4w` at it (the tests monkeypatch `config.get`) and the real
+runner, the real payload protocol and the real GDAL do the work. POSIX only: on Windows
+the real OSGeo4W is the fixture, and these tests skip.
 
 ## Coverage Reports
 
