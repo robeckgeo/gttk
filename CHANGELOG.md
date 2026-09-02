@@ -47,6 +47,14 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **`gttk test` keeps its scratch rasters beside the output workbook.** `--temp-dir`
+  defaulted to `./temp`, relative to wherever the command was run from, so multi-gigabyte
+  candidate rasters piled up in the current directory -- 5.7 GB of them in a checkout root,
+  and 39 files per test-suite run. The default is now `<input stem>_gttk_test/` next to the
+  workbook, and a scratch directory that ends up inside a directory input is skipped when
+  the candidates are collected, so a rerun cannot test its own leftovers. The ArcGIS
+  optimize path's temporary workspace likewise moves under the platform's temporary
+  directory instead of falling back to the working directory when `TEMP` is unset.
 - **Coverage is opt-in.** The `--cov` flags sat in `pytest.ini`'s `addopts`, so every
   invocation -- one test file, `pytest --collect-only`, a subprocess run of a single module --
   rewrote `.coverage`, `coverage.xml` and `htmlcov/`, and the table on disk described whatever

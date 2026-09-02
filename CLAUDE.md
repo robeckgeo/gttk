@@ -101,7 +101,7 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1563 tests total (1354 unit, 51 integration, 56 E2E, 102 doctests -- 93 in `gttk/`
+1568 tests total (1358 unit, 51 integration, 56 E2E, 103 doctests -- 94 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 328 validation tests
 - `tests/integration/` - Component interaction tests

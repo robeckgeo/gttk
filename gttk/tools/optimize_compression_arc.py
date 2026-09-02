@@ -31,7 +31,7 @@ import traceback
 import json
 from contextlib import contextmanager
 import subprocess
-import uuid
+import tempfile
 from importlib import metadata
 from osgeo import gdal, osr
 from pathlib import Path
@@ -107,8 +107,9 @@ if TYPE_CHECKING:
 class TemporaryFileManager:
     """Manages a temporary workspace on disk."""
     def __init__(self):
-        self.temp_dir = Path(os.environ.get("TEMP", Path.cwd())) / f"gttk_{uuid.uuid4().hex}"
-        self.temp_dir.mkdir(exist_ok=True)
+        # tempfile knows the platform's temporary directory; the previous fallback for a
+        # missing TEMP variable was the current working directory.
+        self.temp_dir = Path(tempfile.mkdtemp(prefix="gttk_"))
         self.temp_files: List[Path] = []
         logger.info(f"Created temporary directory: {self.temp_dir}")
 

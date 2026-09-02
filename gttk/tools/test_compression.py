@@ -65,7 +65,6 @@ __test__ = {}
 
 # --- Constants ---
 # Script Behavior
-DEFAULT_TEMP_DIR = Path("./temp")
 NUM_COMPRESSION_RUNS = 1
 NUM_WARMUP_READ_ITERATIONS = 3
 NUM_MEASURED_READ_ITERATIONS = 10
@@ -227,6 +226,22 @@ def _has_internal_overviews(filepath: Path) -> bool:
         ovr_band = None
         band = None
         ds = None
+
+def default_temp_dir(input_path: Path, output_path: Path) -> Path:
+    """
+    Where the candidate rasters go when ``--temp-dir`` is not given.
+
+    Beside the output workbook, in a directory named after the input, so multi-gigabyte
+    candidates land on the volume the user chose for the results rather than in whatever
+    directory the command happened to be run from. The default used to be ``./temp``,
+    relative to the working directory.
+
+    Example:
+        >>> default_temp_dir(Path('/data/tile.tif'), Path('/reports/tile_test.xlsx')).as_posix()
+        '/reports/tile_gttk_test'
+    """
+    return Path(output_path).parent / f"{Path(input_path).stem}_gttk_test"
+
 
 def _generate_temp_filename(source_name_stem: str, type_val: str, params_dict: Dict[str, Any], temp_dir_path: Path) -> Path:
     """Generates a unique temporary filename based on parameters."""
@@ -1294,9 +1309,40 @@ def test_compression(args: TestArguments):
 
 def _test_compression_inner(args: TestArguments):
     """Main function to orchestrate the GeoTIFF compression testing."""
+    # --- Argument & Path Resolution ---
+    # The workbook and the scratch directory are settled before anything else: the log
+    # file lives in the scratch directory, whose default sits beside the workbook.
+    if not args.optimize_script_path:
+        args.optimize_script_path = _get_optimize_script_path(args.arc_mode or False)
+
+    assert args.input_path is not None, "input_path must be set"
+    if isinstance(args.input_path, list):
+        # A list (from a directory) comes from one directory; its parent names things.
+        source_path = Path(args.input_path[0]).parent if args.input_path else Path('.')
+    else:
+        source_path = Path(args.input_path)
+
+    if not args.output_path:
+        if isinstance(args.input_path, list) or source_path.is_dir():
+            args.output_path = source_path / f"{source_path.name}_test.xlsx"
+        else:
+            args.output_path = source_path.with_name(f"{source_path.stem}_test.xlsx")
+
+    # The test report is always an Excel workbook; coerce a non-.xlsx output path so the
+    # workbook isn't written under a misleading extension (e.g. a .tif the user expected to
+    # be a raster). The accuracy sidecar is derived from this path's stem.
+    coerced_from = None
+    if Path(args.output_path).suffix.lower() != '.xlsx':
+        coerced_from = Path(args.output_path)
+        args.output_path = coerced_from.with_suffix('.xlsx')
+
+    if not args.temp_dir:
+        args.temp_dir = default_temp_dir(source_path, args.output_path)
+    temp_directory = Path(args.temp_dir).resolve()
+    temp_directory.mkdir(parents=True, exist_ok=True)
+
     # --- Logging Setup ---
-    assert args.temp_dir is not None, "temp_dir must be set"
-    log_file_path = args.log_file or args.temp_dir / "test_compression_debug.log"
+    log_file_path = args.log_file or temp_directory / "test_compression_debug.log"
     log_file_path.parent.mkdir(parents=True, exist_ok=True)
     
     # Configure FileHandler for logging
@@ -1304,6 +1350,11 @@ def _test_compression_inner(args: TestArguments):
     file_handler.setFormatter(logging.Formatter('%(asctime)s | %(levelname)s | %(funcName)s | %(lineno)d | %(message)s'))
     logger.addHandler(file_handler)
     logger.setLevel(logging.DEBUG)
+
+    if coerced_from is not None:
+        logger.warning(f"Test report is an Excel workbook; writing to "
+                       f"'{args.output_path.name}' instead of '{coerced_from.name}'.")
+    logger.info(f"Using temporary directory: {temp_directory}")
 
     arcMode = args.arc_mode or False
     if arcMode:
@@ -1315,41 +1366,6 @@ def _test_compression_inner(args: TestArguments):
             logger.addHandler(arcpy_handler)
         except Exception as e:
             logger.warning(f"Could not attach ArcpyLogHandler: {e}")
-
-    # --- Argument & Path Resolution ---
-    if not args.optimize_script_path:
-        args.optimize_script_path = _get_optimize_script_path(args.arc_mode or False)
-    
-    if not args.output_path:
-        assert args.input_path is not None, "input_path must be set"
-        # Handle both single file and directory for output path generation
-        if isinstance(args.input_path, list):
-            # If input is a list (from directory), use the directory path to create the output excel name
-            # Assuming the list comes from a single directory, we can get the parent of the first file.
-            if args.input_path:
-                source_path = Path(args.input_path[0]).parent
-                args.output_path = source_path / f"{source_path.name}_test.xlsx"
-        else: # It's a single Path object
-            source_path = Path(args.input_path)
-            if source_path.is_dir():
-                args.output_path = source_path / f"{source_path.name}_test.xlsx"
-            else:
-                args.output_path = source_path.with_name(f"{source_path.stem}_test.xlsx")
-
-    # The test report is always an Excel workbook; coerce a non-.xlsx output path so the
-    # workbook isn't written under a misleading extension (e.g. a .tif the user expected to
-    # be a raster). The accuracy sidecar is derived from this path's stem.
-    if args.output_path is not None and Path(args.output_path).suffix.lower() != '.xlsx':
-        _orig_out = Path(args.output_path)
-        args.output_path = _orig_out.with_suffix('.xlsx')
-        logger.warning(f"Test report is an Excel workbook; writing to "
-                       f"'{args.output_path.name}' instead of '{_orig_out.name}'.")
-
-    if not args.temp_dir:
-        args.temp_dir = DEFAULT_TEMP_DIR
-    temp_directory = Path(args.temp_dir).resolve()
-    temp_directory.mkdir(parents=True, exist_ok=True)
-    logger.info(f"Using temporary directory: {temp_directory}")
 
     excel_writer = None
     try:
@@ -1380,6 +1396,12 @@ def _test_compression_inner(args: TestArguments):
             return 1
         
         geotiff_files = [Path(p) for p in geotiff_files_str]
+        # A scratch directory inside the input tree (a directory input puts the workbook,
+        # and so the scratch, in it) must not feed its own candidates back in on a rerun.
+        inside_scratch = [p for p in geotiff_files if p.resolve().is_relative_to(temp_directory)]
+        if inside_scratch:
+            logger.info(f"Skipping {len(inside_scratch)} file(s) under the scratch directory {temp_directory}")
+            geotiff_files = [p for p in geotiff_files if p not in inside_scratch]
 
         for file_path in geotiff_files:
             # Mark the start of a new file group for border formatting

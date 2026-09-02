@@ -51,11 +51,15 @@ class TestTestCommand:
             '-t', 'dem',
             '--delete-test-files', 'true',
             '--open-report', 'false'
-        ], capture_output=True, text=True, timeout=180)  # Longer timeout for compression testing
+        ], capture_output=True, text=True, timeout=180, cwd=tmp_path)  # Longer timeout for compression testing
         
         # Assert: Command should succeed
         assert result.returncode == 0, f"Command failed: {result.stderr}"
         assert output_file.exists(), "Excel report should be created"
+        # The scratch directory sits beside the workbook, named after the input; nothing
+        # is written relative to the working directory (it used to be ./temp).
+        assert (tmp_path / 'test_input_gttk_test').is_dir()
+        assert not (tmp_path / 'temp').exists()
     
     def test_test_missing_input(self):
         """Test error handling when input file is missing."""
