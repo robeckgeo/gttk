@@ -88,6 +88,7 @@ class ReportBuilder(ABC):
         sections: List of ReportSection objects to include in report
     
     Example:
+        >>> from gttk.utils.report_formatters import HtmlReportFormatter
         >>> with MetadataExtractor('example.tif') as extractor:
         ...     builder = MetadataReportBuilder(extractor)
         ...     builder.build(['tags', 'statistics'])
@@ -95,6 +96,8 @@ class ReportBuilder(ABC):
         ...     formatter = HtmlReportFormatter(filename='example.tif')
         ...     formatter.sections = builder.sections
         ...     html = formatter.format()
+        >>> html.startswith('<!DOCTYPE html>')
+        True
     """
     
     def __init__(self):
@@ -199,8 +202,9 @@ class MetadataReportBuilder(ReportBuilder):
         >>> with MetadataExtractor('example.tif') as extractor:
         ...     builder = MetadataReportBuilder(extractor)
         ...     builder.build(['tags', 'statistics', 'cog'])
-        ...     # builder.sections now contains these sections with their data
-        ...     print(len(builder.sections))  # 3 (assuming all sections had data)
+        ...     # builder.sections now holds one section per ID that had data
+        ...     [section.id for section in builder.sections]
+        ['tags', 'statistics', 'cog']
     """
     
     def __init__(self, extractor: MetadataExtractor, page: int = 0, tag_scope: str = 'complete', reader_type: Optional[str] = None):
@@ -548,19 +552,25 @@ class ComparisonReportBuilder(ReportBuilder):
     section types, making it easy to compare side-by-side.
     
     Example:
-        >>> with MetadataExtractor('baseline.tif') as base_extractor, \
-        ...      MetadataExtractor('optimized.tif') as comp_extractor:
+        >>> with (
+        ...     MetadataExtractor('baseline.tif') as base_extractor,
+        ...     MetadataExtractor('optimized.tif') as comp_extractor,
+        ... ):
         ...     builder = ComparisonReportBuilder(
         ...         base_extractor, comp_extractor, 'Baseline', 'Optimized'
         ...     )
         ...     builder.add_all_sections()
-        >>> # builder.sections now contains comparison sections
-        >>> for section in builder.sections:
-        ...     print(f"{section.id}: {section.title}")
-        differences: Differences
-        ifd-input file: Input File IFDs
-        ifd-output file: Output File IFDs
-        ...
+        ...     for section in builder.sections:
+        ...         print(f"{section.id}: {section.title}")
+        comparison-ifd: IFDs
+        comparison-tiling: Tiling and Overviews
+        comparison-statistics: Statistics
+        comparison-histogram: Histograms
+        comparison-cog: COG Validation
+
+    Each section holds both files' data as a list of (label, data) pairs; the
+    `differences` summary the CLI shows above them is assembled by the tool, not
+    by this builder.
     """
     
     def __init__(self, base_extractor: MetadataExtractor, comp_extractor: MetadataExtractor,
@@ -1036,20 +1046,33 @@ class ValidationReportBuilder(ReportBuilder):
     and transforms them into presentation format for rendering.
 
     Example:
+        >>> from gttk.utils.validation.models import (
+        ...     ValidationResult, ValidationRule, ValidationSummary
+        ... )
+        >>> rule = ValidationRule(
+        ...     product='DGED5', section='tag', key='258', key_type='Tag',
+        ...     description='BitsPerSample', data_type='integer',
+        ...     constraint='exact', expected=32
+        ... )
+        >>> result = ValidationResult(
+        ...     rule=rule, value=32, status='PASS',
+        ...     message='Tag 258 value matches expected value: 32'
+        ... )
         >>> summary = ValidationSummary(
         ...     product='DGED5',
         ...     input_file='example.tif',
         ...     rules_file='dged5_rules.toml',
         ...     report_date='2026-01-15',
-        ...     total_rules=10,
-        ...     passed=8,
-        ...     failed=2,
+        ...     total_rules=1,
+        ...     passed=1,
+        ...     failed=0,
         ...     skipped=0,
-        ...     results_by_section={'tag': [result1, result2], 'geokey': [result3]}
+        ...     results_by_section={'tag': [result]}
         ... )
         >>> builder = ValidationReportBuilder(summary)
         >>> builder.build()
-        >>> print(len(builder.sections))  # Summary + section tables
+        >>> [section.id for section in builder.sections]   # summary + one per section
+        ['validation-summary', 'validation-tag']
     """
 
     def __init__(self, summary: ValidationSummary):

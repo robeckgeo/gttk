@@ -50,10 +50,10 @@ class ValueExtractor:
         _gdal_metadata_cache: Cached GDAL metadata XML
 
     Example:
-        >>> with MetadataExtractor(filepath) as extractor:
+        >>> from gttk.utils.metadata_extractor import MetadataExtractor
+        >>> with MetadataExtractor('example.tif') as extractor:
         ...     value_extractor = ValueExtractor(extractor)
-        ...     bits = value_extractor.extract_tag('258')
-        ...     print(bits)
+        ...     value_extractor.extract_tag('258')     # BitsPerSample
         32
     """
 
@@ -384,14 +384,19 @@ class ValueExtractor:
             of values for all bands (for validation against all bands).
 
         Example:
-            >>> extract_gdal('STATISTICS_MINIMUM')
-            [-430.5, -425.2, -410.1]  # All bands
-            >>> extract_gdal('STATISTICS_MINIMUM:0')
-            -430.5  # Band 0 only
-            >>> extract_gdal('COLORINTERP:0')
+            >>> from gttk.utils.metadata_extractor import MetadataExtractor
+            >>> with MetadataExtractor('image.tif') as extractor:
+            ...     values = ValueExtractor(extractor)
+            ...     values.extract_gdal('STATISTICS_MINIMUM')    # every band
+            ...     values.extract_gdal('STATISTICS_MINIMUM:0')  # band 0 only
+            ...     values.extract_gdal('COLORINTERP:0')
+            [0.0, 0.0, 0.0]
+            0.0
             'Red'
-            >>> extract_gdal('AREA_OR_POINT')
-            'Point'  # Standard GDAL_METADATA item
+
+            >>> with MetadataExtractor('metadata.tif') as extractor:
+            ...     ValueExtractor(extractor).extract_gdal('PRODUCT')
+            'DGED5'
         """
         # Parse band suffix
         band_idx = None
@@ -509,7 +514,8 @@ class ValueExtractor:
             Namespace-agnostic XPath expression
 
         Example:
-            >>> _convert_to_namespace_agnostic('//gmd:fileIdentifier')
+            >>> extractor = ValueExtractor(None)   # pure string work, no file needed
+            >>> extractor._convert_to_namespace_agnostic('//gmd:fileIdentifier')
             "//*[local-name()='fileIdentifier']"
         """
         import re
@@ -588,8 +594,14 @@ class ValueExtractor:
             The extracted value, or None if not found
 
         Example:
-            >>> extract_xpath("//gmd:fileIdentifier/gco:CharacterString", xml)
-            "abc123"
+            >>> xml = '''<gmd:MD_Metadata xmlns:gmd="http://www.isotc211.org/2005/gmd"
+            ...                           xmlns:gco="http://www.isotc211.org/2005/gco">
+            ...   <gmd:fileIdentifier><gco:CharacterString>abc123</gco:CharacterString>
+            ...   </gmd:fileIdentifier>
+            ... </gmd:MD_Metadata>'''
+            >>> extractor = ValueExtractor(None)   # the XML is passed in, not read
+            >>> extractor.extract_xpath("//gmd:fileIdentifier/gco:CharacterString", xml)
+            'abc123'
         """
         if not xml_content:
             return None
@@ -685,7 +697,11 @@ class ValueExtractor:
             The extracted value, or None if not found
 
         Example:
-            >>> extract_geo('//gmd:fileIdentifier/gco:CharacterString')
+            >>> from gttk.utils.metadata_extractor import MetadataExtractor
+            >>> with MetadataExtractor('metadata.tif') as extractor:
+            ...     ValueExtractor(extractor).extract_geo(
+            ...         '//gmd:fileIdentifier/gco:CharacterString'
+            ...     )
             'abc123-uuid'
         """
         content = self._get_geo_metadata_content()
@@ -708,8 +724,10 @@ class ValueExtractor:
             The extracted value, or None if not found
 
         Example:
-            >>> extract_xmp('//dc:description/rdf:Alt/rdf:li')
-            'Image description'
+            >>> from gttk.utils.metadata_extractor import MetadataExtractor
+            >>> with MetadataExtractor('metadata.tif') as extractor:
+            ...     ValueExtractor(extractor).extract_xmp('//dc:description/rdf:Alt/rdf:li')
+            'Example elevation tile'
         """
         content = self._get_xmp_metadata_content()
         return self.extract_xpath(key, content, namespace_agnostic=True) if content else None
@@ -728,8 +746,10 @@ class ValueExtractor:
             The extracted value, or None if not found
 
         Example:
-            >>> extract_xml('//idinfo/citation/citeinfo/title')
-            'Dataset Title'
+            >>> from gttk.utils.metadata_extractor import MetadataExtractor
+            >>> with MetadataExtractor('metadata.tif') as extractor:
+            ...     ValueExtractor(extractor).extract_xml('//idinfo/citation/citeinfo/title')
+            'Example Elevation Tile'
         """
         content = self._get_xml_metadata_content()
         return self.extract_xpath(key, content, namespace_agnostic=True) if content else None
@@ -767,12 +787,15 @@ class ValueExtractor:
             For multiple matches, returns a list of values.
 
         Example:
-            >>> extract_projjson('$.name')
-            'NAD83 / UTM zone 10N'
-            >>> extract_projjson('$.id.authority')
+            >>> from gttk.utils.metadata_extractor import MetadataExtractor
+            >>> with MetadataExtractor('data.tif') as extractor:
+            ...     values = ValueExtractor(extractor)
+            ...     values.extract_projjson('$.name')
+            ...     values.extract_projjson('$.id.authority')
+            ...     values.extract_projjson('$..name')  # doctest: +ELLIPSIS
+            'WGS 84 / UTM zone 10N'
             'EPSG'
-            >>> extract_projjson('$..name')
-            ['NAD83 / UTM zone 10N', 'North American Datum 1983', ...]
+            ['WGS 84 / UTM zone 10N', ...]
         """
         content = self._get_projjson_content()
         if not content:

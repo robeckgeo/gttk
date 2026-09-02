@@ -28,11 +28,14 @@ Classes:
 Example:
     >>> from gttk.utils.statistics import calculate_statistics
     >>> from osgeo import gdal
-    >>> 
+    >>>
     >>> ds = gdal.Open('image.tif')
     >>> stats = calculate_statistics(ds)
     >>> for band_stat in stats:
-    >>>     print(f"{band_stat.band_name}: mean={band_stat.mean:.2f}")
+    ...     print(f"{band_stat.band_name}: mean={band_stat.mean:.2f}")
+    Red: mean=127.50
+    Green: mean=127.50
+    Blue: mean=127.50
 """
 
 # Main functions

@@ -68,14 +68,14 @@ def _calculate_max_pixels_threshold(available_ram_gb: Optional[float] = None) ->
     
     Memory model:
     - Native dtype for full image load (varies by type)
-    - Float64 for valid pixels after masking (~90% of image, 8 bytes/pixel)
-    - Temporary arrays during statistics (2.5× safety factor for NumPy operations)
+    - Float64 for the statistics arrays (8 bytes/pixel per band)
+    - Temporary arrays during statistics (1.5× safety factor for NumPy operations)
     - Uses 25% of available RAM for statistics processing
     
-    Conservative assumption: 4-band Int16 worst case
+    Working assumption: 4-band UInt16, the common satellite case
     - Native load: 4 bands × 2 bytes × total_pixels = 8 bytes/pixel
-    - Stats on valid (90%): 4 bands × 8 bytes × 0.9 × total_pixels = 28.8 bytes/pixel
-    - With 2.5× safety: (8 + 28.8) × 2.5 = 92 bytes/pixel total
+    - Stats arrays (float64): 4 bands × 8 bytes × total_pixels = 32 bytes/pixel
+    - With 1.5× safety: (8 + 32) × 1.5 = 60 bytes/pixel total
     
     Args:
         available_ram_gb: Available RAM in GB (None = auto-detect with psutil)
@@ -85,9 +85,11 @@ def _calculate_max_pixels_threshold(available_ram_gb: Optional[float] = None) ->
         Clamped to range [67,108,864 to 1,073,741,824] (8,192² to 32,768²)
         
     Example:
-        >>> # System with 16 GB available RAM
+        >>> # 25% of 16 GB at 60 bytes per pixel, above the 8,192**2 floor.
+        >>> # Only reproducible while config.toml leaves max_pixels_fast_path at 0,
+        >>> # which short-circuits the calculation when set.
         >>> _calculate_max_pixels_threshold(16.0)
-        268435456  # 16,384² pixels (conservative for 4-band UInt16)
+        71582788
     """
     # Try to get from config first (0 or negative means auto-detect)
     config_max_pixels = config.get("statistics.max_pixels_fast_path", 0)
@@ -180,10 +182,14 @@ def _safe_nodata_comparison(data: np.ndarray, nodata_value: Optional[float],
         
     Examples:
         >>> # Integer data with nodata=-9999
+        >>> int16_array = np.array([1, -9999, 3], dtype=np.int16)
         >>> _safe_nodata_comparison(int16_array, -9999, np.int16)
-        
+        array([False,  True, False])
+
         >>> # Float data with NaN nodata
+        >>> float32_array = np.array([1.0, np.nan, 3.0], dtype=np.float32)
         >>> _safe_nodata_comparison(float32_array, np.nan, np.float32)
+        array([False,  True, False])
     """
     if nodata_value is None:
         # No nodata metadata, only NaN pixels
@@ -260,10 +266,15 @@ def _iterate_blocks(band: gdal.Band, block_size: tuple = (4096, 4096)):
         - x_size, y_size: Actual size of block (may be smaller at edges)
         
     Example:
+        >>> from osgeo import gdal
+        >>> dataset = gdal.Open('example.tif')   # keep the dataset alive
         >>> band = dataset.GetRasterBand(1)
-        >>> for block, x_off, y_off, x_sz, y_sz in _iterate_blocks(band):
-        >>>     # Process block
-        >>>     print(f"Block at ({x_off}, {y_off}), size {x_sz}x{y_sz}")
+        >>> for block, x_off, y_off, x_sz, y_sz in _iterate_blocks(band, (32, 32)):
+        ...     print(f"Block at ({x_off}, {y_off}), size {x_sz}x{y_sz}")
+        Block at (0, 0), size 32x32
+        Block at (32, 0), size 32x32
+        Block at (0, 32), size 32x32
+        Block at (32, 32), size 32x32
     """
     block_height, block_width = block_size
     band_width = band.XSize

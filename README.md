@@ -956,16 +956,17 @@ distance = (100 - quality) × 0.1
 
 ## Testing
 
-GTTK includes a comprehensive test suite with **936 tests** covering unit, integration, end-to-end, and validation scenarios. The testing infrastructure ensures code quality, reliability, and maintainability for professional use in enterprise and government environments.
+GTTK includes a comprehensive test suite with **1,437 tests** covering unit, integration, end-to-end, and validation scenarios. The testing infrastructure ensures code quality, reliability, and maintainability for professional use in enterprise and government environments.
 
 ### Test Suite Overview
 
 | Category | Test Count | Percentage | Description |
 | -------- | --------- | ---------- | ----------- |
-| **Unit Tests** | 832 | 89% | Isolated component tests |
-| **Integration Tests** | 51 | 5% | Component interaction tests |
-| **E2E Tests** | 53 | 6% | Full CLI workflow tests |
-| **TOTAL** | **936** | **100%** | |
+| **Unit Tests** | 1,236 | 86% | Isolated component tests |
+| **Doctests** | 97 | 7% | Every `Example:` block in a docstring, executed |
+| **Integration Tests** | 51 | 4% | Component interaction tests |
+| **E2E Tests** | 53 | 4% | Full CLI workflow tests |
+| **TOTAL** | **1,437** | **100%** | |
 
 **Test Coverage Includes:**
 - Core tools: Compare, Optimize, Test, Read, Validate
@@ -975,6 +976,8 @@ GTTK includes a comprehensive test suite with **936 tests** covering unit, integ
 - Extended data types (date, datetime, url, email)
 - XPath and JSONPath extraction
 - Report generation and formatting
+- Every documented example: docstring `Example:` blocks run under `--doctest-modules`,
+  and the two worked examples in `DEVELOPER.md` are executed straight out of the markdown
 
 ### Documentation
 

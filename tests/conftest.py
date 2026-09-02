@@ -30,46 +30,12 @@ Example:
 
 import pytest
 import numpy as np
-import os
-import sys
 from typing import Optional, Tuple
 from pathlib import Path
 
-# ==============================================================================
-# CRITICAL: Set PROJ_LIB before importing GDAL/OSR
-# ==============================================================================
-# GDAL/OSR needs PROJ_LIB to locate proj.db for EPSG code resolution.
-# In conda environments, this should point to the 'share/proj' directory.
-# This must be done BEFORE the first import of osgeo.gdal or osgeo.osr.
-
-if 'PROJ_LIB' not in os.environ and 'PROJ_DATA' not in os.environ:
-    # Try to find PROJ database in conda environment
-    if 'CONDA_PREFIX' in os.environ:
-        conda_prefix = Path(os.environ['CONDA_PREFIX'])
-        # Try Windows path first (Library/share/proj)
-        proj_path = conda_prefix / 'Library' / 'share' / 'proj'
-        if not proj_path.exists():
-            # Try Unix path (share/proj)
-            proj_path = conda_prefix / 'share' / 'proj'
-        
-        if proj_path.exists() and (proj_path / 'proj.db').exists():
-            os.environ['PROJ_LIB'] = str(proj_path)
-            print(f"[conftest.py] Set PROJ_LIB={proj_path}")
-        else:
-            print("[conftest.py] WARNING: Could not find proj.db in conda environment")
-    
-    # Fallback: Try to find it relative to Python executable
-    if 'PROJ_LIB' not in os.environ:
-        python_path = Path(sys.executable).parent.parent
-        proj_path = python_path / 'Library' / 'share' / 'proj'
-        if not proj_path.exists():
-            proj_path = python_path / 'share' / 'proj'
-        
-        if proj_path.exists() and (proj_path / 'proj.db').exists():
-            os.environ['PROJ_LIB'] = str(proj_path)
-            print(f"[conftest.py] Set PROJ_LIB={proj_path}")
-
-# NOW it's safe to import GDAL/OSR
+# PROJ_LIB is set in the repository-root conftest.py, which pytest loads before
+# this one -- it has to happen before the first osgeo import anywhere in the
+# session, including for doctests collected out of gttk/.
 from osgeo import gdal, osr
 
 # Import our mock factories
@@ -80,22 +46,6 @@ from tests.fixtures.mock_geotiff_factory import MockGeoTIFF
 # =============================================================================
 # Pytest Configuration
 # =============================================================================
-
-def pytest_configure(config):
-    # GTTK applies GDAL's exception mode per operation rather than at import, so
-    # the test session -- an application like any other -- makes the choice for
-    # itself. Import cleanliness is asserted separately, in subprocesses, by
-    # tests/unit/test_import_side_effects.py.
-    gdal.UseExceptions()
-
-    """
-    Configure pytest with custom markers and options.
-    
-    Markers defined in pytest.ini are registered here for documentation.
-    """
-    # Markers are defined in pytest.ini, but we can add dynamic configuration here
-    pass
-
 
 def pytest_assertrepr_compare(op, left, right):
     """
@@ -499,6 +449,7 @@ def assert_geotiff_properties(
         AssertionError: If any property doesn't match
         
     Example:
+        >>> ds = MockGeoTIFF(width=256, height=256).to_gdal_dataset()
         >>> assert_geotiff_properties(ds, 256, 256, 1, gdal.GDT_Float32)
     """
     assert ds is not None, "Dataset is None"

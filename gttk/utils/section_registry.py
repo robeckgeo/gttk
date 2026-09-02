@@ -318,7 +318,7 @@ def get_config(id: str) -> SectionConfig:
         
     Example:
         >>> config = get_config('tags')
-        >>> print(config.title)
+        >>> config.title
         'TIFF Tags'
     """
     return SECTION_CONFIGS[id]
@@ -369,12 +369,13 @@ def validate_section_ids(section_ids: List[str]) -> None:
         ValueError: If any section ID is invalid, with list of valid IDs
         
     Example:
-        >>> validate_section_ids(['tags', 'geokeys', 'statistics'])
-        # No error - all valid
-        
-        >>> validate_section_ids(['tags', 'invalid-section'])
-        ValueError: Invalid section IDs: invalid-section
-        Valid IDs: tags, geokeys, georeference, ...
+        >>> validate_section_ids(['tags', 'geokeys', 'statistics'])   # all valid
+
+        >>> validate_section_ids(['tags', 'invalid-section'])  # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+        ValueError: Invalid section ID(s): invalid-section
+        Valid section IDs are:
+        bbox, cog, ...
     """
     invalid = [sid for sid in section_ids if sid not in SECTION_CONFIGS]
     if invalid:
@@ -404,9 +405,10 @@ def get_section_ids_from_args(args) -> List[str]:
         List of section IDs to include in report
         
     Example:
+        >>> import argparse
         >>> args = argparse.Namespace(sections=None, reader_type='analyst')
-        >>> get_section_ids_from_args(args)
-        ['tags', 'gdal-metadata', 'georeference', ...]
+        >>> get_section_ids_from_args(args)   # doctest: +ELLIPSIS
+        ['tags', 'gdal-metadata', 'xmp-metadata', ...]
     """
     # Priority 1: User provided custom sections
     if hasattr(args, 'sections') and args.sections is not None:
@@ -442,8 +444,9 @@ def filter_sections_for_page(section_ids: List[str], page: int, is_geotiff: bool
         Filtered list of section IDs appropriate for this file/page
         
     Example:
+        >>> # geokeys and cog are only available on page 0
         >>> filter_sections_for_page(['tags', 'geokeys', 'cog'], page=1, is_geotiff=True)
-        ['tags']  # geokeys and cog only available for page 0
+        ['tags']
     """
     # Sections requiring GeoTIFF (GeoKeyDirectoryTag)
     geotiff_sections = {

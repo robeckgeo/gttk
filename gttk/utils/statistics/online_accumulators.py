@@ -51,11 +51,15 @@ class OnlineStatistics:
         The American Statistician. 37(3): 242-247.
     
     Example:
+        >>> import numpy as np
+        >>> data_blocks = [np.array([[100.0, 120.0], [140.0, 160.0]]),
+        ...                np.array([[180.0, 200.0]])]
         >>> stats = OnlineStatistics()
         >>> for block in data_blocks:
-        >>>     stats.update(block)
+        ...     stats.update(block)
         >>> result = stats.finalize()
-        >>> print(f"Mean: {result['mean']}, StdDev: {result['std_dev']}")
+        >>> print(f"Mean: {result['mean']}, StdDev: {result['std_dev']:.4f}")
+        Mean: 150.0, StdDev: 34.1565
     """
     
     def __init__(self):
@@ -160,11 +164,16 @@ class OnlineHistogram:
     a first pass to find min/max values).
     
     Example:
-        >>> bins = np.linspace(0, 100, 257)  # 256 bins from 0 to 100
+        >>> import numpy as np
+        >>> data_blocks = [np.array([[100.0, 120.0], [140.0, 160.0]]),
+        ...                np.array([[180.0, 200.0]])]
+        >>> bins = np.linspace(100, 200, 5)  # 4 bins from 100 to 200
         >>> histogram = OnlineHistogram(bins)
         >>> for block in data_blocks:
-        >>>     histogram.update(block)
-        >>> counts, bins = histogram.get_result()
+        ...     histogram.update(block)
+        >>> counts, edges = histogram.get_result()
+        >>> counts
+        [2, 1, 1, 2]
     """
     
     def __init__(self, bins: np.ndarray):
@@ -218,11 +227,14 @@ class AlphaCharacteristics:
     zero additional performance overhead.
     
     Example:
+        >>> import numpy as np
+        >>> alpha_blocks = [np.array([0, 0, 255, 255], dtype=np.uint8),
+        ...                 np.array([255, 0], dtype=np.uint8)]
         >>> alpha_char = AlphaCharacteristics()
         >>> for block in alpha_blocks:
-        >>>     alpha_char.update(block)
-        >>> alpha_type = alpha_char.get_alpha_type()
-        >>> print(f"Alpha type: {alpha_type}")
+        ...     alpha_char.update(block)
+        >>> alpha_char.get_alpha_type()   # only 0 and 255 are present
+        'binary'
     """
     
     def __init__(self):

@@ -411,7 +411,7 @@ def validate_date_format(value: Any) -> Tuple[bool, Optional[str]]:
         >>> validate_date_format('2025-13-01')
         (False, 'Invalid month: 13')
         >>> validate_date_format('01/15/2025')
-        (False, 'Invalid date format...')
+        (False, "Invalid date format: '01/15/2025'. Expected YYYY-MM-DD")
     """
     if value is None:
         return False, 'Value is None'
@@ -519,7 +519,7 @@ def validate_url_format(value: Any) -> Tuple[bool, Optional[str]]:
         >>> validate_url_format('ftp://files.example.com/data.zip')
         (True, None)
         >>> validate_url_format('not-a-url')
-        (False, 'Invalid URL format...')
+        (False, "Invalid URL scheme: ''. Expected http, https, ftp, ftps, sftp, or s3")
     """
     if value is None:
         return False, 'Value is None'
@@ -557,7 +557,7 @@ def validate_email_format(value: Any) -> Tuple[bool, Optional[str]]:
         >>> validate_email_format('user@example.com')
         (True, None)
         >>> validate_email_format('invalid-email')
-        (False, 'Invalid email format...')
+        (False, "Invalid email format: 'invalid-email'")
     """
     if value is None:
         return False, 'Value is None'

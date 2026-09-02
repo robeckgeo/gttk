@@ -99,12 +99,60 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1320 tests total (1216 unit, 51 integration, 53 E2E):
-- `tests/unit/` - Isolated component tests including 298 validation tests
+1437 tests total (1236 unit, 51 integration, 53 E2E, 97 doctests -- 88 in `gttk/`
+and 9 in `tests/`, all run by `--doctest-modules`):
+- `tests/unit/` - Isolated component tests including 328 validation tests
 - `tests/integration/` - Component interaction tests
 - `tests/e2e/` - Full CLI workflow tests
 - `tests/fixtures/` - Mock GeoTIFF factory (`mock_geotiff_factory.py`)
-- `tests/conftest.py` - Shared fixtures and pytest configuration
+- `tests/conftest.py` - Mock GeoTIFF fixtures and assertion formatting
+- `conftest.py` (repo root) - `PROJ_LIB` bootstrap, `gdal.UseExceptions()`, and the doctest sandbox
+
+### Doctests
+
+`pytest.ini` passes `--doctest-modules` and lists `gttk` in `testpaths`, so every
+`Example:` block in a docstring is executed on every run. An example that stops being
+true fails the suite.
+
+A docstring example that needs a file just opens one by name:
+
+```python
+>>> with MetadataExtractor('example.tif') as extractor:
+```
+
+The root `conftest.py` builds a set of deterministic `MockGeoTIFF` rasters once per
+session (`doctest_sample_dir`), and an autouse fixture copies them into a fresh
+directory and `chdir`s each doctest into it. So the names are real, writes are
+isolated per example, and nothing is left in the working tree. Available:
+`example.tif`, `input.tif`, `baseline.tif`, `optimized.tif`, `compressed.tif`,
+`image.tif` (3-band), `data.tif`, `dem_with_custom_vertical.tif`, `regular.tif`
+(no CRS), `metadata.tif` (GEO_METADATA + XMP + sidecar + a GDAL item), and a
+`tiles/` directory. Elevation rasters run 100.0 to 200.0, mean 150.0.
+
+House rules, learned from the 52 examples that had to be repaired:
+
+- **No `Path` reprs in expected output** - it is `PosixPath(...)` on Linux and
+  `WindowsPath(...)` on Windows, and this project ships an ArcGIS Pro toolbox.
+  Compare `p.name` or `p.as_posix()` instead.
+- **No repo-relative paths.** `Path('gttk/resources/rules')` only resolves when
+  pytest happens to run from the repo root; derive it from `gttk.__file__`.
+- **Format floats explicitly** - `f"{x:.4f}"`, not a bare repr.
+- **Sort anything unordered** before printing it.
+- **Loop bodies use `...`, not `>>>`.**
+- **Method examples need a receiver** - `extractor.extract_gdal(...)`, never a bare
+  `extract_gdal(...)`.
+- **Assert shape, not counts that churn** - `sorted(rules)` rather than
+  `len(rules['tag'])`, which broke the moment a rule was added.
+- **`# doctest: +ELLIPSIS` per example, and only when the value is genuinely
+  unstable.** Setting `doctest_optionflags` turns off pytest's default of a blanket
+  `ELLIPSIS`, on purpose: it lets an example trail off with `...` and pass without
+  anyone comparing it to the real output, which is how several of these examples came
+  to describe results the code had not produced in releases.
+- **Keep a GDAL dataset alive** while you hold a band from it -
+  `gdal.Open(f).GetRasterBand(1)` yields a band whose dataset is already collected.
+
+`DEVELOPER.md`'s two worked examples are not reachable by `--doctest-modules`, so
+`tests/unit/test_developer_guide.py` extracts and runs them instead.
 
 Validation test coverage:
 - `test_validation_models.py` - ValidationRule, ValidationResult, ValidationSummary
@@ -115,6 +163,7 @@ Validation test coverage:
 - `test_validation_xml.py` - XPath extraction with namespace handling
 - `test_validation_phase5.py` - JSONPath, extended data types
 - `test_validation_report.py` - Report generation
+- `test_validation_output.py` - Output folder, report and input-file path construction
 - `test_validation_integration.py` - End-to-end validation workflows
 
 Toolbox language coverage:
@@ -122,6 +171,9 @@ Toolbox language coverage:
 - `test_i18n_catalog.py` - every `_()` string in the `.pyt` has a Spanish entry, no orphans, placeholders intact
 - `test_toolbox_sidecars.py` - each language's `.pyt.xml` documents exactly the dialog's parameters and labels
 - `test_optimize_arc_wiring.py` - the ArcGIS optimize path binds its GDAL options and logs to the GP pane
+
+Documentation coverage:
+- `test_developer_guide.py` - runs DEVELOPER.md's two worked examples straight out of the markdown
 
 ## Key Dependencies
 - **GDAL** (>=3.11) - Core geospatial operations

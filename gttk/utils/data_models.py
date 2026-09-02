@@ -163,6 +163,7 @@ class ReportSection:
         >>> section = ReportSection(
         ...     id="tags",
         ...     title="TIFF Tags",
+        ...     menu_name="Tags",
         ...     data=[TiffTag(256, "ImageWidth", 1024)],
         ...     renderer_hint="table"
         ... )
@@ -694,7 +695,7 @@ class BoundingBox:
         ...     east=180.0,
         ...     south=-90.0,
         ...     north=90.0,
-        ...     unit="degree"
+        ...     horizontal_unit="degree"
         ... )
         >>> bbox.width()
         360.0
@@ -772,6 +773,11 @@ class StatisticsBand:
     Example:
         >>> stats = StatisticsBand(
         ...     band_name="Band 1",
+        ...     valid_percent=100.0,
+        ...     valid_count=65536,
+        ...     mask_count=0,
+        ...     alpha_0_count=0,
+        ...     nodata_count=0,
         ...     minimum=0.0,
         ...     maximum=255.0,
         ...     mean=127.5,
@@ -1099,7 +1105,7 @@ class JsonString:
     
     Example:
         >>> json_data = JsonString(
-        ...     json_string='{"type": "GeographicCRS", "name": "WGS 84",...}',
+        ...     json_string='{"type": "GeographicCRS", "name": "WGS 84"}'
         ... )
         >>> json_data.is_valid_json()
         True
@@ -1515,8 +1521,12 @@ class FileComparison:
         cog_warnings: List of COG validation warnings
 
     Example:
-        >>> base = FileInfo(name='Input', data_type='Float32', is_cog='Yes', is_bigtiff='No', ...)
-        >>> comp = FileInfo(name='Output', data_type='Float32', is_cog='Yes', is_bigtiff='No', ...)
+        >>> base = FileInfo(name='Input', data_type='Float32', is_cog='Yes',
+        ...                 is_bigtiff='No', algorithm='None', bands=1,
+        ...                 transparency='None', size_mb=100.0)
+        >>> comp = FileInfo(name='Output', data_type='Float32', is_cog='Yes',
+        ...                 is_bigtiff='No', algorithm='ZSTD', bands=1,
+        ...                 transparency='None', size_mb=25.0)
         >>> comparison = FileComparison(
         ...     base_file=base,
         ...     comp_file=comp,
@@ -1582,13 +1592,16 @@ class IfdInfoComparison:
         files: List of tuples (file_label, IfdInfoData)
     
     Example:
+        >>> ifds = IfdInfoData(
+        ...     headers=['IFD', 'Size', 'Compression'],
+        ...     rows=[[0, '64 x 64', 'DEFLATE']]
+        ... )
         >>> comp_ifd = IfdInfoComparison(
         ...     title="IFDs",
-        ...     files=[
-        ...         ("Baseline", baseline_ifd_data),
-        ...         ("Comparison", comparison_ifd_data)
-        ...     ]
+        ...     files=[("Baseline", ifds), ("Comparison", ifds)]
         ... )
+        >>> [label for label, _ in comp_ifd.files]
+        ['Baseline', 'Comparison']
     """
     title: str
     files: List[Tuple[str, IfdInfoData]]
@@ -1609,13 +1622,19 @@ class TilingComparison:
                where tiling_data_or_message is either List[TileInfo] or str
     
     Example:
+        >>> tiles = [TileInfo(
+        ...     level=0, tile_count=1, block_size='64 x 64',
+        ...     tile_dimensions='64 x 64', total_pixels='4,096', resolution='1.0'
+        ... )]
         >>> comp_tiling = TilingComparison(
         ...     title="Tiling and Overviews",
         ...     files=[
-        ...         ("Baseline", baseline_tiles),
+        ...         ("Baseline", tiles),
         ...         ("Comparison", "This file is not tiled.")
         ...     ]
         ... )
+        >>> comp_tiling.files[1][1]
+        'This file is not tiled.'
     """
     title: str
     files: List[Tuple[str, Union[List[TileInfo], str]]]
@@ -1634,13 +1653,17 @@ class StatisticsComparison:
         files: List of tuples (file_label, StatisticsData)
     
     Example:
+        >>> stats = StatisticsData(
+        ...     title="Statistics",
+        ...     headers=['Band', 'Minimum', 'Maximum', 'Mean'],
+        ...     data=[['Band 1', 100.0, 200.0, 150.0]]
+        ... )
         >>> comp_stats = StatisticsComparison(
         ...     title="Statistics",
-        ...     files=[
-        ...         ("Baseline", baseline_stats),
-        ...         ("Comparison", comparison_stats)
-        ...     ]
+        ...     files=[("Baseline", stats), ("Comparison", stats)]
         ... )
+        >>> [label for label, _ in comp_stats.files]
+        ['Baseline', 'Comparison']
     """
     title: str
     files: List[Tuple[str, StatisticsData]]
@@ -1659,13 +1682,13 @@ class HistogramComparison:
         files: List of tuples (file_label, HistogramImage)
     
     Example:
+        >>> histogram = HistogramImage(base64_image='iVBORw0KGgo=', bands=['Band 1'])
         >>> comp_hist = HistogramComparison(
         ...     title="Histograms",
-        ...     files=[
-        ...         ("Baseline", baseline_histogram),
-        ...         ("Comparison", comparison_histogram)
-        ...     ]
+        ...     files=[("Baseline", histogram), ("Comparison", histogram)]
         ... )
+        >>> comp_hist.files[0][1].band_count()
+        1
     """
     title: str
     files: List[Tuple[str, HistogramImage]]
@@ -1684,13 +1707,13 @@ class CogValidationComparison:
         files: List of tuples (file_label, CogValidation)
     
     Example:
+        >>> valid = CogValidation()
         >>> comp_cog = CogValidationComparison(
         ...     title="COG Validation",
-        ...     files=[
-        ...         ("Baseline", baseline_cog),
-        ...         ("Comparison", comparison_cog)
-        ...     ]
+        ...     files=[("Baseline", valid), ("Comparison", valid)]
         ... )
+        >>> comp_cog.files[0][1].get_status_message()
+        'Valid Cloud Optimized GeoTIFF'
     """
     title: str
     files: List[Tuple[str, CogValidation]]

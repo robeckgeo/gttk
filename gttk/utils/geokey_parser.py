@@ -281,13 +281,12 @@ class GeoKeyParser:
             >>> with GeoKeyParser('example.tif') as parser:
             ...     version, keys = parser.parse_geokey_directory()
             ...     print(f"GeoTIFF v{version}: {len(keys)} keys")
-            ...     for key in keys:
+            ...     for key in keys[:3]:
             ...         print(f"  {key.name}: {key.value_text}")
-            GeoTIFF v1.1: 8 keys
+            GeoTIFF v1.0: 7 keys
               GTModelTypeGeoKey: 2 (ModelTypeGeographic)
               GTRasterTypeGeoKey: 1 (RasterPixelIsArea)
-              GeodeticCRSGeoKey: 4326 (WGS 84)
-              ...
+              GeographicTypeGeoKey: 4326 (WGS 84)
         """
         if not self.tif.series:
             return None, []

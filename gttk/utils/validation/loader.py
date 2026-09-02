@@ -70,13 +70,17 @@ def load_validation_rules(
         ValueError: If product not found or duplicate products detected
 
     Example:
+        >>> import gttk
+        >>> rules_dir = Path(gttk.__file__).parent / 'resources' / 'rules'
         >>> rules, filename = load_validation_rules(
-        ...     Path('gttk/resources/rules'),
+        ...     rules_dir,
         ...     'DGED5',
         ...     sections=['tag', 'geokey']
         ... )
-        >>> len(rules['tag'])
-        5
+        >>> sorted(rules)
+        ['geokey', 'tag']
+        >>> filename
+        'example_rules.toml'
     """
     # 1. Find all TOML files
     toml_files = list(rules_dir.glob('*.toml'))
@@ -240,9 +244,11 @@ def get_available_products(rules_dir: Path) -> Dict[str, str]:
         ValueError: If duplicate products are detected
 
     Example:
-        >>> products = get_available_products(Path('gttk/resources/rules'))
-        >>> 'DGED5' in products
-        True
+        >>> import gttk
+        >>> rules_dir = Path(gttk.__file__).parent / 'resources' / 'rules'
+        >>> products = get_available_products(rules_dir)
+        >>> products['DGED5']
+        'example_rules.toml'
     """
     toml_files = list(rules_dir.glob('*.toml'))
 

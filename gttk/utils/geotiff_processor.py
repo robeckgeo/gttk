@@ -1306,7 +1306,9 @@ def is_nodata_valid(nodata: float, dtype: str) -> bool:
         True if NoData value is valid for the data type, False otherwise
         
     Examples:
-        >>> is_nodata_valid(-3.4e38, 'Float32')  # Out of range
+        >>> is_nodata_valid(-3.4e38, 'Float32')  # Representable: |x| < 3.4028235e38
+        True
+        >>> is_nodata_valid(-3.5e38, 'Float32')  # Out of range
         False
         >>> is_nodata_valid(np.nan, 'Float32')  # Valid for floats
         True

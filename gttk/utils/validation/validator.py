@@ -68,12 +68,19 @@ class ValidationEngine:
         value_extractor: ValueExtractor for retrieving values by key
 
     Example:
-        >>> with MetadataExtractor(filepath) as extractor:
+        >>> from gttk.utils.metadata_extractor import MetadataExtractor
+        >>> rule = ValidationRule(
+        ...     product='DGED5', section='tag', key='258', key_type='Tag',
+        ...     description='BitsPerSample', data_type='integer',
+        ...     constraint='exact', expected=32
+        ... )
+        >>> with MetadataExtractor('example.tif') as extractor:
         ...     engine = ValidationEngine(extractor)
-        ...     results = engine.validate_all_sections(rules_by_section)
+        ...     results = engine.validate_all_sections({'tag': [rule]})
         ...     for section, section_results in results.items():
         ...         for result in section_results:
         ...             print(f"{result.status}: {result.message}")
+        PASS: Tag 258 value matches expected value: 32
     """
 
     def __init__(self, extractor: "MetadataExtractor") -> None:
@@ -572,11 +579,12 @@ class ValidationEngine:
             Formatted string representation
 
         Examples:
-            >>> _format_value_for_display([642.78])
+            >>> engine = ValidationEngine(None)   # formatting only, no file needed
+            >>> engine._format_value_for_display([642.78])
             '642.78'
-            >>> _format_value_for_display([100, 200, 150])
+            >>> engine._format_value_for_display([100, 200, 150])
             '[100, 200, 150]'
-            >>> _format_value_for_display(42.5)
+            >>> engine._format_value_for_display(42.5)
             '42.5'
         """
         if isinstance(value, (list, tuple)) and len(value) == 1:

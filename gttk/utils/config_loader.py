@@ -118,8 +118,10 @@ class Config:
             Dictionary containing the section configuration
             
         Example:
-            >>> config.get_section("gui")
-            {'default_layout': 'analyst', 'default_theme': 'material_light', ...}
+            >>> sorted(config.get_section("gui"))
+            ['default_layout', 'default_theme', 'enable_dark_mode', 'language', 'window_size']
+            >>> config.get_section("gui")["default_theme"]
+            'material_light'
         """
         return self._config.get(section, {})
     

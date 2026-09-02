@@ -158,6 +158,11 @@ class ValidationResult:
         message: Human-readable message explaining the result
 
     Example:
+        >>> rule = ValidationRule(
+        ...     product='DGED5', section='tag', key='258', key_type='Tag',
+        ...     description='BitsPerSample', data_type='integer',
+        ...     constraint='exact', expected=32
+        ... )
         >>> result = ValidationResult(
         ...     rule=rule,
         ...     value=32,
@@ -287,10 +292,17 @@ class ValidationTableData:
         icon: Icon name for the section menu
 
     Example:
+        >>> rule = ValidationRule(
+        ...     product='DGED5', section='tag', key='258', key_type='Tag',
+        ...     description='BitsPerSample', data_type='integer',
+        ...     constraint='exact', expected=32
+        ... )
+        >>> passing = ValidationResult(rule=rule, value=32, status='PASS')
+        >>> failing = ValidationResult(rule=rule, value=16, status='FAIL')
         >>> table_data = ValidationTableData(
         ...     section_name='TIFF Tags',
         ...     section_type='tag',
-        ...     results=[result1, result2]
+        ...     results=[passing, failing]
         ... )
         >>> table_data.passed_count
         1

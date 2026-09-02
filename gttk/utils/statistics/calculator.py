@@ -664,14 +664,19 @@ def calculate_statistics(
         ```
     
     Examples:
+        >>> from osgeo import gdal
+        >>> dataset = gdal.Open('example.tif')
+
         >>> # Automatic strategy selection
         >>> stats = calculate_statistics(dataset)
-        
-        >>> # Force specific threshold
+        >>> f"{stats[0].minimum} to {stats[0].maximum}, mean {stats[0].mean}"
+        '100.0 to 200.0, mean 150.0'
+
+        >>> # Force the fast path by raising the pixel-count threshold
         >>> stats = calculate_statistics(dataset, max_pixels=100_000_000)
-        
-        >>> # Custom block size for blocked path
-        >>> stats = calculate_statistics(dataset, block_size=(1024, 1024))
+
+        >>> # Custom block size for the blocked path
+        >>> stats = calculate_statistics(dataset, max_pixels=1, block_size=(32, 32))
     """
     if ds_or_band is None:
         logger.error("Invalid dataset or band provided for statistics calculation.")

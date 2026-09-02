@@ -197,9 +197,12 @@ def round_overviews(ds: gdal.Dataset, decimals: int) -> gdal.Dataset:
         The same dataset with rounded overviews, reopened to ensure changes are visible
     
     Example:
-        >>> ds = gdal.Open('/vsimem/temp.tif', gdal.GA_Update)
+        >>> ds = gdal.Open('example.tif', gdal.GA_Update)
         >>> ds.BuildOverviews('BILINEAR', [2, 4, 8], options=['COMPRESS=NONE'])
+        0
         >>> ds = round_overviews(ds, 2)  # Round all overviews to 2 decimal places
+        >>> ds.GetRasterBand(1).GetOverviewCount()
+        3
     """
     if not ds or ds.RasterCount == 0:
         logger.warning("Dataset is None or has no bands. Cannot round overviews.")

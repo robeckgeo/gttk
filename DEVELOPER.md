@@ -35,6 +35,11 @@ The toolkit uses a Builder pattern to separate report content (what to include) 
 
 ### Example Usage
 
+The two blocks below are not illustrations: `tests/unit/test_developer_guide.py`
+extracts them from this file and runs them, against rasters named `input.tif`,
+`baseline.tif` and `optimized.tif`. If you edit them, they have to keep working.
+Adding or removing a block under this heading fails that test until it is updated.
+
 #### Generating a Metadata Report
 
 ```python
@@ -299,6 +304,39 @@ Rules that keep it honest:
 - To add a language, add its code to `SUPPORTED`, a `<code>.toml` catalog and a
   `toolbox/i18n/<code>/` directory of sidecars; the tests parametrise over every
   language they find there.
+
+## Examples That Run
+
+`pytest.ini` passes `--doctest-modules` and lists `gttk` in `testpaths`, so every
+`Example:` block in a docstring is executed on every test run. An example that stops
+matching the code fails the suite. This is not decoration: v0.10.0 shipped seven
+docstrings describing a `utils.report_context` module, a `build_context_from_file()`
+function and an `HtmlReportGenerator` class, none of which had existed for several
+releases, because nothing had ever run them.
+
+Write examples that open files by name:
+
+```python
+>>> with MetadataExtractor('example.tif') as extractor:
+...     builder = MetadataReportBuilder(extractor)
+...     builder.build(['tags', 'statistics'])
+```
+
+The repository-root `conftest.py` builds a set of deterministic `MockGeoTIFF` rasters
+once per session and gives each doctest a fresh copy of them as its working directory,
+so the filenames are real, one example's writes cannot reach the next, and nothing is
+left in the working tree. `example.tif`, `input.tif`, `baseline.tif`, `optimized.tif`,
+`compressed.tif`, `image.tif` (3-band), `data.tif`, `dem_with_custom_vertical.tif`,
+`regular.tif` (no CRS), `metadata.tif` (GEO_METADATA + XMP + sidecar) and a `tiles/`
+directory are available. Elevation rasters run 100.0 to 200.0 with a mean of 150.0.
+
+Two rules are worth repeating here because breaking them produces examples that pass on
+one machine and fail on another. Never put a `Path` repr in expected output -- it is
+`PosixPath(...)` on Linux and `WindowsPath(...)` on Windows, and this project ships an
+ArcGIS Pro toolbox; compare `p.name` or `p.as_posix()`. And `ELLIPSIS` is off (pytest
+enables it by default; `doctest_optionflags` in `pytest.ini` overrides that), so an
+example that truncates its expected output with `...` has to opt in per-example with
+`# doctest: +ELLIPSIS` and be able to say why. The full list is in CLAUDE.md.
 
 ## Third-Party Code
 

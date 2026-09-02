@@ -43,29 +43,37 @@ def generate_output_paths(
         Tuple of (output_folder_path, json_file_path, gpkg_file_path)
 
     Examples:
-        >>> generate_output_paths(Path('/data/example.tif'))
-        (Path('/data/example_validation'),
-         Path('/data/example_validation/example_validation_results.json'),
-         Path('/data/example_validation/example_validation_map.gpkg'))
+        >>> folder, json_file, gpkg_file = generate_output_paths(Path('example.tif'))
+        >>> [folder.name, json_file.name, gpkg_file.name]
+        ['example_validation', 'example_validation_results.json', 'example_validation_map.gpkg']
 
-        >>> generate_output_paths(Path('/data/tiles/'))
-        (Path('/data/tiles_validation'),
-         Path('/data/tiles_validation/tiles_validation_results.json'),
-         Path('/data/tiles_validation/tiles_validation_map.gpkg'))
+        >>> folder, _, _ = generate_output_paths(Path('tiles'))   # a directory
+        >>> folder.name
+        'tiles_validation'
 
-        >>> generate_output_paths(Path('/data/example.tif'), Path('/reports'))
-        (Path('/reports/example_validation'),
-         Path('/reports/example_validation/example_validation_results.json'),
-         Path('/reports/example_validation/example_validation_map.gpkg'))
+        >>> folder, _, _ = generate_output_paths(Path('example.tif'), Path('reports'))
+        >>> folder.as_posix()
+        'reports/example_validation'
+
+        A file that has not been written yet is still named as a file:
+
+        >>> folder, _, _ = generate_output_paths(Path('not_yet_written.tif'))
+        >>> folder.name
+        'not_yet_written_validation'
     """
     # Determine basename and parent
-    if input_path.is_file():
-        basename = input_path.stem
-        parent = input_path.parent
-    else:
+    if input_path.is_dir():
         # Directory input - use directory name
         basename = input_path.name
-        parent = input_path.parent
+    elif input_path.is_file() or input_path.suffix:
+        # A file, or a file-shaped path that has not been written yet. Testing
+        # the suffix matters because callers build output paths for inputs that
+        # do not exist on disk; without it '/data/tile.tif' would be treated as
+        # a directory and every output would carry '.tif' in its name.
+        basename = input_path.stem
+    else:
+        basename = input_path.name
+    parent = input_path.parent
 
     # Determine output parent directory
     if output_dir is not None:
@@ -104,20 +112,20 @@ def generate_report_path(
 
     Examples:
         >>> generate_report_path(
-        ...     Path('/data/tile_001.tif'),
-        ...     Path('/data/tiles_validation'),
+        ...     Path('tiles/tile_001_DSM.tif'),
+        ...     Path('tiles_validation'),
         ...     'PASS',
         ...     'html'
-        ... )
-        Path('/data/tiles_validation/reports/tile_001_PASS.html')
+        ... ).as_posix()
+        'tiles_validation/reports/tile_001_DSM_PASS.html'
 
         >>> generate_report_path(
-        ...     Path('/data/tile_002.tif'),
-        ...     Path('/data/tiles_validation'),
+        ...     Path('tiles/tile_002_DSM.tif'),
+        ...     Path('tiles_validation'),
         ...     'FAIL',
         ...     'md'
-        ... )
-        Path('/data/tiles_validation/reports/tile_002_FAIL.md')
+        ... ).as_posix()
+        'tiles_validation/reports/tile_002_DSM_FAIL.md'
     """
     stem = input_file.stem
     suffix = f"_{overall_status}"
@@ -138,11 +146,14 @@ def get_input_files(input_path: Path, name_filter: str = '') -> list:
         List of Path objects for files to validate
 
     Examples:
-        >>> get_input_files(Path('data/example.tif'))
-        [Path('data/example.tif')]
+        >>> [f.name for f in get_input_files(Path('example.tif'))]
+        ['example.tif']
 
-        >>> get_input_files(Path('data/'), name_filter='DSM')
-        [Path('data/tile_001_DSM.tif'), Path('data/tile_002_DSM.tif')]
+        >>> [f.name for f in get_input_files(Path('tiles'))]
+        ['tile_001_DSM.tif', 'tile_002_DSM.tif', 'tile_003_DTM.tif']
+
+        >>> [f.name for f in get_input_files(Path('tiles'), name_filter='DSM')]
+        ['tile_001_DSM.tif', 'tile_002_DSM.tif']
     """
     if input_path.is_file():
         return [input_path]

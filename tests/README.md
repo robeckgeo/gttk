@@ -1,6 +1,6 @@
 # GeoTIFF Toolkit - Testing Guide
 
-**Status**: ✅ **623 tests passing** | **Phase 1 Expansion Complete** | **Production Ready**
+**Status**: ✅ **1,437 tests passing** | **Doctests enabled** | **Production Ready**
 
 This guide provides comprehensive information about testing GTTK (GeoTIFF ToolKit).
 
@@ -47,14 +47,38 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 638 (623 pytest tests + 15 benchmark/validation functions)
+- **Total Tests**: 1,437
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 516 tests (models, processors, extractors, formatters, utilities)
-  - Integration Tests: 31 tests (metadata workflows, statistics validation)
-  - E2E Tests: 76 tests (CLI commands)
-  - Benchmarks: 10 functions (statistics performance)
-  - Validation: 5 functions (accuracy verification)
+  - Unit Tests: 1,236 tests (models, processors, extractors, formatters, utilities)
+  - Doctests: 97 (88 in `gttk/`, 9 in `tests/`)
+  - Integration Tests: 51 tests (metadata workflows, statistics validation)
+  - E2E Tests: 53 tests (CLI commands)
+
+> The per-file counts in the directory tree below have not been kept current and are
+> indicative only. The category totals above are from `pytest --collect-only`.
+
+### Doctests
+
+`pytest.ini` passes `--doctest-modules` and lists `gttk` in `testpaths`, so every
+`Example:` block in a docstring runs as part of the suite -- a docstring that stops
+matching the code fails the build.
+
+An example that needs a raster opens one by name:
+
+```python
+>>> with MetadataExtractor('example.tif') as extractor:
+...     builder = MetadataReportBuilder(extractor)
+...     builder.build(['tags', 'statistics'])
+```
+
+The repository-root `conftest.py` builds deterministic `MockGeoTIFF` rasters once per
+session and gives each doctest its own copy of them as the working directory, so the
+names resolve, writes stay isolated, and nothing is left behind. `DEVELOPER.md`'s two
+worked examples are run the same way, by `tests/unit/test_developer_guide.py`.
+
+The house rules for writing one -- `Path` reprs, `ELLIPSIS`, float formatting, keeping
+a GDAL dataset alive -- are in the **Doctests** section of `CLAUDE.md`.
 
 ### Coverage Targets
 
@@ -69,9 +93,11 @@ open htmlcov/index.html   # macOS/Linux
 ### Directory Structure
 
 ```text
+conftest.py                                      # (repo root) PROJ_LIB, gdal.UseExceptions,
+                                                 # and the doctest sandbox
 tests/
 ├── __init__.py                                  # Test package initialization
-├── conftest.py                                  # Shared fixtures & pytest configuration
+├── conftest.py                                  # Mock GeoTIFF fixtures & assertion formatting
 ├── README.md                                    # Detailed test documentation
 ├── fixtures/                                    # Mock data factories
 │   ├── __init__.py
@@ -397,6 +423,13 @@ def test_command_basic_workflow(tmp_path):
 ## Testing Fixtures
 
 ### Shared Fixtures (conftest.py)
+
+There are two. `tests/conftest.py` holds the mock GeoTIFF fixtures below and the
+assertion formatting that keeps base64 histograms out of failure output. The
+repository-root `conftest.py` holds what has to run above everything else: the
+`PROJ_LIB` bootstrap (before the first `osgeo` import), `gdal.UseExceptions()`, and
+the doctest sandbox -- which only a root conftest can supply, since a conftest reaches
+only items at or below its own directory and the doctests live under `gttk/`.
 
 **Mock GeoTIFF Fixtures**:
 

@@ -65,7 +65,8 @@ class ReportFormatter(ABC):
         sections: List of ReportSection objects to include in report
     
     Example:
-        >>> # Build sections using MetadataReportBuilder
+        >>> from gttk.utils.metadata_extractor import MetadataExtractor
+        >>> from gttk.utils.report_builders import MetadataReportBuilder
         >>> with MetadataExtractor('example.tif') as extractor:
         ...     builder = MetadataReportBuilder(extractor)
         ...     builder.build(['tags', 'statistics'])
@@ -74,6 +75,8 @@ class ReportFormatter(ABC):
         ...     formatter = MarkdownReportFormatter(filename='example.tif')
         ...     formatter.sections = builder.sections
         ...     report = formatter.format()
+        >>> report.startswith('## ')
+        True
     """
     
     def __init__(self, renderer: Renderer):
@@ -191,12 +194,17 @@ class MarkdownReportFormatter(ReportFormatter):
     of contents generation with anchor links.
     
     Example:
+        >>> from gttk.utils.metadata_extractor import MetadataExtractor
+        >>> from gttk.utils.report_builders import MetadataReportBuilder
+        >>> with MetadataExtractor('example.tif') as extractor:
+        ...     builder = MetadataReportBuilder(extractor)
+        ...     builder.build(['tags', 'statistics'])
         >>> formatter = MarkdownReportFormatter(filename='example.tif')
         >>> formatter.include_title = True
-        >>> formatter.sections = builder.sections  # from a MetadataReportBuilder
+        >>> formatter.sections = builder.sections
         >>> markdown = formatter.format()
-        >>> with open('report.md', 'w') as f:
-        ...     f.write(markdown)
+        >>> markdown.splitlines()[0]
+        '# Metadata Content: example.tif'
     """
     
     def __init__(self, filename: str = "Unknown"):
@@ -290,12 +298,17 @@ class HtmlReportFormatter(ReportFormatter):
     3. Wraps in custom HTML template with CSS and navigation
     
     Example:
+        >>> from gttk.utils.metadata_extractor import MetadataExtractor
+        >>> from gttk.utils.report_builders import MetadataReportBuilder
+        >>> with MetadataExtractor('example.tif') as extractor:
+        ...     builder = MetadataReportBuilder(extractor)
+        ...     builder.build(['tags', 'statistics'])
         >>> formatter = HtmlReportFormatter(filename='example.tif')
         >>> formatter.report_title = "Metadata Content"
-        >>> formatter.sections = builder.sections  # from a MetadataReportBuilder
+        >>> formatter.sections = builder.sections
         >>> html = formatter.format()
-        >>> with open('report.html', 'w') as f:
-        ...     f.write(html)
+        >>> html.startswith('<!DOCTYPE html>')
+        True
     """
     
     def __init__(self, filename: str = "Unknown", report_type: str = "metadata", theme: str = "material_light"):

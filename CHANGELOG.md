@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- **Every `Example:` block in a docstring now runs as part of the test suite.** They were
+  all written in doctest form, but `--doctest-modules` had never been passed, so none of
+  them had ever been executed -- which is how v0.10.0 came to ship seven docstrings
+  describing a `report_context` module and an `HtmlReportGenerator` class that had not
+  existed for several releases. Turning the flag on surfaced 52 broken examples across 17
+  files: dataclass calls missing required fields, methods documented as free functions,
+  loop bodies written with `>>>` instead of `...`, expected output that was a comment,
+  and truncated strings that had never been compared against the real message. All are
+  fixed, and `gttk` now sits in `testpaths` so the flag cannot be quietly dropped.
+
+  An example that needs a raster opens one by name -- `MetadataExtractor('example.tif')`
+  -- because the root `conftest.py` builds a set of deterministic `MockGeoTIFF` files once
+  per session and runs each example in its own copy of them. Examples stay readable as
+  documentation, writes cannot leak between them, and nothing lands in the working tree.
+  The house rules are in CLAUDE.md; the two worked examples in `DEVELOPER.md` are
+  extracted from the markdown and executed by `tests/unit/test_developer_guide.py`.
+
+- **`gttk validate` now names its output folder correctly for a file that does not exist
+  yet.** `generate_output_paths()` decided between a file and a directory with
+  `is_file()`, so a caller asking where results *would* go for `/data/tile.tif` got
+  `tile.tif_validation/tile.tif_validation_results.json`. It now falls back to the path's
+  suffix when the path is not on disk. The CLI never reached this -- it rejects a missing
+  input first -- so no run changes; a library caller's would. The function had no unit
+  tests at all; it has `tests/unit/test_validation_output.py` now.
+
 ### Removed
 
 - `gttk/utils/xml_helpers.py`, a leftover from a Qt GUI this repository does not contain.
