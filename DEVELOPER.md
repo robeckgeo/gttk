@@ -284,6 +284,15 @@ each subcommand's option table in the README to `build_parser()` -- the default 
 what the option's own `Default:` clause says, or `Profile` when that varies by product type
 -- so a hand-edit that disagrees with either fails the suite.
 
+### The version number
+
+`gttk.__version__` is read from the installed package metadata on first use, so the only
+place to bump it is `pyproject.toml` -- then `CITATION.cff`, the two README badges and the
+changelog's release heading, which `tests/unit/test_versions.py` holds to the same number.
+The modules that stamp reports and `TIFFTAG_SOFTWARE`, and the toolbox label, all import
+it; none looks the metadata up itself. An editable install reports the version it was
+installed with, so after a bump run `pip install -e .` again.
+
 ### Known ArcGIS toolbox divergences
 
 The toolbox deliberately differs from the CLI in three places, all in the **Read

@@ -22,7 +22,6 @@ Classes:
 import logging
 import numpy as np
 import uuid
-from importlib import metadata
 from osgeo import gdal, osr
 from pathlib import Path
 from typing import Optional, List
@@ -37,10 +36,7 @@ from gttk.utils.statistics import calculate_statistics
 
 logger = logging.getLogger(__name__)
 
-try:
-    __version__ = metadata.version("geotiff-toolkit")
-except metadata.PackageNotFoundError:
-    __version__ = "0.0.0-dev"
+from gttk import __version__
 
 
 def _discard_lsb_float(array, decimals, valid_mask):

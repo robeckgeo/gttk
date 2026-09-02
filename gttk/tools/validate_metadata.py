@@ -27,14 +27,10 @@ import json
 import logging
 import math
 from datetime import datetime, timezone
-from importlib import metadata
 from pathlib import Path
 from typing import Dict, List, Any, Optional, cast
 
-try:
-    __version__ = metadata.version("geotiff-toolkit")
-except metadata.PackageNotFoundError:
-    __version__ = "0.0.0-dev"
+from gttk import __version__
 
 from gttk.utils.gdal_env import gdal_env
 from gttk.utils.script_arguments import ValidateArguments

@@ -315,6 +315,31 @@ class TestGdalEnv:
             "belongs only to the ArcGIS path that needs it")
 
 
+class TestEntryPointsScopeTheirSettings:
+    """DEVELOPER.md: each tool's public entry point opens gdal_env() and delegates to its
+    _*_inner. Only optimize's was ever checked; the other five had the shape and no test."""
+
+    ENTRY_POINTS = [
+        ('gttk.tools.compare_compression', 'compare_compression', '_compare_compression_inner'),
+        ('gttk.tools.optimize_compression', 'optimize_compression', '_optimize_compression_inner'),
+        ('gttk.tools.optimize_compression_arc', 'optimize_compression', '_optimize_compression_arc_inner'),
+        ('gttk.tools.test_compression', 'test_compression', '_test_compression_inner'),
+        ('gttk.tools.read_metadata', 'read_metadata', '_read_metadata_inner'),
+        ('gttk.tools.validate_metadata', 'validate_metadata', '_validate_metadata_inner'),
+    ]
+
+    @pytest.mark.parametrize('module_name, entry, inner', ENTRY_POINTS)
+    def test_opens_gdal_env_and_delegates(self, module_name, entry, inner):
+        import importlib
+        import inspect
+        module = importlib.import_module(module_name)
+        source = inspect.getsource(getattr(module, entry))
+        assert 'with gdal_env(' in source, f'{module_name}.{entry} does not open gdal_env()'
+        assert f'{inner}(' in source, f'{module_name}.{entry} does not delegate to {inner}'
+        assert 'with gdal_env(' not in inspect.getsource(getattr(module, inner)), \
+            f'{module_name}.{inner} opens gdal_env() a second time'
+
+
 @pytest.mark.slow
 class TestOperationsStillGetTheSettings:
     """Scoping the settings must not amount to removing them."""

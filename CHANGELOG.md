@@ -34,6 +34,17 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`gttk.__version__`.** The release number was written in five places that agreed by
+  discipline and a sixth, `gttk.utils.statistics.__version__ = '1.0.0'`, that agreed with
+  nothing, while five modules each looked the installed version up for themselves. The
+  package exposes it once, read lazily from the installed metadata (`0.0.0-dev` for a
+  checkout on `sys.path` that was never installed); the report footers, the
+  `TIFFTAG_SOFTWARE` stamp and `gttk validate`'s JSON read it from there, and the ArcGIS
+  Pro toolbox shows it in its label. `tests/unit/test_versions.py` holds `pyproject.toml`,
+  `CITATION.cff`, both README badges and the changelog's newest release to the same
+  number, and `test_import_side_effects.py` now checks all six tool entry points, not
+  just `optimize`'s, for the shape DEVELOPER.md promises: open `gdal_env()`, delegate
+  to the inner function.
 - **Two validation scripts nothing ran are tests now.** `tests/validation/` held the checks
   that Welford's accumulator reproduces NumPy and that the blocked statistics path reproduces
   the fast path. pytest did not collect them and no document named them, so the second had

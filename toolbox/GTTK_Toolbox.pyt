@@ -144,6 +144,7 @@ try:
     # GTTK applies GDAL's exception mode per operation, not at import, so this
     # toolbox makes the choice for the ArcGIS process it runs in.
     gdal.UseExceptions()
+    from gttk import __version__
     import gttk.i18n as i18n
     from gttk.i18n import _, N_, Picklist
     import gttk.tools.compare_compression as cc
@@ -279,7 +280,7 @@ def _get_report_path(input_path: str, suffix: str, format: str) -> str:
 class Toolbox:
     def __init__(self):
         """Define the toolbox (the name of the toolbox is the name of the .pyt file)."""
-        self.label = _("GTTK Toolbox")
+        self.label = f'{_("GTTK Toolbox")} {__version__}'
         self.alias = "gttk"
         self.icon = "icons/GTTK_Toolbox.pyt.32px.png"
         # List of tool classes associated with this toolbox

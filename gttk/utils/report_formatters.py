@@ -26,7 +26,7 @@ import logging
 import mistune
 import re
 from abc import ABC, abstractmethod
-from importlib import metadata, resources
+from importlib import resources
 from typing import Any, List
 from urllib.parse import quote
 from gttk.utils.contexts import banner_context, xml_type_context
@@ -39,10 +39,7 @@ from gttk.utils.colors import ColorManager
 
 logger = logging.getLogger(__name__)
 
-try:
-    __version__ = metadata.version("geotiff-toolkit")
-except metadata.PackageNotFoundError:
-    __version__ = "0.0.0-dev"
+from gttk import __version__
 
 # ============================================================================
 # Report Generator Classes

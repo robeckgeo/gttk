@@ -33,3 +33,21 @@ try:  # noqa: SIM105 -- the message is the point
     from osgeo import gdal as _gdal  # noqa: F401  (imported for the check only)
 except ImportError as _exc:  # pragma: no cover -- needs an env without GDAL
     raise ImportError(_GDAL_MISSING) from _exc
+
+
+def __getattr__(name: str):
+    """``gttk.__version__``, read from the installed metadata on first use.
+
+    One number for the five modules that stamp reports and TIFFTAG_SOFTWARE, the toolbox
+    label and ``--help``; ``0.0.0-dev`` when the package is on ``sys.path`` without having
+    been installed. Looked up lazily so that importing the package opens no files.
+    """
+    if name == '__version__':
+        from importlib import metadata
+        try:
+            version = metadata.version('geotiff-toolkit')
+        except metadata.PackageNotFoundError:
+            version = '0.0.0-dev'
+        globals()['__version__'] = version
+        return version
+    raise AttributeError(f"module 'gttk' has no attribute {name!r}")

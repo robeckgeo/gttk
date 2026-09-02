@@ -47,10 +47,10 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,713
+- **Total Tests**: 1,726
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,459 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,472 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 106 (97 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 80 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
@@ -105,7 +105,7 @@ tests/
 │   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,459)
+├── unit/                                        # Unit tests (1,472)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (99)
 │   ├── test_readme_option_tables.py             # README option tables pinned to the parser (14)
@@ -124,7 +124,7 @@ tests/
 │   ├── test_validation_phase5.py                # JSONPath & extended data types (36)
 │   ├── test_validation_validator.py             # ValidationEngine (35)
 │   ├── test_statistics_type_utilities.py        # Native dtype utilities (32)
-│   ├── test_import_side_effects.py              # Importing GTTK leaves the host process alone (36)
+│   ├── test_import_side_effects.py              # Importing GTTK leaves the host process alone (42)
 │   ├── test_discard_lsb.py                      # DISCARD_LSB decimals-to-bits helper (30)
 │   ├── test_report_formatters.py                # Report formatting (30)
 │   ├── test_validation_loader.py                # TOML rule loading, in name order (30)
@@ -148,6 +148,7 @@ tests/
 │   ├── test_custom_vertical_crs_compound.py     # Custom vertical CRS into a compound CRS (7)
 │   ├── test_dependency_manifests.py             # The three manifests agree with the imports (6)
 │   ├── test_optimize_arc_wiring.py              # ArcGIS optimize path wiring (6)
+│   ├── test_versions.py                         # One version number, in every place it is written (7)
 │   ├── test_pytest_config.py                    # Coverage opt-in & the CI policy pinned (6)
 │   ├── test_toolbox_load.py                     # Loading the .pyt the way ArcGIS Pro does (6)
 │   ├── test_scratch_locations.py                # Scratch files never land in the working directory (4)

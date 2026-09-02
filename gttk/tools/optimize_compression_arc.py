@@ -32,7 +32,6 @@ import json
 from contextlib import contextmanager
 import subprocess
 import tempfile
-from importlib import metadata
 from osgeo import gdal, osr
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Union, Tuple, TYPE_CHECKING
@@ -55,10 +54,7 @@ from gttk.utils.script_arguments import OptimizeArguments
 from gttk.utils.srs_logic import handle_srs_logic, check_vertical_srs_mismatch
 from gttk.utils.statistics import calculate_statistics, build_pam_data_from_stats, write_pam_xml
 
-try:
-    __version__ = metadata.version("geotiff-toolkit")
-except metadata.PackageNotFoundError:
-    __version__ = "0.0.0-dev"
+from gttk import __version__
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 GDAL_RUNNER_SCRIPT = SCRIPT_DIR.parent / 'utils' / 'gdal_runner.py'
