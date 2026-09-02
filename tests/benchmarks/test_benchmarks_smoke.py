@@ -9,7 +9,7 @@
 # ******************************************************************************
 
 """
-Every benchmark in ``benchmark_statistics.py``, run once at a small size.
+Every benchmark, run once at a small size.
 
 The benchmarks are a hand-run tool: their default sizes take minutes and gigabytes, and
 nothing else imported them, so the functions they call could change under them without
@@ -21,6 +21,7 @@ back, or for the alpha classifier, the right label.
 
 import pytest
 
+from tests.benchmarks import benchmark_optimize as optimize_bench
 from tests.benchmarks import benchmark_statistics as bench
 
 pytestmark = pytest.mark.integration
@@ -73,3 +74,23 @@ def test_rgba_imagery():
 
 def test_large_dem():
     assert bench.benchmark_large_dem(size=256, block=64) > 0
+
+
+class TestOptimizeBenchmarks:
+    """``benchmark_optimize``: what one optimize run costs. Its defaults build an 8192x8192
+    raster three times over, so the suite runs each at 256x256 -- the numbers are noise at
+    that size, the code paths are not."""
+
+    def test_statistics_passes(self):
+        results = optimize_bench.benchmark_statistics_passes(size=256)
+        assert results['write only'][0] == 1, 'the write should take one statistics pass'
+        assert results['with report'][0] == 3
+        assert all(seconds > 0 for _, _, seconds in results.values())
+
+    def test_workspace_location(self):
+        results = optimize_bench.benchmark_workspace_location(size=256)
+        assert results['memory'] > 0 and results['disk'] > 0
+        assert results['estimated_gb'] == 256 * 256 * 4 * 2 / 1024 ** 3
+
+    def test_end_to_end(self):
+        assert optimize_bench.benchmark_end_to_end(size=256) > 0

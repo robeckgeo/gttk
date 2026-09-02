@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`tests/benchmarks/benchmark_optimize.py`** measures what one `gttk optimize` run costs:
+  the statistics passes it makes and how many band-equivalents they read, and the same
+  raster with its intermediates in memory and on disk. Both numbers came from a gigapixel
+  orthophoto that took over an hour; they are now something anyone can re-measure at a size
+  their machine can afford.
+
 ### Fixed
 
 - **Intermediates too large for memory are written beside the output instead.** The optimize
