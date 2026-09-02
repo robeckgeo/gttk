@@ -34,7 +34,7 @@ jobs:
           miniforge-version: latest
           environment-file: environment.yml
           activate-environment: gttk
-          auto-activate-base: false
+          auto-activate: false
 
       - name: Install GTTK in development mode
         run: pip install -e .
