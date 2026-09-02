@@ -41,6 +41,8 @@ dependencies = [
   "mistune>=3.0.0",
   "numpy>=2.2.0",
   "openpyxl>=3.1.5",
+  "pillow>=10.0.0",
+  "psutil>=5.9.0",
   "tifffile>=2025.1.10",
 ]
 
@@ -49,6 +51,8 @@ dependencies = [
 # installed; otherwise this builds from source and fails. conda-forge is the supported
 # route: `conda env create -f environment.yml`.
 gdal = ["gdal>=3.11"]
+# The test suite's own tools: `pip install -e ".[dev]"`. environment.yml carries the same.
+dev = ["pytest>=7.0.0", "pytest-cov>=4.0.0"]
 
 [project.urls]
 Homepage = "https://github.com/robeckgeo/gttk"
@@ -66,27 +70,19 @@ include-package-data = true
 find = { where = ["."] , include = ["gttk*"] }
 
 [tool.setuptools.package-data]
-# Include non-Python data files in the final wheel
-gttk = [
-    "resources/**/*.json",
-    "resources/**/*.py",
-    "resources/**/*.md",
-    "resources/**/*.svg",
-    "resources/**/*.png",
-    "resources/**/*.ico",
-    "resources/**/*.css",
-    "resources/**/*.qml",
-    "resources/**/*.ui",
-    "resources/**/*.txt",
-    "resources/i18n/*.toml",
-]
+# Everything under gttk/resources ships: the rule files, the JS and CSS the reports
+# embed, the CSV and XLSX templates `gttk test` reads, the TOML themes, catalogs and
+# default config, the icons and the two JSON lookups. The previous list of extensions
+# covered none of the JS, CSV, XLSX or non-i18n TOML files; they shipped only because
+# include-package-data plus MANIFEST.in rescued them.
+gttk = ["resources/**/*"]
 
 [tool.setuptools.exclude-package-data]
-# Exclude cache folders and temporary data
+# The caches the build scripts fill, and compiled bytecode
 gttk = [
     "resources/esri/cache/*",
     "resources/tiff/cache/*",
-    "resources/**/*.html"
+    "**/__pycache__/*",
 ]
 
 

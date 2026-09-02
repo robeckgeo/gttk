@@ -19,19 +19,12 @@ can reliably access these resources.
 Classes:
     ResourceManager: A singleton for accessing packaged static files.
 """
-import sys
 import re
 from pathlib import Path
 from typing import Dict, Optional
 
 
-if sys.version_info >= (3, 11):
-    import tomllib
-else:
-    try:
-        import tomli as tomllib
-    except ImportError:
-        tomllib = None
+import tomllib
 
 
 class ResourceManager:

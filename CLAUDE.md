@@ -12,7 +12,7 @@ GeoTIFF ToolKit (GTTK) is a Python toolkit for analyzing, optimizing, and compre
 # Environment setup
 conda env create -f environment.yml
 conda activate gttk
-pip install -e .  # Development install
+pip install -e ".[dev]"  # Development install, with the test tools
 
 # Run all tests
 pytest
@@ -101,7 +101,7 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1568 tests total (1358 unit, 51 integration, 56 E2E, 103 doctests -- 94 in `gttk/`
+1580 tests total (1364 unit, 57 integration, 56 E2E, 103 doctests -- 94 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 328 validation tests
 - `tests/integration/` - Component interaction tests
@@ -186,6 +186,7 @@ Documentation coverage:
 - **mistune** - Markdown to HTML conversion
 - **jsonpath-ng** - JSONPath expressions for PROJJSON validation
 - **psutil** - Memory monitoring for statistics calculator
+- **Pillow** - ICC profile decoding for the InterColourProfile tag
 
 ## Data Flow
 GeoTIFF file -> Metadata Extractor -> Data Models -> Report Builders -> Section Renderers -> Report Formatters -> Output (HTML/Markdown)

@@ -47,12 +47,12 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,568
+- **Total Tests**: 1,580
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,358 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,364 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 103 (94 in `gttk/`, 9 in `tests/`)
-  - Integration Tests: 51 tests (metadata workflows, statistics validation)
+  - Integration Tests: 57 tests (metadata workflows, statistics validation)
   - E2E Tests: 56 tests (CLI commands)
 
 Counts here and in the tree below are from `pytest --collect-only`; doctests
@@ -103,7 +103,7 @@ tests/
 │   ├── custom_vertical_crs.py                   # A vertical CRS with no EPSG code
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,358)
+├── unit/                                        # Unit tests (1,364)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (95)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
@@ -139,6 +139,7 @@ tests/
 │   ├── test_log_helpers.py                      # Logging helpers & startup env checks (9)
 │   ├── test_i18n_catalog.py                     # Spanish catalog pinned to the toolbox (8)
 │   ├── test_custom_vertical_crs_compound.py     # Custom vertical CRS into a compound CRS (7)
+│   ├── test_dependency_manifests.py             # The three manifests agree with the imports (6)
 │   ├── test_optimize_arc_wiring.py              # ArcGIS optimize path wiring (6)
 │   ├── test_pytest_config.py                    # Coverage opt-in & the CI policy pinned (6)
 │   ├── test_toolbox_load.py                     # Loading the .pyt the way ArcGIS Pro does (6)
@@ -149,8 +150,9 @@ tests/
 │   ├── test_histogram_generator.py              # Histograms render headless and pick no backend (2)
 │   ├── test_logging_hygiene.py                  # Nothing logs through the root logger (2)
 │   └── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
-├── integration/                                 # Integration tests (51)
+├── integration/                                 # Integration tests (57)
 │   ├── test_validation_integration.py           # End-to-end validation workflows (20)
+│   ├── test_installed_wheel.py                  # GTTK works from an installed wheel (6)
 │   ├── test_metadata_workflow.py                # Metadata extraction workflows (13)
 │   ├── test_statistics_blocked_path.py          # Block-based statistics (9)
 │   └── test_statistics_native_dtype.py          # Native dtype statistics (9)

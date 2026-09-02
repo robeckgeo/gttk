@@ -16,6 +16,8 @@ matplotlib>=3.10.0
 mistune>=3.0.0
 numpy>=2.2.0
 openpyxl>=3.1.5
+# ICC profile decoding for the InterColourProfile tag
+pillow>=10.0.0
 tifffile>=2025.1.10
 
 # Memory detection for adaptive statistics processing

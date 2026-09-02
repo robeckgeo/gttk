@@ -10,6 +10,7 @@ dependencies:
   - mistune
   - numpy
   - openpyxl
+  - pillow
   - tifffile
   # Memory detection for adaptive statistics processing
   - psutil

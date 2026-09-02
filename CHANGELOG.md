@@ -34,6 +34,12 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **A `dev` extra, and a test that installs the wheel.** `pip install -e ".[dev]"` brings
+  `pytest` and `pytest-cov`, which only `environment.yml` and `requirements.txt` listed
+  before. `tests/integration/test_installed_wheel.py` builds the wheel from what git would
+  ship, installs it into a throwaway virtual environment and runs `gttk read`, `gttk test`
+  and `gttk validate` from a scratch directory -- the arrangement none of the other 1,500
+  tests ever sees, since they all run against the editable checkout.
 - **The test suite runs in GitHub Actions.** There was no CI at all, so every guard in the
   repository -- the executed doctests, the import-side-effect checks, the README tables
   pinned to the resolver -- held only while someone remembered to run `pytest`.
@@ -101,6 +107,16 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **`pip install geotiff-toolkit` brings everything the code imports.** `psutil` was in
+  `environment.yml` and `requirements.txt` but not in `pyproject.toml`, so a pip install ran
+  without it and the statistics calculator silently used a fixed fast-path threshold
+  instead of sizing it from the available RAM; Pillow, which decodes the InterColourProfile
+  tag, was declared nowhere and present only because matplotlib happens to need it. Both
+  are dependencies now, and `tests/unit/test_dependency_manifests.py` keeps the three
+  manifests and the code's imports in agreement. The wheel's package-data rule now says
+  what ships (`resources/**/*`, minus the build caches and bytecode); the old list of
+  extensions covered none of the JavaScript, CSV, XLSX or theme files that reports and
+  `gttk test` read, and `MANIFEST.in` no longer prunes five directories that do not exist.
 - **An installed copy finds its configuration.** `config.toml` lives outside the package,
   and three modules looked for it three directories above their own file -- the checkout
   root in a checkout, `site-packages` in a wheel, where nothing is. `gttk test` and

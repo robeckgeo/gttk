@@ -6,27 +6,17 @@ include LICENSE
 include pyproject.toml
 include requirements.txt
 
-# Include selective resource files
+# Package data: everything under gttk/resources except the caches the build
+# scripts fill, and never compiled bytecode
 recursive-include gttk/resources *
-
-# Exclude unused resource cache files
 recursive-exclude gttk/resources/esri/cache *
 recursive-exclude gttk/resources/tiff/cache *
+global-exclude __pycache__ *.py[cod]
 
-# Exclude misc files not needed on PyPI
+# Not part of the distribution
 exclude .gitignore
-exclude .coveragerc
 exclude coverage.xml
 exclude .coverage
-
-# Exclude beta GUI
-exclude gttk_gui.py
-prune gttk/gui
-
-# Exclude heavy or dev-only directories
-prune arcgis_toolbox
-prune design
-prune docs
 prune htmlcov
 prune input
 prune output
