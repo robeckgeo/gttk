@@ -146,6 +146,10 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Rule files are read in name order.** The validation loader took `*.toml` files in
+  whatever order the filesystem listed them, so which file answered for a product, and
+  whether a broken file was reported before a match ended the search, differed from one
+  machine to the next.
 - **Opening a report from WSL without `wslpath` reaches the right place.** The fallback
   spelled every path through the distribution's network share, and always Ubuntu's, so a
   report on a Windows drive (`/mnt/c/...`) took the long way round to `C:\` and any other

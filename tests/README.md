@@ -47,10 +47,10 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,689
+- **Total Tests**: 1,690
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,434 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,435 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 107 (98 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 80 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
@@ -105,7 +105,7 @@ tests/
 │   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,434)
+├── unit/                                        # Unit tests (1,435)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (99)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
@@ -126,7 +126,7 @@ tests/
 │   ├── test_import_side_effects.py              # Importing GTTK leaves the host process alone (36)
 │   ├── test_discard_lsb.py                      # DISCARD_LSB decimals-to-bits helper (30)
 │   ├── test_report_formatters.py                # Report formatting (30)
-│   ├── test_validation_loader.py                # TOML rule loading (29)
+│   ├── test_validation_loader.py                # TOML rule loading, in name order (30)
 │   ├── test_mock_factory.py                     # MockGeoTIFF factory itself (27)
 │   ├── test_preprocessor.py                     # Data preprocessing (25)
 │   ├── test_xml_safety.py                       # XML from rasters and sidecars never reads a file (25)

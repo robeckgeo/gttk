@@ -551,11 +551,21 @@ class TestInvalidRuleFilesAreNamedWhenSkipped:
 
     def test_get_product_metadata_names_a_file_it_skips(self, tmp_path, caplog):
         """The product listing already said which file it skipped; the metadata lookup
-        skipped the same file in silence."""
+        skipped the same file in silence. The lookup stops at the first file holding the
+        product, and files are read in name order, so the broken file is the one that
+        sorts first."""
         import logging
         from gttk.utils.validation.loader import get_product_metadata
-        (tmp_path / 'good.toml').write_text('[X]\ntitle = "X"\n', encoding='utf-8')
-        (tmp_path / 'bad.toml').write_text('this is not = toml [', encoding='utf-8')
+        (tmp_path / 'b_product.toml').write_text('[X]\ntitle = "X"\n', encoding='utf-8')
+        (tmp_path / 'a_broken.toml').write_text('this is not = toml [', encoding='utf-8')
         with caplog.at_level(logging.WARNING):
             assert get_product_metadata(tmp_path, 'X')['title'] == 'X'
-        assert 'Skipping invalid TOML file: bad.toml' in caplog.text
+        assert 'Skipping invalid TOML file: a_broken.toml' in caplog.text
+
+    def test_rule_files_are_read_in_name_order(self, tmp_path):
+        """A directory listing comes in the filesystem's order, which is why the test
+        above passed on one machine and failed on another until the loader sorted."""
+        from gttk.utils.validation.loader import get_available_products
+        for name in ('m.toml', 'a.toml', 'z.toml', 'k.toml'):
+            (tmp_path / name).write_text(f'[{name[0].upper()}]\ntitle = "{name}"\n', encoding='utf-8')
+        assert list(get_available_products(tmp_path).values()) == ['a.toml', 'k.toml', 'm.toml', 'z.toml']
