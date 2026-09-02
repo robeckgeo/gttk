@@ -53,7 +53,7 @@ pytest --cov=gttk --cov-report=html
 ### Report Generation (Builder Pattern)
 The toolkit separates report content from formatting:
 
-1. **Data Models** (`gttk/utils/data_models.py`) - Strongly-typed dataclasses (`FileComparison`, `IfdTableData`, `StatisticsData`, etc.)
+1. **Data Models** (`gttk/utils/data_models.py`) - Strongly-typed dataclasses (`FileComparison`, `IfdInfo`, `StatisticsData`, etc.)
 2. **Metadata Extractor** (`gttk/utils/metadata_extractor.py`) - Extract data from GeoTIFF files, return dataclass instances
 3. **Report Builders** (`gttk/utils/report_builders.py`) - Determine WHAT sections to include (`MetadataReportBuilder`, `ComparisonReportBuilder`)
 4. **Section Renderers** (`gttk/utils/section_renderers.py`) - Render individual sections to markdown
@@ -101,9 +101,9 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1730 tests total (1476 unit, 80 integration, 58 E2E, 10 benchmark smoke, 106 doctests -- 97 in `gttk/`
+1743 tests total (1489 unit, 80 integration, 58 E2E, 10 benchmark smoke, 106 doctests -- 97 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
-- `tests/unit/` - Isolated component tests including 328 validation tests
+- `tests/unit/` - Isolated component tests including 326 validation tests
 - `tests/integration/` - Component interaction tests
 - `tests/e2e/` - Full CLI workflow tests
 - `tests/benchmarks/` - The statistics benchmarks, hand-run at full size, and a smoke test that runs each at 256×256
@@ -191,6 +191,7 @@ Packaging coverage:
 
 Documentation coverage:
 - `test_developer_guide.py` - runs DEVELOPER.md's two worked examples straight out of the markdown
+- `test_docs_pinned.py` - the counts and marker list in CLAUDE.md and tests/README.md against `--collect-only` and `pytest.ini`; every backticked path in the four documents exists and every `gttk.` name resolves
 - `test_readme_option_tables.py` - every subcommand's option table in README.md against `build_parser()`: option, short flag, type, required, and the default as `--help` states it
 - `test_versions.py` - `gttk.__version__` against `pyproject.toml`, `CITATION.cff`, both README badges and the changelog's newest release; no module carries a version of its own
 

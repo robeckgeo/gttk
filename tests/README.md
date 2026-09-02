@@ -47,10 +47,10 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,730
+- **Total Tests**: 1,743
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,476 tests (models, processors, extractors, formatters, utilities)
+  - Unit Tests: 1,489 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 106 (97 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 80 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
@@ -105,7 +105,7 @@ tests/
 │   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,476)
+├── unit/                                        # Unit tests (1,489)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (99)
 │   ├── test_readme_option_tables.py             # README option tables pinned to the parser (14)
@@ -124,7 +124,7 @@ tests/
 │   ├── test_validation_phase5.py                # JSONPath & extended data types (36)
 │   ├── test_validation_validator.py             # ValidationEngine (35)
 │   ├── test_statistics_type_utilities.py        # Native dtype utilities (32)
-│   ├── test_import_side_effects.py              # Importing GTTK leaves the host process alone (42)
+│   ├── test_import_side_effects.py              # Importing GTTK leaves the host process alone (44)
 │   ├── test_discard_lsb.py                      # DISCARD_LSB decimals-to-bits helper (30)
 │   ├── test_report_formatters.py                # Report formatting (30)
 │   ├── test_validation_loader.py                # TOML rule loading, in name order (30)
@@ -154,6 +154,7 @@ tests/
 │   ├── test_scratch_locations.py                # Scratch files never land in the working directory (4)
 │   ├── test_statistics_accuracy.py              # OnlineStatistics against NumPy, block by block (4)
 │   ├── test_tiff_tag_parser.py                  # Unparsable tags stay, a missing lookup says so (4)
+│   ├── test_docs_pinned.py                      # Counts, markers, paths and dotted names in the docs, held to the tree (13)
 │   ├── test_developer_guide.py                  # DEVELOPER.md's worked examples, executed (3)
 │   ├── test_gdal_runner.py                      # gdal_runner's stdout protocol and its timeout (4)
 │   ├── test_histogram_generator.py              # Histograms render headless and pick no backend (2)

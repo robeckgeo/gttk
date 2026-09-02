@@ -10,7 +10,7 @@ The toolkit uses a Builder pattern to separate report content (what to include) 
 
 1. **Data Models** ([`gttk/utils/data_models.py`](gttk/utils/data_models.py))
     * Strongly-typed dataclasses for all report data
-    * Examples: `FileComparison`, `IfdTableData`, `StatisticsData`
+    * Examples: `FileComparison`, `IfdInfo`, `StatisticsData`
     * Ensures type safety and clear contracts between components
 
 2. **Metadata Extractor** ([`gttk/utils/metadata_extractor.py`](gttk/utils/metadata_extractor.py))
@@ -247,14 +247,15 @@ The toolkit includes a built-in lookup table that maps Esri-specific CRS names t
 
 ### Packaged Data
 
-The lookup table is stored as a JSON file at `resources/esri/esri_epsg_name_lookup.json`. This file is packaged with the toolkit and is used by default for all SRS standardization operations.
+The lookup table is stored as a JSON file at `gttk/resources/esri/esri_cs_epsg_lookup.json`. This file is packaged with the toolkit and is used by default for all SRS standardization operations.
 
 ### Updating the Lookup Table
 
 The lookup table is generated from Esri's `projection-engine-db-doc` GitHub repository. To update the local version to the latest data, run:
 
 ```bash
-python tools/build_esri_epsg_lookup.py
+cd gttk
+python resources/esri/build_esri_cs_epsg_lookup.py
 ```
 
 This will fetch the latest CRS definitions from the repository and overwrite the existing JSON file with the updated data.

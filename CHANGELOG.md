@@ -91,6 +91,15 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **The documents that describe the suite are held to it.** `tests/unit/test_docs_pinned.py`
+  compares the test counts CLAUDE.md and tests/README.md state -- in total, by category and
+  per file -- with one `--collect-only` run, the marker list with `pytest.ini`, and every
+  backticked path and `gttk.` name in CLAUDE.md, DEVELOPER.md, README.md and tests/README.md
+  with the tree and the package. On today's documents that found a validation-test count
+  two off, a per-file count two off, a dataclass named `IfdTableData` that has never
+  existed (it is `IfdInfo`), and DEVELOPER.md pointing at
+  `resources/esri/esri_epsg_name_lookup.json` and a `tools/` directory, neither of which
+  exists.
 - **The README's option tables are pinned to the parser.** Each tool's table is now
   compared, row by row, with `build_parser()` by `tests/unit/test_readme_option_tables.py`:
   option, short flag, type, whether it is required, and the default exactly as `--help`
