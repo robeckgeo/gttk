@@ -85,6 +85,7 @@ Located in `gttk/utils/validation/`:
 - `gttk/utils/srs_logic.py` - Spatial reference system handling (compound CRS, vertical datums)
 - `gttk/utils/gdal_runner.py` - GDAL subprocess wrapper for ArcGIS isolation
 - `gttk/utils/esri_epsg_lookup.py` - Esri CRS name to EPSG code lookup
+- `gttk/utils/preprocessor.py` - The optimize pipeline's intermediates; `Workspace` holds them in `/vsimem` or, when they would not fit in memory, beside the output
 
 ### ArcGIS Pro Integration
 - `gttk/tools/optimize_compression_arc.py` - Uses OSGeo4W GDAL via subprocess to avoid ArcGIS GDAL conflicts
@@ -101,7 +102,7 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1755 tests total (1501 unit, 80 integration, 58 E2E, 10 benchmark smoke, 106 doctests -- 97 in `gttk/`
+1771 tests total (1512 unit, 83 integration, 58 E2E, 10 benchmark smoke, 108 doctests -- 99 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 326 validation tests
 - `tests/integration/` - Component interaction tests

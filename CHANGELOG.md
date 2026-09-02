@@ -6,6 +6,15 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Intermediates too large for memory are written beside the output instead.** The optimize
+  pipeline built its intermediate rasters in GDAL's `/vsimem` whatever their size: the tiled
+  copy of the input and, when an alpha band becomes a mask, the copy without it. For a
+  91,445 x 53,704 four-band orthophoto that is about 36 GB of them, which on a 16 GB machine
+  means the pagefile -- and every pass after it then reads its own pixels back through the
+  swapper rather than GDAL's block cache. `Workspace` sizes them from the input and puts them
+  on disk when they exceed half the free memory, beside the output, where a file that size
+  has somewhere to go. Ordinary rasters are unaffected: a 10,000 x 10,000 RGBA image needs
+  0.75 GB and stays in memory. The output is byte-identical either way.
 - **`gttk optimize` reads the raster once for the statistics it writes, not twice.**
   `preprocess_geotiff` ended with a full statistics pass whose only product was
   STATISTICS_* band metadata on the intermediate -- metadata in a domain that neither the

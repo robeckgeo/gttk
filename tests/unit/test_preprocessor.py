@@ -12,7 +12,7 @@
 Unit Tests for preprocessor.py
 
 Comprehensive test coverage for the GeoTIFF preprocessing pipeline including:
-- VirtualFileManager lifecycle and cleanup
+- Workspace lifecycle, location and cleanup
 - Alpha-to-mask conversion
 - Overview rounding for lossless compression
 - Complex NoData handling (remapping, masking, validation, conflict resolution)
@@ -25,11 +25,13 @@ Target: 24 tests with 80%+ code coverage for preprocessor.py
 import pytest
 import numpy as np
 import logging
+from pathlib import Path
 from unittest.mock import Mock
 from osgeo import gdal
 
+import gttk.utils.preprocessor as pre
 from gttk.utils.preprocessor import (
-    VirtualFileManager,
+    Workspace,
     _create_intermediate_with_mask,
     round_overviews,
     preprocess_geotiff
@@ -65,6 +67,7 @@ def mock_optimize_args():
 def mock_geotiff_info():
     """Create mock GeoTiffInfo with sensible defaults."""
     info = Mock(spec=GeoTiffInfo)
+    info.x_size, info.y_size, info.bands = 100, 100, 1
     info.nodata = None
     info.data_type = 'Float32'
     info.has_alpha = False
@@ -75,26 +78,26 @@ def mock_geotiff_info():
 
 
 # ==============================================================================
-# CATEGORY 1: VIRTUALFILEMANAGER TESTS (4 TESTS)
+# CATEGORY 1: WORKSPACE TESTS (4 TESTS)
 # ==============================================================================
 
-class TestVirtualFileManager:
-    """Test VirtualFileManager context manager for GDAL /vsimem/ operations."""
+class TestWorkspace:
+    """Where a run's intermediates are put, and that they are all removed."""
     
-    def test_virtual_file_manager_context_lifecycle(self):
-        """VirtualFileManager creates and cleans up virtual files."""
+    def test_workspace_context_lifecycle(self):
+        """Workspace creates and cleans up virtual files."""
         vsi_path = None
         
-        with VirtualFileManager() as vfm:
+        with Workspace() as workspace:
             # Create virtual file
-            vsi_path = vfm.get_temp_path("test.tif")
+            vsi_path = workspace.get_temp_path("test.tif")
             
             # Verify path format
             assert vsi_path.startswith("/vsimem/compress_")
             assert vsi_path.endswith("test.tif")
             
             # Verify path is registered
-            assert vsi_path in vfm.virtual_files
+            assert vsi_path in workspace.paths
             
             # Create a dummy file at that path
             driver = gdal.GetDriverByName('GTiff')
@@ -107,14 +110,14 @@ class TestVirtualFileManager:
         # After context exit, file should be cleaned up
         assert gdal.VSIStatL(vsi_path) is None
     
-    def test_virtual_file_manager_multiple_files(self):
-        """VirtualFileManager tracks and cleans up multiple files."""
+    def test_workspace_multiple_files(self):
+        """Workspace tracks and cleans up multiple files."""
         paths = []
         
-        with VirtualFileManager() as vfm:
+        with Workspace() as workspace:
             # Create multiple virtual files
             for i in range(5):
-                path = vfm.get_temp_path(f"test_{i}.tif")
+                path = workspace.get_temp_path(f"test_{i}.tif")
                 paths.append(path)
                 
                 # Create dummy file
@@ -130,24 +133,24 @@ class TestVirtualFileManager:
         for path in paths:
             assert gdal.VSIStatL(path) is None
     
-    def test_virtual_file_manager_invalid_path_raises_error(self):
+    def test_workspace_invalid_path_raises_error(self):
         """get_temp_path rejects paths not under /vsimem/."""
-        with VirtualFileManager() as vfm:
-            # Verify that vfm.vsi_prefix starts with /vsimem/
-            assert vfm.vsi_prefix.startswith("/vsimem/")
+        with Workspace() as workspace:
+            # Verify that workspace.vsi_prefix starts with /vsimem/
+            assert workspace.vsi_prefix.startswith("/vsimem/")
             
             # get_temp_path always prepends vsi_prefix, so paths are always valid
             # This tests the internal validation logic
-            vsi_path = vfm.get_temp_path("test.tif")
+            vsi_path = workspace.get_temp_path("test.tif")
             assert vsi_path.startswith("/vsimem/")
     
-    def test_virtual_file_manager_cleanup_on_exception(self):
-        """VirtualFileManager cleans up files even when exception occurs."""
+    def test_workspace_cleanup_on_exception(self):
+        """Workspace cleans up files even when exception occurs."""
         vsi_path = None
         
         try:
-            with VirtualFileManager() as vfm:
-                vsi_path = vfm.get_temp_path("test.tif")
+            with Workspace() as workspace:
+                vsi_path = workspace.get_temp_path("test.tif")
                 
                 # Create file
                 driver = gdal.GetDriverByName('GTiff')
@@ -169,6 +172,77 @@ class TestVirtualFileManager:
 # ==============================================================================
 # CATEGORY 2: ALPHA-TO-MASK CONVERSION TESTS (3 TESTS)
 # ==============================================================================
+
+    # --- where the intermediates are put ---------------------------------------
+
+    def test_a_workspace_that_fits_stays_in_memory(self, mock_geotiff_info):
+        """The common case, and what GTTK always did."""
+        with Workspace() as workspace:
+            workspace.plan_for(mock_geotiff_info)
+            assert not workspace.on_disk
+            assert workspace.get_temp_path('intermediate.tif').startswith('/vsimem/')
+
+    def test_intermediates_too_large_for_memory_are_written_to_disk(self, tmp_path, mock_geotiff_info, monkeypatch):
+        """A 4.9 gigapixel orthophoto needs ~36 GB of intermediates. Held in /vsimem on a
+        16 GB machine that is the pagefile, and every later pass reads its own pixels back
+        through the swapper."""
+        monkeypatch.setattr(pre, 'workspace_fits_in_memory', lambda *a, **kw: False)
+        directory = None
+        with Workspace(preferred_dir=tmp_path) as workspace:
+            workspace.plan_for(mock_geotiff_info)
+            assert workspace.on_disk
+            directory = workspace.directory
+            assert directory.parent == tmp_path, 'the workspace belongs beside the output'
+            path = workspace.get_temp_path('intermediate.tif')
+            assert not path.startswith('/vsimem/')
+            gdal.GetDriverByName('GTiff').Create(path, 8, 8, 1, gdal.GDT_Byte).FlushCache()
+            assert Path(path).is_file()
+        assert not directory.exists(), 'the workspace directory outlived the run'
+
+    def test_a_workspace_that_cannot_reach_a_disk_stays_in_memory(self, tmp_path, mock_geotiff_info, monkeypatch, caplog):
+        monkeypatch.setattr(pre, 'workspace_fits_in_memory', lambda *a, **kw: False)
+        monkeypatch.setattr(pre.tempfile, 'mkdtemp', Mock(side_effect=OSError('no room')))
+        with caplog.at_level(logging.WARNING):
+            with Workspace(preferred_dir=tmp_path) as workspace:
+                workspace.plan_for(mock_geotiff_info)
+                assert not workspace.on_disk
+                assert workspace.get_temp_path('intermediate.tif').startswith('/vsimem/')
+        assert 'no room' in caplog.text
+
+    def test_the_location_is_chosen_once(self, tmp_path, mock_geotiff_info, monkeypatch):
+        """The second intermediate must land beside the first, whatever changes underneath."""
+        with Workspace(preferred_dir=tmp_path) as workspace:
+            workspace.plan_for(mock_geotiff_info)
+            first = workspace.get_temp_path('intermediate.tif')
+            monkeypatch.setattr(pre, 'workspace_fits_in_memory', lambda *a, **kw: False)
+            workspace.plan_for(mock_geotiff_info)
+            assert workspace.get_temp_path('masked.tif').startswith(first.rsplit('/', 1)[0])
+
+
+class TestWorkspaceSizing:
+    """The numbers behind the choice, with the free memory supplied rather than measured."""
+
+    def test_the_estimate_covers_both_intermediates(self):
+        # 100 x 100 x 3 bands x 2 bytes x the two copies the pipeline holds at once
+        assert pre.estimated_workspace_bytes(100, 100, 3, 'UInt16') == 100 * 100 * 3 * 2 * 2
+
+    def test_an_unknown_data_type_is_sized_as_a_byte(self):
+        assert pre.estimated_workspace_bytes(10, 10, 1, None) == 10 * 10 * 1 * 1 * 2
+
+    @pytest.mark.parametrize('gigabytes, free_gb, expected', [
+        (0.12, 16, True),      # 4k x 4k RGBA
+        (2.98, 16, True),      # 20k x 20k Float32 DEM
+        (36.59, 16, False),    # the 91,445 x 53,704 orthophoto
+        (36.59, 128, True),    # the same file on a machine that can hold it
+    ])
+    def test_the_threshold_is_half_the_free_memory(self, gigabytes, free_gb, expected):
+        assert pre.workspace_fits_in_memory(int(gigabytes * 1024 ** 3), free_gb * 1024 ** 3) is expected
+
+    def test_without_psutil_the_answer_is_memory(self, monkeypatch):
+        """What GTTK did before the question was asked."""
+        monkeypatch.setitem(__import__('sys').modules, 'psutil', None)
+        assert pre.workspace_fits_in_memory(10 ** 15) is True
+
 
 class TestAlphaToMaskConversion:
     """Test alpha band to transparency mask conversion."""
@@ -196,14 +270,14 @@ class TestAlphaToMaskConversion:
         ds.FlushCache()
         
         # Now test conversion
-        with VirtualFileManager() as vfm:
+        with Workspace() as workspace:
             # Copy to virtual file
-            temp_path = vfm.get_temp_path("temp.tif")
+            temp_path = workspace.get_temp_path("temp.tif")
             temp_ds = driver.CreateCopy(temp_path, ds)
             ds = None
             
             # Apply conversion
-            masked_ds = _create_intermediate_with_mask(temp_ds, vfm)
+            masked_ds = _create_intermediate_with_mask(temp_ds, workspace)
             
             # Verify result
             assert masked_ds.RasterCount == 3  # RGB only
@@ -236,12 +310,12 @@ class TestAlphaToMaskConversion:
         ds.GetRasterBand(2).WriteArray(alpha_data)
         ds.FlushCache()
         
-        with VirtualFileManager() as vfm:
-            temp_path = vfm.get_temp_path("temp.tif")
+        with Workspace() as workspace:
+            temp_path = workspace.get_temp_path("temp.tif")
             temp_ds = driver.CreateCopy(temp_path, ds)
             ds = None
             
-            masked_ds = _create_intermediate_with_mask(temp_ds, vfm)
+            masked_ds = _create_intermediate_with_mask(temp_ds, workspace)
             
             # Should have 3 bands (R, G, B)
             assert masked_ds.RasterCount == 3
@@ -275,12 +349,12 @@ class TestAlphaToMaskConversion:
         ds.GetRasterBand(4).WriteArray(alpha_data)
         ds.FlushCache()
         
-        with VirtualFileManager() as vfm:
-            temp_path = vfm.get_temp_path("temp.tif")
+        with Workspace() as workspace:
+            temp_path = workspace.get_temp_path("temp.tif")
             temp_ds = driver.CreateCopy(temp_path, ds)
             ds = None
             
-            masked_ds = _create_intermediate_with_mask(temp_ds, vfm)
+            masked_ds = _create_intermediate_with_mask(temp_ds, workspace)
             
             # Verify RGB data preserved
             assert np.all(masked_ds.GetRasterBand(1).ReadAsArray() == 100)
@@ -408,8 +482,8 @@ class TestNoDataHandling:
         # Update info
         mock_geotiff_info.nodata = -9999.0
         
-        with VirtualFileManager() as vfm:
-            result_ds = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, None, {})
+        with Workspace() as workspace:
+            result_ds = preprocess_geotiff(original_ds, workspace, args, mock_geotiff_info, None, {})
             
             # Verify NoData was remapped
             result_data = result_ds.GetRasterBand(1).ReadAsArray()
@@ -446,8 +520,8 @@ class TestNoDataHandling:
         mock_geotiff_info.nodata = 0
         mock_geotiff_info.data_type = 'Byte'
         
-        with VirtualFileManager() as vfm:
-            result_ds = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, None, {})
+        with Workspace() as workspace:
+            result_ds = preprocess_geotiff(original_ds, workspace, args, mock_geotiff_info, None, {})
             
             # NoData should be unset
             assert result_ds.GetRasterBand(1).GetNoDataValue() is None
@@ -486,8 +560,8 @@ class TestNoDataHandling:
         mock_geotiff_info.nodata = -np.inf
         
         with caplog.at_level(logging.WARNING):
-            with VirtualFileManager() as vfm:
-                result_ds = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, None, {})
+            with Workspace() as workspace:
+                result_ds = preprocess_geotiff(original_ds, workspace, args, mock_geotiff_info, None, {})
         
         # Should log warning about invalid NoData
         assert "invalid or extreme" in caplog.text.lower()
@@ -522,8 +596,8 @@ class TestNoDataHandling:
         mock_geotiff_info.data_type = 'Byte'
         
         with caplog.at_level(logging.WARNING):
-            with VirtualFileManager() as vfm:
-                result_ds = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, None, {})
+            with Workspace() as workspace:
+                result_ds = preprocess_geotiff(original_ds, workspace, args, mock_geotiff_info, None, {})
         
         # Should log warning about conflict
         assert "mask_nodata takes precedence" in caplog.text
@@ -561,8 +635,8 @@ class TestNoDataHandling:
         mock_geotiff_info.nodata = 0
         mock_geotiff_info.data_type = 'Byte'
         
-        with VirtualFileManager() as vfm:
-            result_ds = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, None, {})
+        with Workspace() as workspace:
+            result_ds = preprocess_geotiff(original_ds, workspace, args, mock_geotiff_info, None, {})
         
         # NoData should be masked implicitly
         assert result_ds.GetRasterBand(1).GetNoDataValue() is None
@@ -596,8 +670,8 @@ class TestNoDataHandling:
         # Update info
         mock_geotiff_info.nodata = -9999.0
         
-        with VirtualFileManager() as vfm:
-            result_ds = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, None, {})
+        with Workspace() as workspace:
+            result_ds = preprocess_geotiff(original_ds, workspace, args, mock_geotiff_info, None, {})
         
         # NoData should be preserved
         assert result_ds.GetRasterBand(1).GetNoDataValue() == -9999.0
@@ -633,8 +707,8 @@ class TestMainPreprocessingPipeline:
         data = np.tile(data, (50, 50))
         original_ds.GetRasterBand(1).WriteArray(data)
         
-        with VirtualFileManager() as vfm:
-            result_ds = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, None, {})
+        with Workspace() as workspace:
+            result_ds = preprocess_geotiff(original_ds, workspace, args, mock_geotiff_info, None, {})
             result_data = result_ds.GetRasterBand(1).ReadAsArray()
         
         # Data should be rounded to 2 decimals
@@ -662,8 +736,8 @@ class TestMainPreprocessingPipeline:
                                      [987.654321, 1500.123]], dtype=np.float32), (32, 32))
             original_ds.GetRasterBand(1).WriteArray(data)
 
-            with VirtualFileManager() as vfm:
-                result_ds = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, None, {})
+            with Workspace() as workspace:
+                result_ds = preprocess_geotiff(original_ds, workspace, args, mock_geotiff_info, None, {})
                 result_data = result_ds.GetRasterBand(1).ReadAsArray()
 
             assert np.array_equal(result_data, data), f"decimals={dec} should not change the data"
@@ -692,8 +766,8 @@ class TestMainPreprocessingPipeline:
             'TIFFTAG_SOFTWARE': 'Original Software v1.0'
         }
         
-        with VirtualFileManager() as vfm:
-            result_ds = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, None, source_metadata)
+        with Workspace() as workspace:
+            result_ds = preprocess_geotiff(original_ds, workspace, args, mock_geotiff_info, None, source_metadata)
             result_metadata = result_ds.GetMetadata()
         
         # Verify custom metadata preserved
@@ -722,8 +796,8 @@ class TestMainPreprocessingPipeline:
         driver = gdal.GetDriverByName('MEM')
         ds_dem = driver.Create('', 100, 100, 1, gdal.GDT_Float32)
         
-        with VirtualFileManager() as vfm:
-            result_dem = preprocess_geotiff(ds_dem, vfm, args_dem, mock_geotiff_info, None, {})
+        with Workspace() as workspace:
+            result_dem = preprocess_geotiff(ds_dem, workspace, args_dem, mock_geotiff_info, None, {})
             area_or_point_dem = result_dem.GetMetadataItem('AREA_OR_POINT')
         
         assert area_or_point_dem == 'Point'
@@ -752,8 +826,8 @@ class TestMainPreprocessingPipeline:
         info_image.vertical_srs = None
         info_image.filepath = 'test.tif'
         
-        with VirtualFileManager() as vfm:
-            result_image = preprocess_geotiff(ds_image, vfm, args_image, info_image, None, {})
+        with Workspace() as workspace:
+            result_image = preprocess_geotiff(ds_image, workspace, args_image, info_image, None, {})
             area_or_point_image = result_image.GetMetadataItem('AREA_OR_POINT')
         
         assert area_or_point_image == 'Area'
@@ -786,8 +860,8 @@ class TestMainPreprocessingPipeline:
         
         compound_srs = create_compound_srs(horiz_srs, vert_srs)
         
-        with VirtualFileManager() as vfm:
-            result_ds = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, compound_srs, {})
+        with Workspace() as workspace:
+            result_ds = preprocess_geotiff(original_ds, workspace, args, mock_geotiff_info, compound_srs, {})
             
             # Check that COMPOUND_CRS_WKT2 metadata exists
             compound_wkt2 = result_ds.GetMetadataItem('COMPOUND_CRS_WKT2')
@@ -816,8 +890,8 @@ class TestMainPreprocessingPipeline:
         original_ds = driver.Create('', 100, 100, 1, gdal.GDT_Float32)
         original_ds.GetRasterBand(1).WriteArray(np.arange(10000, dtype=np.float32).reshape(100, 100))
 
-        with VirtualFileManager() as vfm:
-            result_ds = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, None, {})
+        with Workspace() as workspace:
+            result_ds = preprocess_geotiff(original_ds, workspace, args, mock_geotiff_info, None, {})
             assert result_ds.GetRasterBand(1).GetMetadata('STATISTICS') == {}
 
     def test_preprocess_geotiff_invalid_dataset_raises_error(self, mock_geotiff_info):
@@ -834,11 +908,11 @@ class TestMainPreprocessingPipeline:
         args.geo_metadata = False
         args.discard_lsb = False
         
-        with VirtualFileManager() as vfm:
+        with Workspace() as workspace:
             with pytest.raises(Exception):  # Could be ProcessingStepFailedError or GDAL error
-                preprocess_geotiff(None, vfm, args, mock_geotiff_info, None, {})  # type: ignore[arg-type]
+                preprocess_geotiff(None, workspace, args, mock_geotiff_info, None, {})  # type: ignore[arg-type]
     
-    def test_virtual_file_manager_cleanup_on_processing_error(self, mock_geotiff_info):
+    def test_workspace_cleanup_on_processing_error(self, mock_geotiff_info):
         """Virtual files cleaned up when preprocessing raises error."""
         args = Mock(spec=OptimizeArguments)
         args.algorithm = 'DEFLATE'
@@ -857,11 +931,11 @@ class TestMainPreprocessingPipeline:
         
         vsi_paths = []
         try:
-            with VirtualFileManager() as vfm:
+            with Workspace() as workspace:
                 # Track paths before error
-                _ = preprocess_geotiff(original_ds, vfm, args, mock_geotiff_info, None, {})
+                _ = preprocess_geotiff(original_ds, workspace, args, mock_geotiff_info, None, {})
                 # Capture paths
-                vsi_paths = vfm.virtual_files.copy()
+                vsi_paths = workspace.paths.copy()
         except Exception:
             pass
         

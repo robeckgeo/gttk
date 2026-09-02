@@ -17,10 +17,12 @@ It orchestrates a series of in-memory operations using GDAL's virtual file syste
 rounding, and metadata updates, before the final compression stage.
 
 Classes:
-    VirtualFileManager: A context manager for handling temporary in-memory files.
+    Workspace: A context manager for this run's intermediates, in memory or on disk.
 """
 import logging
 import numpy as np
+import shutil
+import tempfile
 import uuid
 from osgeo import gdal, osr
 from pathlib import Path
@@ -67,49 +69,169 @@ def _discard_lsb_float(array, decimals, valid_mask):
     return out, k
 
 
-# --- Virtual File Manager ---
-class VirtualFileManager:
-    """
-    Manages an in-memory workspace using GDAL's /vsimem/ virtual file system.
+# --- Workspace ---
 
-    This class creates a unique virtual directory for each instance, providing a
-    sandboxed environment for temporary files. When used as a context manager, it
-    automatically cleans up all registered virtual files upon exiting the context,
-    preventing memory leaks.
+#: The pipeline holds up to two intermediates at once: the tiled copy of the input and,
+#: when an alpha band becomes a mask, the copy without it. Both are LZW-compressed, which
+#: on real imagery brings them in under this estimate; assuming they do not compress at all
+#: keeps the decision on the safe side.
+INTERMEDIATE_COPIES = 2
+
+#: Above this share of the free memory the intermediates go to disk. Statistics, GDAL's
+#: block cache and the final translate all want memory while they exist, so the workspace
+#: cannot be given most of it.
+MEMORY_SHARE = 0.5
+
+
+def estimated_workspace_bytes(x_size: int, y_size: int, bands: int, data_type: Optional[str]) -> int:
+    """How much room this run's intermediates need, uncompressed.
+
+    Example:
+        >>> gigapixel_ortho = estimated_workspace_bytes(91445, 53704, 4, 'Byte')
+        >>> f"{gigapixel_ortho / 1024**3:.1f} GB"
+        '36.6 GB'
     """
-    def __init__(self):
+    gdal_type = gdal.GetDataTypeByName(data_type or 'Byte') or gdal.GDT_Byte
+    bytes_per_sample = max(1, gdal.GetDataTypeSize(gdal_type) // 8)
+    return int(x_size) * int(y_size) * max(1, int(bands)) * bytes_per_sample * INTERMEDIATE_COPIES
+
+
+def workspace_fits_in_memory(estimated_bytes: int, available_bytes: Optional[int] = None) -> bool:
+    """Whether intermediates of this size belong in memory rather than on disk.
+
+    Args:
+        estimated_bytes: What the intermediates need, from :func:`estimated_workspace_bytes`.
+        available_bytes: Free memory; detected with psutil when not given. Without psutil
+            the answer is memory, which is what GTTK did before the question was asked.
+
+    Example:
+        >>> workspace_fits_in_memory(1 * 1024**3, available_bytes=16 * 1024**3)
+        True
+        >>> workspace_fits_in_memory(30 * 1024**3, available_bytes=16 * 1024**3)
+        False
+    """
+    if available_bytes is None:
+        try:
+            import psutil
+            available_bytes = psutil.virtual_memory().available
+        except ImportError:
+            logger.info("psutil is not installed; keeping the workspace in memory.")
+            return True
+        except Exception as e:
+            logger.warning(f"Could not read the available memory ({e}); keeping the workspace in memory.")
+            return True
+    return estimated_bytes <= available_bytes * MEMORY_SHARE
+
+
+class Workspace:
+    """The temporary rasters of one optimize run: in memory when they fit, on disk when not.
+
+    GTTK built its intermediates in GDAL's ``/vsimem`` unconditionally. That is right for
+    the common case and wrong at the top of the range: a 91,445 x 53,704 four-band
+    orthophoto needs about 36 GB of them, and on a 16 GB machine that is the pagefile --
+    every later pass then reads its pixels back from disk anyway, by way of the swapper
+    rather than GDAL's block cache. :meth:`plan_for` sizes them from the input and chooses.
+    Without a plan the workspace stays in memory, as it always was.
+
+    A disk workspace is made beside the output, where there is room for a file that size,
+    and falls back to the platform's temporary directory.
+    """
+
+    def __init__(self, preferred_dir: Optional[Path] = None):
         self.vsi_prefix = f"/vsimem/compress_{uuid.uuid4().hex}/"
-        self.virtual_files: List[str] = []
+        self.preferred_dir = preferred_dir
+        self.directory: Optional[Path] = None
+        self.paths: List[str] = []
+
+    @property
+    def on_disk(self) -> bool:
+        """Whether the intermediates are being written to a real directory."""
+        return self.directory is not None
+
+    def plan_for(self, info: GeoTiffInfo) -> None:
+        """Choose memory or disk for this run's intermediates, from the input's size."""
+        if self.paths:
+            return                                  # already committed to a location
+        try:
+            estimated = estimated_workspace_bytes(info.x_size, info.y_size, info.bands, info.data_type)
+        except (AttributeError, TypeError, ValueError) as e:
+            # Every GeoTiffInfo the pipeline builds carries these; a caller that hands over
+            # something else gets the behaviour GTTK had before the question was asked.
+            logger.debug(f"Workspace: could not size the intermediates ({e}); using memory.")
+            return
+        gigabytes = estimated / 1024 ** 3
+        if workspace_fits_in_memory(estimated):
+            logger.info(f"Workspace: intermediates need about {gigabytes:.2f} GB; holding them in memory.")
+            return
+        self.directory = self._make_directory()
+        if self.directory is None:
+            logger.warning(f"Workspace: intermediates need about {gigabytes:.2f} GB, more than half the "
+                           f"free memory, but no directory could be created for them; using memory.")
+        else:
+            logger.info(f"Workspace: intermediates need about {gigabytes:.2f} GB, more than half the free "
+                        f"memory; writing them to {self.directory}.")
+
+    def _make_directory(self) -> Optional[Path]:
+        """A private directory beside the output, or in the platform's temporary directory."""
+        for parent in (self.preferred_dir, None):
+            try:
+                return Path(tempfile.mkdtemp(prefix='gttk_workspace_', dir=str(parent) if parent else None))
+            except OSError as e:
+                logger.warning(f"Workspace: could not create a directory in "
+                               f"{parent or tempfile.gettempdir()} ({e}).")
+        return None
 
     def get_temp_path(self, filename: str) -> str:
-        """Generates and registers a new path within the virtual directory."""
-        vsi_path = self.vsi_prefix + filename
-        if not vsi_path.startswith("/vsimem/"):
-            raise ValueError(f"Generated path {vsi_path} is not a /vsimem/ path.")
-        self.virtual_files.append(vsi_path)
-        logger.debug(f"VirtualFileManager: Registered virtual path: {vsi_path}")
-        return vsi_path
+        """Generates and registers a path for one intermediate."""
+        if self.on_disk:
+            path = str(self.directory / filename)
+        else:
+            path = self.vsi_prefix + filename
+            if not path.startswith("/vsimem/"):
+                raise ValueError(f"Generated path {path} is not a /vsimem/ path.")
+        self.paths.append(path)
+        logger.debug(f"Workspace: registered {path}")
+        return path
 
     def cleanup(self):
-        """Unlinks all registered virtual files from memory."""
-        logger.info(f"VirtualFileManager: Cleaning up {len(self.virtual_files)} virtual files...")
+        """Removes every intermediate, and the directory when there is one."""
+        logger.info(f"Workspace: cleaning up {len(self.paths)} intermediate files...")
         cleaned_count = 0
-        failed_to_unlink_paths: List[str] = []
-        for vsi_file in reversed(self.virtual_files):
+        failed: List[str] = []
+        for path in reversed(self.paths):
             try:
-                if gdal.VSIStatL(vsi_file):
-                    gdal.Unlink(vsi_file)
+                if self.on_disk:
+                    if Path(path).exists():
+                        Path(path).unlink()
+                        cleaned_count += 1
+                elif gdal.VSIStatL(path):
+                    gdal.Unlink(path)
                     cleaned_count += 1
             except Exception as e:
-                logger.error(f"    Error unlinking virtual file {vsi_file}: {e}")
-                failed_to_unlink_paths.append(vsi_file)
-        
-        self.virtual_files = failed_to_unlink_paths
-        
-        if failed_to_unlink_paths:
-            logger.warning(f"VirtualFileManager: Cleanup finished. {len(failed_to_unlink_paths)} files failed to unlink.")
+                logger.error(f"    Error removing intermediate {path}: {e}")
+                failed.append(path)
+
+        self.paths = failed
+
+        if self.directory is not None:
+            try:
+                shutil.rmtree(self.directory)
+                self.directory = None
+            except OSError as e:
+                logger.error(f"Workspace: could not remove {self.directory}: {e}")
+        elif not failed:
+            # /vsimem keeps the directory entry after its files are gone. One empty marker
+            # costs nothing; one per file over a directory of ten thousand rasters is worth
+            # not leaving behind.
+            try:
+                gdal.Rmdir(self.vsi_prefix)
+            except Exception as e:
+                logger.debug(f"Workspace: could not remove the virtual directory {self.vsi_prefix}: {e}")
+
+        if failed:
+            logger.warning(f"Workspace: cleanup finished. {len(failed)} files could not be removed.")
         else:
-            logger.info(f"VirtualFileManager: Cleanup finished. All {cleaned_count} registered virtual files unlinked.")
+            logger.info(f"Workspace: cleanup finished. All {cleaned_count} intermediates removed.")
 
     def __enter__(self):
         return self
@@ -118,7 +240,8 @@ class VirtualFileManager:
         self.cleanup()
         return False
 
-def _create_intermediate_with_mask(temp_ds: gdal.Dataset, vfm: VirtualFileManager) -> gdal.Dataset:
+
+def _create_intermediate_with_mask(temp_ds: gdal.Dataset, workspace: "Workspace") -> gdal.Dataset:
     """Handles the alpha to mask conversion and creates an intermediate dataset."""
     threshold = 230
     logger.info(f"Applying threshold of {threshold}/255 (90% opaque) to alpha band to reduce edge effects.")
@@ -157,7 +280,7 @@ def _create_intermediate_with_mask(temp_ds: gdal.Dataset, vfm: VirtualFileManage
             'COMPRESS=LZW'
         ]
     )
-    masked_path = vfm.get_temp_path("masked.tif")
+    masked_path = workspace.get_temp_path("masked.tif")
     masked_ds = gdal.Translate(masked_path, temp_ds, options=translate_options)
     if masked_ds is None:
         raise ProcessingStepFailedError("Failed to create intermediate file.")
@@ -271,7 +394,7 @@ def round_overviews(ds: gdal.Dataset, decimals: int) -> gdal.Dataset:
 
 def preprocess_geotiff(
     original_ds: gdal.Dataset,
-    vfm: VirtualFileManager,
+    workspace: Workspace,
     args: OptimizeArguments,
     info: GeoTiffInfo,
     srs: Optional[osr.SpatialReference],
@@ -294,8 +417,9 @@ def preprocess_geotiff(
         The preprocessed GDAL dataset.
     """
     # --- 1. Create Intermediate File ---
-    temp_path = vfm.get_temp_path("intermediate.tif")
-    logger.info(f"Creating intermediate file at virtual path: {temp_path}")
+    workspace.plan_for(info)
+    temp_path = workspace.get_temp_path("intermediate.tif")
+    logger.info(f"Creating intermediate file at: {temp_path}")
     ds = gdal.GetDriverByName('GTiff').CreateCopy(
         temp_path, 
         original_ds, 
@@ -310,7 +434,7 @@ def preprocess_geotiff(
         raise ProcessingStepFailedError("Failed to create intermediate tiled copy.")
 
     if info.has_alpha and args.mask_alpha:
-        ds = _create_intermediate_with_mask(ds, vfm)
+        ds = _create_intermediate_with_mask(ds, workspace)
 
     # --- 2. Process NoData Values ---
     

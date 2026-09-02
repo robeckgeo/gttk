@@ -41,7 +41,7 @@ import gttk.utils.optimize_constants as oc
 from gttk.utils.cli_help import render_resolved_settings
 from gttk.utils.path_helpers import get_geotiff_files, prepare_output_path, copy_folder_structure
 from gttk.utils.performance_tracker import PerformanceTracker
-from gttk.utils.preprocessor import preprocess_geotiff, round_overviews, VirtualFileManager
+from gttk.utils.preprocessor import preprocess_geotiff, round_overviews, Workspace
 from gttk.utils.script_arguments import OptimizeArguments
 from gttk.utils.srs_logic import handle_srs_logic, check_vertical_srs_mismatch
 from gttk.utils.statistics import calculate_statistics, build_pam_data_from_stats, write_pam_xml
@@ -99,13 +99,15 @@ def _process_single_file(args: OptimizeArguments, tracker: Optional[PerformanceT
     if tracker:
         tracker.start("total_processing")
     
-    with VirtualFileManager() as vfm:
+    # Beside the output: when the intermediates are too large for memory they are also
+    # too large to assume the platform's temporary directory has room for them.
+    with Workspace(preferred_dir=args.output_path.parent if args.output_path else None) as workspace:
         try:
             ds = gdal.Open(str(args.input_path))
             if ds:
                 check_vertical_srs_mismatch(ds, args.vertical_srs, str(args.input_path))
                 ds = None
-            _orchestrate_geotiff_optimization(args, vfm, tracker)
+            _orchestrate_geotiff_optimization(args, workspace, tracker)
 
             # Report generation costs two full metadata passes, a full COG validation
             # of both files and a histogram render.  That is the right default for a
@@ -226,13 +228,13 @@ def _calculate_overview_levels(x_size: int, y_size: int, tile_size: int = 512) -
     logger.debug(f"Calculated overview levels for {x_size}x{y_size}: {levels}")
     return levels
 
-def _orchestrate_geotiff_optimization(args: OptimizeArguments, vfm: VirtualFileManager, tracker: Optional[PerformanceTracker] = None):
+def _orchestrate_geotiff_optimization(args: OptimizeArguments, workspace: Workspace, tracker: Optional[PerformanceTracker] = None):
     """Orchestrates the end-to-end GeoTIFF optimization and compression workflow."""
     with gdal_env():
-        return _orchestrate_geotiff_optimization_inner(args, vfm, tracker)
+        return _orchestrate_geotiff_optimization_inner(args, workspace, tracker)
 
 
-def _orchestrate_geotiff_optimization_inner(args: OptimizeArguments, vfm: VirtualFileManager, tracker: Optional[PerformanceTracker] = None):
+def _orchestrate_geotiff_optimization_inner(args: OptimizeArguments, workspace: Workspace, tracker: Optional[PerformanceTracker] = None):
     if tracker:
         tracker.start("gdal_processing")
     
@@ -271,8 +273,8 @@ def _orchestrate_geotiff_optimization_inner(args: OptimizeArguments, vfm: Virtua
     temp_ds = None
     final_ds = None
     try:
-        with vfm as temp_vfm:
-            temp_path = temp_vfm.get_temp_path("intermediate.tif")
+        with workspace as run_workspace:
+            temp_path = run_workspace.get_temp_path("intermediate.tif")
 
             # --- 1. Perform all in-memory preprocessing steps ---
             if tracker:
@@ -280,7 +282,7 @@ def _orchestrate_geotiff_optimization_inner(args: OptimizeArguments, vfm: Virtua
 
             temp_ds = preprocess_geotiff(
                 original_ds=original_input_ds,
-                vfm=temp_vfm,
+                workspace=run_workspace,
                 args=args,
                 info=input_info,
                 srs=target_srs,

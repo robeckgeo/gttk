@@ -26,7 +26,7 @@ import pytest
 from osgeo import gdal
 
 import gttk.utils.optimize_constants as oc
-from gttk.utils.preprocessor import VirtualFileManager
+from gttk.utils.preprocessor import Workspace
 from gttk.utils.script_arguments import OptimizeArguments
 from tests.fixtures.mock_geotiff_factory import MockGeoTIFF
 
@@ -73,7 +73,7 @@ def _run(args):
     """Run the optimization without report generation, quietly."""
     prior, ocmp.arcMode = ocmp.arcMode, True
     try:
-        ocmp._orchestrate_geotiff_optimization(args, VirtualFileManager(), None)
+        ocmp._orchestrate_geotiff_optimization(args, Workspace(), None)
     finally:
         ocmp.arcMode = prior
 
@@ -463,7 +463,7 @@ class TestSourceHandleIsReleasedOnFailure:
                                  product_type='thematic', algorithm='ZSTD',
                                  report=False, write_pam_xml=False, open_report=False)
         with pytest.raises(RuntimeError, match="synthetic failure"):
-            ocmp._orchestrate_geotiff_optimization(args, VirtualFileManager(), None)
+            ocmp._orchestrate_geotiff_optimization(args, Workspace(), None)
 
         # The source must be replaceable: on POSIX this always passes, so also assert
         # no GDAL dataset is still open on it.

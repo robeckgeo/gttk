@@ -347,7 +347,7 @@ class TestOperationsStillGetTheSettings:
     def test_optimize_applies_them_and_restores_them(self, tmp_path):
         import numpy as np
         import gttk.tools.optimize_compression as ocmp
-        from gttk.utils.preprocessor import VirtualFileManager
+        from gttk.utils.preprocessor import Workspace
         from gttk.utils.script_arguments import OptimizeArguments
         from tests.fixtures.mock_geotiff_factory import MockGeoTIFF
 
@@ -371,7 +371,7 @@ class TestOperationsStillGetTheSettings:
                                   product_type="dem", vertical_srs="EPSG:4326+3855",
                                   algorithm="ZSTD", report=False, write_pam_xml=False,
                                   open_report=False),
-                VirtualFileManager(), None)
+                Workspace(), None)
         finally:
             ocmp.preprocess_geotiff = real
             ocmp.arcMode = prior

@@ -232,14 +232,19 @@ the formatters that render them.
 
 ## Understanding the Processing Pipeline
 
-`gttk optimize` uses a sophisticated, multi-step pipeline to process your data. All steps are performed in-memory using GDAL's virtual file system, meaning no temporary files are written to disk.
+`gttk optimize` uses a sophisticated, multi-step pipeline to process your data. Its intermediate
+rasters are held in GDAL's virtual file system, so nothing is written to disk between the steps --
+unless they would not fit in memory. `Workspace.plan_for` sizes them from the input (two copies,
+uncompressed) and writes them beside the output when they exceed half the free memory, which for
+a 91,445 x 53,704 four-band orthophoto is about 36 GB. The output is the same either way.
 
 1. **Initial Read & Analysis**: Opens the input file and gathers key metadata (resolution, data type, spatial reference system)
 2. **SRS Handling**: Checks for and parses compound SRS; creates new compound SRS if `--vertical-srs` is provided
 3. **SRS Assignment**: Writes the resolved SRS as WKT2. This is an assignment, not a warp -- pixels and the geotransform are never touched, so a file's georeferencing cannot shift. GTTK does not reproject; use `gdalwarp` first if you need a different CRS
 4. **Alpha-to-Mask Conversion** (for images): Converts alpha channel to internal mask for better COG compatibility and compression
 5. **Rounding** (for floats): Performs block-based rounding for large floating-point rasters, allowing efficient processing of files too large for RAM
-6. **Final Compression and COG Creation**: Processed in-memory dataset is passed to the COG driver for compression and writing. Overviews are generated at this stage.
+6. **Statistics**: One pass over the intermediate. Its numbers become the `.aux.xml` sidecar; a raster too large for memory is read block by block, so this pass is not free and there is only one of it.
+7. **Final Compression and COG Creation**: The processed dataset is passed to the COG driver for compression and writing. Overviews are generated at this stage.
 
 ## Esri CRS Name to EPSG Lookup
 

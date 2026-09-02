@@ -55,7 +55,7 @@ GTTK is more than a compression script—it's an optimization engine that combin
 
 **Solves the Vertical Datum Problem**: For elevation data, GTTK handles compound coordinate systems natively, preventing common errors that can lead to vertical shifts of several meters. Assign vertical datums by name (e.g., `NAVD88`, `EGM2008`, `CGVD2013`), EPSG code (e.g. `EPSG:5703`), or WKT string. For Mexican data choose **NAVD88 (EPSG:5703)**, the vertical datum established by INEGI's *Norma Técnica para el Sistema Geodésico Nacional*; the GGM10 and GGM25 geoid models are transformations between ellipsoidal and orthometric heights, not datums, which is why they are not on the list (see the [example report](example_reports/INEGI_f13a35e4_ms_NEW_meta.html)).
 
-**Fast and Efficient**: All operations are performed in-memory using GDAL's virtual file system, avoiding intermediate file writes. This significantly improves performance, especially for large files or complex processing chains.
+**Fast and Efficient**: Intermediate steps are held in memory, using GDAL's virtual file system, so a processing chain writes nothing between its stages. When the intermediates would not fit -- a gigapixel orthophoto needs tens of gigabytes of them -- they are written beside the output instead, which is slower than memory and far faster than the pagefile.
 
 **Expert-Level Automation**: Intelligent, data-aware defaults make optimal choices for you. GTTK automatically selects the right predictor for compression algorithms, chooses appropriate resampling methods, and adapts workflows based on data type.
 

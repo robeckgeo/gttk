@@ -112,7 +112,7 @@ _config_after_import = {k: gdal.GetConfigOption(k) for k in _GLOBAL_GDAL_CONFIG}
 for _key, _value in _config_before_import.items():
     gdal.SetConfigOption(_key, _value)
 
-from gttk.utils.preprocessor import VirtualFileManager  # noqa: E402
+from gttk.utils.preprocessor import Workspace  # noqa: E402
 from gttk.utils.script_arguments import OptimizeArguments  # noqa: E402
 
 
@@ -141,7 +141,7 @@ def _write_dem_cog(tmp_path, vertical_srs, decimals=2, crs='EPSG:4326'):
                               decimals=decimals, raster_type='point', cog=True,
                               overviews=True, report=False, write_pam_xml=False,
                               open_report=False),
-            VirtualFileManager(), None)
+            Workspace(), None)
     finally:
         ocmp.arcMode = prior
     return src, out

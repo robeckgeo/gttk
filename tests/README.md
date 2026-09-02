@@ -47,12 +47,12 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,755
+- **Total Tests**: 1,771
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,501 tests (models, processors, extractors, formatters, utilities)
-  - Doctests: 106 (97 in `gttk/`, 9 in `tests/`)
-  - Integration Tests: 80 tests (metadata workflows, statistics validation)
+  - Unit Tests: 1,512 tests (models, processors, extractors, formatters, utilities)
+  - Doctests: 108 (99 in `gttk/`, 9 in `tests/`)
+  - Integration Tests: 83 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
   - Benchmark smoke tests: 10 tests (every statistics benchmark, once at 256×256)
 
@@ -105,7 +105,7 @@ tests/
 │   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,501)
+├── unit/                                        # Unit tests (1,512)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (99)
 │   ├── test_readme_option_tables.py             # README option tables pinned to the parser (14)
@@ -129,7 +129,7 @@ tests/
 │   ├── test_report_formatters.py                # Report formatting (30)
 │   ├── test_validation_loader.py                # TOML rule loading, in name order (30)
 │   ├── test_mock_factory.py                     # MockGeoTIFF factory itself (27)
-│   ├── test_preprocessor.py                     # Data preprocessing (25)
+│   ├── test_preprocessor.py                     # Data preprocessing (36)
 │   ├── test_xml_safety.py                       # XML from rasters and sidecars never reads a file (25)
 │   ├── test_statistics_vectorized.py            # Vectorized statistics (24)
 │   ├── test_validation_report.py                # Validation report generation (19)
@@ -165,11 +165,12 @@ tests/
 │   ├── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
 │   ├── test_compare_compression.py              # compare releases both datasets on every path (1)
 │   └── test_statistics_nodata_warnings.py       # An unreadable per-band NoData is reported (1)
-├── integration/                                 # Integration tests (80)
+├── integration/                                 # Integration tests (83)
 │   ├── test_validation_integration.py           # End-to-end validation workflows (20)
 │   ├── test_installed_wheel.py                  # GTTK works from an installed wheel (6)
 │   ├── test_metadata_workflow.py                # Metadata extraction workflows (13)
 │   ├── test_statistics_phase2_accuracy.py       # Blocked path against NumPy and the fast path (12)
+│   ├── test_workspace_location.py               # Memory or disk, the output is the same (3)
 │   ├── test_gdal_runner_fake_osgeo4w.py         # gdal_runner run for real through a fake OSGeo4W (8)
 │   ├── test_optimize_arc_on_linux.py            # optimize-arc's orchestration, end to end, on Linux (3)
 │   ├── test_statistics_blocked_path.py          # Block-based statistics (9)
