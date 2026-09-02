@@ -67,6 +67,7 @@ def _generate_report_summary(input_path: str) -> str:
     from gttk.utils.geotiff_processor import (
         get_transparency_str,
         calculate_compression_efficiency,
+        format_compression_efficiency,
         read_geotiff,
         determine_decimal_precision,
         estimate_image_quality,
@@ -120,7 +121,7 @@ def _generate_report_summary(input_path: str) -> str:
             file_size_bytes = filepath.stat().st_size
             size_mb = file_size_bytes / (1024 * 1024)
             efficiency = calculate_compression_efficiency(str(filepath))
-            ratio = 100 / (100 - efficiency) if efficiency != 100 else 0
+            space_saving, ratio_text = format_compression_efficiency(efficiency)
 
             compression = ds.GetMetadataItem('COMPRESSION', 'IMAGE_STRUCTURE') or 'NONE'
             decimals = determine_decimal_precision(ds)
@@ -174,8 +175,8 @@ def _generate_report_summary(input_path: str) -> str:
                 predictor=predictor,
                 max_z_error=lerc_error,
                 size_mb=f"{size_mb:,.2f}",
-                space_saving=f"{efficiency:.2f}%",
-                ratio=f"{ratio:.2f}x"
+                space_saving=space_saving,
+                ratio=ratio_text
             )
 
             # Render FileInfo table (without 'File' column)

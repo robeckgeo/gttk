@@ -60,6 +60,7 @@ from gttk.utils.geotiff_processor import (
     read_geotiff,
     get_lerc_max_z_error,
     calculate_compression_efficiency,
+    format_compression_efficiency,
     determine_decimal_precision,
     estimate_image_quality,
     get_transparency_str,
@@ -645,6 +646,8 @@ class ComparisonReportBuilder(ReportBuilder):
 
         base_efficiency = calculate_compression_efficiency(base_path, tiff=self.base_extractor.tiff)
         comp_efficiency = calculate_compression_efficiency(comp_path, tiff=self.comp_extractor.tiff)
+        base_space_saving, base_ratio_text = format_compression_efficiency(base_efficiency)
+        comp_space_saving, comp_ratio_text = format_compression_efficiency(comp_efficiency)
 
         base_compression = base_ds.GetMetadataItem('COMPRESSION', 'IMAGE_STRUCTURE') or 'NONE'
         comp_compression = comp_ds.GetMetadataItem('COMPRESSION', 'IMAGE_STRUCTURE') or 'NONE'
@@ -694,7 +697,6 @@ class ComparisonReportBuilder(ReportBuilder):
         if has_lerc:
             base_lerc_error = get_lerc_max_z_error(base_ds)
 
-        base_ratio = 100 / (100 - base_efficiency)
         base_file = FileInfo(
             name=self.base_name,
             data_type=base_info.data_type or "Unknown",
@@ -708,8 +710,8 @@ class ComparisonReportBuilder(ReportBuilder):
             predictor=base_predictor,
             max_z_error=base_lerc_error,
             size_mb=f"{base_size_mb:,.2f}",
-            space_saving=f"{base_efficiency:.2f}%",
-            ratio=f"{base_ratio:.2f}x"
+            space_saving=base_space_saving,
+            ratio=base_ratio_text
         )
 
         # --- Build COMP FileInfo ---
@@ -741,7 +743,6 @@ class ComparisonReportBuilder(ReportBuilder):
         if has_lerc:
             comp_lerc_error = get_lerc_max_z_error(comp_ds)
 
-        comp_ratio = 100 / (100 - comp_efficiency)
         comp_file = FileInfo(
             name=self.comp_name,
             data_type=comp_info.data_type or "Unknown",
@@ -755,13 +756,14 @@ class ComparisonReportBuilder(ReportBuilder):
             predictor=comp_predictor,
             max_z_error=comp_lerc_error,
             size_mb=f"{comp_size_mb:,.2f}",
-            space_saving=f"{comp_efficiency:.2f}%",
-            ratio=f"{comp_ratio:.2f}x"
+            space_saving=comp_space_saving,
+            ratio=comp_ratio_text
         )
 
         size_difference_mb = comp_size_mb - base_size_mb
         size_difference_pct = (size_difference_mb / base_size_mb * 100) if base_size_mb > 0 else 0
-        efficiency_difference = comp_efficiency - base_efficiency
+        efficiency_difference = (None if base_efficiency is None or comp_efficiency is None
+                                 else comp_efficiency - base_efficiency)
 
         file_comparison = FileComparison(
             base_file=base_file,

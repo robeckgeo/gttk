@@ -1105,8 +1105,8 @@ class TestErrorHandlingAndEdgeCases:
                 f.write(b'not a tiff file')
             
             size = get_uncompressed_size(filename)
-            # Should return 0 on error
-            assert size == 0.0
+            # Unknown, not a size: 0.0 is not a size any raster has
+            assert size is None
         finally:
             if os.path.exists(filename):
                 os.remove(filename)
@@ -1115,7 +1115,7 @@ class TestErrorHandlingAndEdgeCases:
         """Handle invalid file path gracefully."""
         # Non-existent file
         efficiency = calculate_compression_efficiency('/nonexistent/file.tif')
-        assert efficiency == 0.0
+        assert efficiency is None   # unknown, not "uncompressed"
     
     def test_read_geotiff_no_projection(self, tmp_path):
         """Handle dataset without projection info."""

@@ -107,6 +107,19 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **A compression efficiency that could not be computed is reported as unknown, not as
+  0.0.** `calculate_compression_efficiency` returned 0.0 for any exception, at debug level,
+  and 0.0 is also the honest answer for an uncompressed file; nothing downstream could tell
+  the two apart. `gttk read` printed 0.00% and a 1.00x ratio, `gttk validate` recorded no
+  savings, the comparison report showed both files as equally efficient, and `gttk test`
+  subtracted the figure from every candidate's improvement column. The function now returns
+  `None` when a file cannot be opened, an IFD cannot be read or carries no byte counts, or
+  nothing could be sized, and logs why at warning; every renderer shows "n/a". A genuinely
+  uncompressed file is still 0.0, and `gttk validate` now records its 0.0 savings and 1.0
+  ratio instead of nothing. `get_uncompressed_size` follows suit, the per-IFD header
+  estimate no longer answers "1024 bytes" for an IFD it could not read, and
+  `TiffTagParser.close()` leaves a `TiffFile` the caller lent in open, as its context
+  manager already did.
 - **`pip install geotiff-toolkit` brings everything the code imports.** `psutil` was in
   `environment.yml` and `requirements.txt` but not in `pyproject.toml`, so a pip install ran
   without it and the statistics calculator silently used a fixed fast-path threshold

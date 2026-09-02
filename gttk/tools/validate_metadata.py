@@ -52,7 +52,7 @@ from gttk.utils.validation import (
 from gttk.utils.validation.gpkg_writer import write_validation_gpkg
 from gttk.utils.validation.output import get_input_files, generate_report_path, generate_output_paths
 from gttk.utils.validate_cloud_optimized_geotiff import validate as validate_cog
-from gttk.utils.geotiff_processor import calculate_compression_efficiency
+from gttk.utils.geotiff_processor import calculate_compression_efficiency, compression_ratio
 
 logger = logging.getLogger(__name__)
 
@@ -429,9 +429,12 @@ def extract_compression_info(extractor: MetadataExtractor, filepath: Path) -> Di
         algorithm = extractor.gdal_ds.GetMetadataItem('COMPRESSION', 'IMAGE_STRUCTURE') or 'NONE'
 
     # Calculate efficiency
+    # None means the efficiency could not be determined; 0.0 is a real answer (an
+    # uncompressed file) and reports as 0.0 savings and a 1.0 ratio, not as nothing.
     efficiency = calculate_compression_efficiency(str(filepath))
-    savings = round(efficiency / 100, 4) if efficiency else None
-    ratio = round(100 / (100 - efficiency), 2) if efficiency and efficiency != 100 else None
+    savings = round(efficiency / 100, 4) if efficiency is not None else None
+    ratio_value = compression_ratio(efficiency)
+    ratio = round(ratio_value, 2) if ratio_value is not None else None
 
     return {
         'algorithm': algorithm,

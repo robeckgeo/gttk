@@ -19,6 +19,7 @@ managing transparency masks.
 import re
 import logging
 import numpy as np
+from pathlib import Path
 import tifffile
 from decimal import Decimal, DecimalException, getcontext
 from osgeo import gdal, osr
@@ -692,7 +693,7 @@ def get_transparency_str(info: GeoTiffInfo) -> str:
         parts.append(f"NoData ({nodata_val})")
     return ', '.join(parts) if parts else 'No'
 
-def get_uncompressed_size(filepath: str) -> float:
+def get_uncompressed_size(filepath: str) -> Optional[float]:
     """
     Calculates the theoretical uncompressed size of a dataset by summing all IFDs.
 
@@ -703,40 +704,44 @@ def get_uncompressed_size(filepath: str) -> float:
         filepath: Path to the TIFF file.
 
     Returns:
-        The total uncompressed size in bytes.
+        The total uncompressed size in bytes, or None when it could not be determined
+        (the reason is logged at warning). It used to return 0.0 for that case, which is
+        not a size any raster has.
     """
     total_uncompressed_size = 0.0
     try:
-        tiff = TiffTagParser(filepath)
-        for page_index in range(len(tiff.tif.pages)):
-            tags_list = tiff.get_tags(page_index=page_index)
-            if not tags_list:
-                continue
-            tags = {tag.code: tag for tag in tags_list}
+        with TiffTagParser(filepath) as tiff:
+            for page_index in range(len(tiff.tif.pages)):
+                tags_list = tiff.get_tags(page_index=page_index)
+                if not tags_list:
+                    continue
+                tags = {tag.code: tag for tag in tags_list}
 
-            width_tag = tags.get(256)
-            width = width_tag.value if width_tag else None
-            height_tag = tags.get(257)
-            height = height_tag.value if height_tag else None
-            bit_count_tag = tags.get(258)
-            bit_count = bit_count_tag.value if bit_count_tag else 0
-            band_count_tag = tags.get(277)
-            band_count = band_count_tag.value if band_count_tag else 1
+                width_tag = tags.get(256)
+                width = width_tag.value if width_tag else None
+                height_tag = tags.get(257)
+                height = height_tag.value if height_tag else None
+                bit_count_tag = tags.get(258)
+                bit_count = bit_count_tag.value if bit_count_tag else 0
+                band_count_tag = tags.get(277)
+                band_count = band_count_tag.value if band_count_tag else 1
 
-            if not width or not height:
-                continue
+                if not width or not height:
+                    continue
 
-            if isinstance(bit_count, (list, tuple)):
-                total_bits_per_pixel = sum(bit_count)
-            else:
-                total_bits_per_pixel = bit_count * band_count
+                if isinstance(bit_count, (list, tuple)):
+                    total_bits_per_pixel = sum(bit_count)
+                else:
+                    total_bits_per_pixel = bit_count * band_count
 
-            ifd_uncompressed_size = width * height * total_bits_per_pixel / 8
-            total_uncompressed_size += ifd_uncompressed_size
-        tiff.close()
+                ifd_uncompressed_size = width * height * total_bits_per_pixel / 8
+                total_uncompressed_size += ifd_uncompressed_size
     except Exception as e:
-        logger.warning(f"Could not calculate uncompressed size for {filepath}: {e}")
-        return 0.0
+        logger.warning(f"Uncompressed size unknown for {Path(filepath).name}: {e}")
+        return None
+    if total_uncompressed_size == 0:
+        logger.warning(f"Uncompressed size unknown for {Path(filepath).name}: no IFD carried dimensions")
+        return None
     return total_uncompressed_size
 
 def get_lerc_max_z_error(ds: gdal.Dataset) -> str:
@@ -840,7 +845,7 @@ def _is_transparency_mask_ifd(tags: Dict[int, Any]) -> bool:
         return False
 
 
-def _estimate_ifd_header_size(page_index: int, tiff_file: tifffile.TiffFile, tags: Dict[int, Any]) -> int:
+def _estimate_ifd_header_size(page_index: int, tiff_file: tifffile.TiffFile, tags: Dict[int, Any]) -> Optional[int]:
     """
     Estimate the size of IFD header and metadata overhead.
     
@@ -856,7 +861,9 @@ def _estimate_ifd_header_size(page_index: int, tiff_file: tifffile.TiffFile, tag
         tags: Dictionary of TIFF tags for this IFD
         
     Returns:
-        Estimated header size in bytes
+        Estimated header size in bytes, or None when the IFD's tags could not be read
+        (logged at warning). It used to answer 1024 -- "a typical IFD with ~50 tags" --
+        for any failure, and 0 for a tag whose value could not be read.
     """
     try:
         page = tiff_file.pages[page_index]
@@ -892,53 +899,41 @@ def _estimate_ifd_header_size(page_index: int, tiff_file: tifffile.TiffFile, tag
             # Offset/byte count arrays (stored outside IFD)
             if tag_code in [273, 279, 324, 325]:  # StripOffsets, StripByteCounts, TileOffsets, TileByteCounts
                 # These are typically uint32 or uint64 arrays
-                try:
-                    value = tag_obj.value
-                    if isinstance(value, (list, tuple, np.ndarray)):
-                        element_size = 8 if is_bigtiff else 4
-                        tag_value_data_size += len(value) * element_size
-                except Exception:
-                    pass
+                value = tag_obj.value
+                if isinstance(value, (list, tuple, np.ndarray)):
+                    element_size = 8 if is_bigtiff else 4
+                    tag_value_data_size += len(value) * element_size
             
             # String values (stored outside IFD if > 4 bytes for classic, > 8 for BigTIFF)
             elif tag_code in [270, 305, 306, 315, 316, 317]:  # Description, Software, DateTime, Artist, etc.
-                try:
-                    value = tag_obj.value
-                    if isinstance(value, str):
-                        # Add null terminator
-                        str_size = len(value.encode('utf-8')) + 1
-                        threshold = 8 if is_bigtiff else 4
-                        if str_size > threshold:
-                            tag_value_data_size += str_size
-                except Exception:
-                    pass
+                value = tag_obj.value
+                if isinstance(value, str):
+                    # Add null terminator
+                    str_size = len(value.encode('utf-8')) + 1
+                    threshold = 8 if is_bigtiff else 4
+                    if str_size > threshold:
+                        tag_value_data_size += str_size
             
             # GeoKey directory (tag 34735) - stored as array of uint16
             elif tag_code == 34735:
-                try:
-                    value = tag_obj.value
-                    if isinstance(value, (list, tuple, np.ndarray)):
-                        tag_value_data_size += len(value) * 2  # uint16
-                except Exception:
-                    pass
+                value = tag_obj.value
+                if isinstance(value, (list, tuple, np.ndarray)):
+                    tag_value_data_size += len(value) * 2  # uint16
             
             # Other array tags stored outside IFD
             elif tag_code in [34736, 34737]:  # GeoDoubleParams, GeoAsciiParams
-                try:
-                    value = tag_obj.value
-                    if tag_code == 34736 and isinstance(value, (list, tuple, np.ndarray)):
-                        tag_value_data_size += len(value) * 8  # doubles
-                    elif tag_code == 34737 and isinstance(value, str):
-                        tag_value_data_size += len(value.encode('utf-8'))
-                except Exception:
-                    pass
+                value = tag_obj.value
+                if tag_code == 34736 and isinstance(value, (list, tuple, np.ndarray)):
+                    tag_value_data_size += len(value) * 8  # doubles
+                elif tag_code == 34737 and isinstance(value, str):
+                    tag_value_data_size += len(value.encode('utf-8'))
         
         total_header_size = ifd_dir_size + tag_value_data_size
         
         return total_header_size
-    except Exception:
-        # Fallback estimate: assume typical IFD with ~50 tags
-        return 1024  # Conservative estimate
+    except Exception as e:
+        logger.warning(f"IFD {page_index} header size unknown: {e}")
+        return None
 
 
 def _generate_temp_baseline(source_file: str, arc_mode: bool = False, debug: bool = False) -> Optional[str]:
@@ -957,7 +952,6 @@ def _generate_temp_baseline(source_file: str, arc_mode: bool = False, debug: boo
         Path to temporary baseline file, or None if generation failed
     """
     import tempfile
-    from pathlib import Path
     
     try:
         # Import optimization tools and arguments
@@ -1014,7 +1008,7 @@ def calculate_compression_efficiency(
     generate_baseline: bool = False,
     baseline_file: Optional[str] = None,
     arc_mode: bool = False
-) -> float:
+) -> Optional[float]:
     """
     Calculate compression efficiency with accurate overhead accounting.
     
@@ -1056,7 +1050,9 @@ def calculate_compression_efficiency(
         arc_mode: [Dev-only] Use ArcGIS-compatible mode for baseline generation
         
     Returns:
-        Compression efficiency as a percentage (e.g., 45.2) or 0.0 for uncompressed/failures
+        Compression efficiency as a percentage (e.g., 45.2); 0.0 for an uncompressed file;
+        None when it could not be determined, with the reason logged at warning. An error
+        and "uncompressed" used to be the same 0.0, and a report could not tell them apart.
         
     Examples:
         >>> # Standard usage (refined estimation, fast)
@@ -1070,7 +1066,6 @@ def calculate_compression_efficiency(
     """
     # --- Baseline Generation Mode (Dev-Only) ---
     if generate_baseline or baseline_file:
-        from pathlib import Path
         
         if debug:
             logger.debug("Using baseline file approach for 100% accuracy")
@@ -1141,158 +1136,206 @@ def calculate_compression_efficiency(
                         pass
     
     # --- Refined Estimation Mode (Default, Production) ---
+    name = Path(filepath).name
     try:
-        from pathlib import Path
-        
         tiff_parser = TiffTagParser(str(filepath), tiff_file=tiff)
-        
-        # Separate accumulators for compressible data vs. invariant overhead
-        compressible_compressed_size = 0
-        compressible_uncompressed_size = 0
-        overhead_size = 0
-        has_compressed_data = False
-        
-        # File header overhead (8 bytes for classic TIFF, 16 for BigTIFF)
-        is_bigtiff = tiff_parser.tif.is_bigtiff
-        file_header_size = 16 if is_bigtiff else 8
-        overhead_size += file_header_size
-        
-        if debug:
-            logger.debug(f"Analyzing {len(tiff_parser.tif.pages)} IFDs in {Path(filepath).name}")
-            logger.debug(f"  File header: {file_header_size} bytes ({'BigTIFF' if is_bigtiff else 'Classic TIFF'})")
-        
-        # Iterate through ALL IFDs (main image + overviews + masks + thumbnails)
-        for page_index in range(len(tiff_parser.tif.pages)):
-            try:
-                tags_list = tiff_parser.get_tags(page_index=page_index)
-                if not tags_list:
-                    continue
-                tags = {tag.code: tag for tag in tags_list}
-                    
-                # Get basic image properties for this IFD
-                width_tag = tags.get(256)
-                width = width_tag.value if width_tag else None
-                height_tag = tags.get(257)
-                height = height_tag.value if height_tag else None
-                bit_count_tag = tags.get(258)
-                bit_count = bit_count_tag.value if bit_count_tag else 0
-                band_count_tag = tags.get(277)
-                band_count = band_count_tag.value if band_count_tag else 1
-                compression_tag = tags.get(259)
-                compression_code = compression_tag.value if compression_tag else 1
-                algo_interp = compression_tag.interpretation if compression_tag else ''
-                
-                if not width or not height:
-                    if debug:
-                        logger.debug(f"  IFD {page_index}: Missing dimensions, skipping")
-                    continue
-                
-                # Check if this is a transparency mask
-                is_mask = _is_transparency_mask_ifd(tags)
-                
-                # Handle bit_count as tuple/list (multiple bands) or single value
-                if isinstance(bit_count, (list, tuple)):
-                    total_bits_per_pixel = sum(bit_count) * band_count if band_count > len(bit_count) else sum(bit_count)
-                else:
-                    total_bits_per_pixel = bit_count * band_count if bit_count else 8 * band_count
-                
-                # Determine if tiled or striped for this IFD
-                tile_width_tag = tags.get(322)
-                tile_width = tile_width_tag.value if tile_width_tag else None
-                is_tiled = tile_width is not None
-                
-                # Get actual compressed byte counts
-                byte_counts_tag_code = 325 if is_tiled else 279  # TileByteCounts or StripByteCounts
-                byte_counts = None
-                try:
-                    page_obj = tiff_parser.tif.pages[page_index]
-                    page_tags = getattr(page_obj, 'tags', None)
-                    raw_tag = page_tags.get(byte_counts_tag_code) if page_tags is not None else None
-                    if raw_tag is not None:
-                        byte_counts = raw_tag.value
-                except Exception:
-                    byte_counts = None
+    except Exception as e:
+        logger.warning(f"Compression efficiency unknown for {name}: cannot read its TIFF structure ({e})")
+        return None
 
-                # Fall back to the parsed/display tag if raw access failed
-                if byte_counts is None:
-                    byte_counts_tag = tags.get(byte_counts_tag_code)
-                    byte_counts = byte_counts_tag.value if byte_counts_tag else None
-                
-                if byte_counts:
+    try:
+        with tiff_parser:
+            # Separate accumulators for compressible data vs. invariant overhead
+            compressible_compressed_size = 0
+            compressible_uncompressed_size = 0
+            overhead_size = 0
+            overhead_known = True
+            has_compressed_data = False
+
+            # File header overhead (8 bytes for classic TIFF, 16 for BigTIFF)
+            is_bigtiff = tiff_parser.tif.is_bigtiff
+            file_header_size = 16 if is_bigtiff else 8
+            overhead_size += file_header_size
+
+            if debug:
+                logger.debug(f"Analyzing {len(tiff_parser.tif.pages)} IFDs in {name}")
+                logger.debug(f"  File header: {file_header_size} bytes ({'BigTIFF' if is_bigtiff else 'Classic TIFF'})")
+
+            # Iterate through ALL IFDs (main image + overviews + masks + thumbnails)
+            for page_index in range(len(tiff_parser.tif.pages)):
+                try:
+                    tags_list = tiff_parser.get_tags(page_index=page_index)
+                    if not tags_list:
+                        continue
+                    tags = {tag.code: tag for tag in tags_list}
+
+                    # Get basic image properties for this IFD
+                    width_tag = tags.get(256)
+                    width = width_tag.value if width_tag else None
+                    height_tag = tags.get(257)
+                    height = height_tag.value if height_tag else None
+                    bit_count_tag = tags.get(258)
+                    bit_count = bit_count_tag.value if bit_count_tag else 0
+                    band_count_tag = tags.get(277)
+                    band_count = band_count_tag.value if band_count_tag else 1
+                    compression_tag = tags.get(259)
+                    compression_code = compression_tag.value if compression_tag else 1
+                    algo_interp = compression_tag.interpretation if compression_tag else ''
+
+                    if not width or not height:
+                        if debug:
+                            logger.debug(f"  IFD {page_index}: Missing dimensions, skipping")
+                        continue
+
+                    # Check if this is a transparency mask
+                    is_mask = _is_transparency_mask_ifd(tags)
+
+                    # Handle bit_count as tuple/list (multiple bands) or single value
+                    if isinstance(bit_count, (list, tuple)):
+                        total_bits_per_pixel = sum(bit_count) * band_count if band_count > len(bit_count) else sum(bit_count)
+                    else:
+                        total_bits_per_pixel = bit_count * band_count if bit_count else 8 * band_count
+
+                    # Determine if tiled or striped for this IFD
+                    tile_width_tag = tags.get(322)
+                    tile_width = tile_width_tag.value if tile_width_tag else None
+                    is_tiled = tile_width is not None
+
+                    # Get actual compressed byte counts
+                    byte_counts_tag_code = 325 if is_tiled else 279  # TileByteCounts or StripByteCounts
+                    byte_counts = None
+                    try:
+                        page_obj = tiff_parser.tif.pages[page_index]
+                        page_tags = getattr(page_obj, 'tags', None)
+                        raw_tag = page_tags.get(byte_counts_tag_code) if page_tags is not None else None
+                        if raw_tag is not None:
+                            byte_counts = raw_tag.value
+                    except Exception:
+                        byte_counts = None
+
+                    # Fall back to the parsed/display tag if raw access failed
+                    if byte_counts is None:
+                        byte_counts_tag = tags.get(byte_counts_tag_code)
+                        byte_counts = byte_counts_tag.value if byte_counts_tag else None
+
+                    if not byte_counts:
+                        # An image IFD always carries strip or tile byte counts. Without
+                        # them this IFD cannot be sized, and neither can the file.
+                        logger.warning(f"Compression efficiency unknown for {name}: IFD {page_index} carries no byte counts")
+                        return None
+
                     # Calculate actual compressed size for this IFD
                     if isinstance(byte_counts, (list, tuple, np.ndarray)):
                         actual_compressed_bytes = sum(int(b) for b in byte_counts)
                     else:
                         actual_compressed_bytes = int(byte_counts)
-                    
+
                     if is_mask:
                         # Transparency masks are ALWAYS compressed (DEFLATE) by GDAL
                         # Treat them as invariant overhead, not compressible data
                         overhead_size += actual_compressed_bytes
-                        
+
                         if debug:
                             logger.debug(f"  IFD {page_index} (Transparency Mask): "
-                                       f"{width}x{height}, {total_bits_per_pixel}bpp, "
-                                       f"{actual_compressed_bytes:,} bytes → overhead (always DEFLATE)")
+                                         f"{width}x{height}, {total_bits_per_pixel}bpp, "
+                                         f"{actual_compressed_bytes:,} bytes → overhead (always DEFLATE)")
                     else:
                         # This is compressible image data
                         theoretical_uncompressed = width * height * total_bits_per_pixel / 8
-                        
+
                         compressible_compressed_size += actual_compressed_bytes
                         compressible_uncompressed_size += theoretical_uncompressed
-                        
+
                         # Track if we found any actually compressed data
                         if compression_code != 1 and not (algo_interp and "uncompressed" in algo_interp.lower()):
                             has_compressed_data = True
-                        
+
                         if debug:
                             subfile_type_tag = tags.get(254)
                             subfile_type = subfile_type_tag.interpretation if subfile_type_tag else 'Image'
                             logger.debug(f"  IFD {page_index} ({subfile_type}): "
-                                       f"{width}x{height}, {total_bits_per_pixel}bpp, "
-                                       f"{actual_compressed_bytes:,} compressed / "
-                                       f"{theoretical_uncompressed:,} uncompressed bytes")
-                    
-                    # Add IFD header size to overhead
+                                         f"{width}x{height}, {total_bits_per_pixel}bpp, "
+                                         f"{actual_compressed_bytes:,} compressed / "
+                                         f"{theoretical_uncompressed:,} uncompressed bytes")
+
+                    # Add IFD header size to overhead. The overhead only informs the debug
+                    # summary, so an unknown header does not make the figure unknown.
                     header_size = _estimate_ifd_header_size(page_index, tiff_parser.tif, tags)
-                    overhead_size += header_size
-                    
-                    if debug:
-                        logger.debug(f"    IFD {page_index} header/metadata: {header_size:,} bytes -> overhead")
-                else:
-                    if debug:
-                        logger.debug(f"  IFD {page_index}: No byte count data available")
-                    
-            except Exception as e:
+                    if header_size is None:
+                        overhead_known = False
+                    else:
+                        overhead_size += header_size
+                        if debug:
+                            logger.debug(f"    IFD {page_index} header/metadata: {header_size:,} bytes -> overhead")
+
+                except Exception as e:
+                    # One IFD that cannot be read makes the whole figure unknown: a number
+                    # computed over the rest would be a plausible wrong answer.
+                    logger.warning(f"Compression efficiency unknown for {name}: IFD {page_index} could not be sized ({e})")
+                    return None
+
+            if compressible_uncompressed_size == 0:
+                logger.warning(f"Compression efficiency unknown for {name}: no image IFD could be sized")
+                return None
+
+            if not has_compressed_data:
                 if debug:
-                    logger.debug(f"  Error processing IFD {page_index}: {e}")
-                continue
-        
-        tiff_parser.close()
-        
-        # Calculate compression efficiency on compressible data only
-        if compressible_uncompressed_size > 0 and has_compressed_data:
+                    logger.debug("  No compressed data found: an uncompressed file, efficiency 0.0")
+                return 0.0
+
+            # Calculate compression efficiency on compressible data only
             efficiency = (1 - (compressible_compressed_size / compressible_uncompressed_size)) * 100
-            
+
             if debug:
                 logger.debug("\n  === Compression Efficiency Summary ===")
                 logger.debug(f"  Compressible data: {compressible_compressed_size:,} compressed / "
-                           f"{compressible_uncompressed_size:,} uncompressed bytes")
-                logger.debug(f"  Invariant overhead: {overhead_size:,} bytes")
+                             f"{compressible_uncompressed_size:,} uncompressed bytes")
+                logger.debug(f"  Invariant overhead: {overhead_size:,} bytes"
+                             + ("" if overhead_known else " (at least; one IFD header could not be sized)"))
                 logger.debug(f"  Total file size: {compressible_compressed_size + overhead_size:,} bytes")
                 logger.debug(f"  Efficiency: {efficiency:.2f}%")
-            
+
             # Clamp to valid range [0, 100]
             return max(0.0, min(100.0, efficiency))
-        else:
-            if debug:
-                logger.debug("\n  No compressed data found or calculation failed. Returning 0.0")
-            return 0.0  # Uncompressed or calculation failed
-        
+
     except Exception as e:
-        if debug:
-            logger.debug(f"Could not calculate compression efficiency for {filepath}: {e}")
-        return 0.0
+        logger.warning(f"Compression efficiency unknown for {name}: {e}")
+        return None
+
+
+def compression_ratio(efficiency: Optional[float]) -> Optional[float]:
+    """
+    The size ratio an efficiency percentage implies: 50% -> 2.0.
+
+    None when the efficiency is unknown, and at 100%, where the ratio is unbounded.
+
+    Example:
+        >>> compression_ratio(50.0), compression_ratio(0.0), compression_ratio(None)
+        (2.0, 1.0, None)
+    """
+    if efficiency is None or efficiency >= 100:
+        return None
+    return 100 / (100 - efficiency)
+
+
+def format_compression_efficiency(efficiency: Optional[float]) -> Tuple[str, str]:
+    """
+    The two report cells for an efficiency: ('45.20%', '1.82x'), or ('n/a', 'n/a').
+
+    A report used to print an efficiency the calculation had not produced as 0.00% and
+    1.00x, the same cells as a genuinely uncompressed file.
+
+    Example:
+        >>> format_compression_efficiency(45.2)
+        ('45.20%', '1.82x')
+        >>> format_compression_efficiency(None)
+        ('n/a', 'n/a')
+    """
+    if efficiency is None:
+        return ('n/a', 'n/a')
+    ratio = compression_ratio(efficiency)
+    return (f"{efficiency:.2f}%", f"{ratio:.2f}x" if ratio is not None else 'n/a')
+
 
 def is_nodata_valid(nodata: float, dtype: str) -> bool:
     """

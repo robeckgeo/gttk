@@ -727,8 +727,8 @@ class TiffTagParser:
         return is_geotiff(self.filename)
 
     def close(self):
-        """Close the TIFF file."""
-        if hasattr(self, 'tif') and self.tif:
+        """Close the TIFF file -- unless the caller lent it in, as __exit__ already knew."""
+        if hasattr(self, 'tif') and self.tif and not self._tiff_file_external:
             self.tif.close()
 
 def _sanitize_string(input_str: str) -> str:

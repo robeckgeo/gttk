@@ -1546,7 +1546,7 @@ class FileComparison:
     comp_size_mb: float = 0.0
     size_difference_mb: float = 0.0
     size_difference_pct: float = 0.0
-    efficiency_difference: float = 0.0
+    efficiency_difference: Optional[float] = 0.0
     cog_creation_failed: bool = False
     cog_errors: Optional[List[str]] = None
     cog_warnings: Optional[List[str]] = None
@@ -1569,7 +1569,9 @@ class FileComparison:
         size_text = f"{'Decreased' if self.size_difference_mb < 0 else 'Increased'} by {abs(self.size_difference_mb):,.2f} MB"
         rel_text = f"({abs(self.size_difference_pct):.1f}% {'smaller' if self.size_difference_mb < 0 else 'larger'})"
         
-        if self.efficiency_difference > 0.05:
+        if self.efficiency_difference is None:
+            efficiency_text = ", compression efficiency could not be compared"
+        elif self.efficiency_difference > 0.05:
             efficiency_text = f", {self.efficiency_difference:.1f}% more efficient compression"
         elif self.efficiency_difference < -0.05:
             efficiency_text = f", {abs(self.efficiency_difference):.1f}% less efficient compression"

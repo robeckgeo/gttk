@@ -47,11 +47,11 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,580
+- **Total Tests**: 1,594
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,364 tests (models, processors, extractors, formatters, utilities)
-  - Doctests: 103 (94 in `gttk/`, 9 in `tests/`)
+  - Unit Tests: 1,376 tests (models, processors, extractors, formatters, utilities)
+  - Doctests: 105 (96 in `gttk/`, 9 in `tests/`)
   - Integration Tests: 57 tests (metadata workflows, statistics validation)
   - E2E Tests: 56 tests (CLI commands)
 
@@ -103,7 +103,7 @@ tests/
 │   ├── custom_vertical_crs.py                   # A vertical CRS with no EPSG code
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,364)
+├── unit/                                        # Unit tests (1,376)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (95)
 │   ├── test_geotiff_processor.py                # GeoTIFF processing (71)
@@ -134,6 +134,7 @@ tests/
 │   ├── test_statistics_strategy_selection.py    # Fast vs blocked strategy selection (16)
 │   ├── test_validation_output.py                # Output folder & report path construction (14)
 │   ├── test_statistics_phase2.py                # Phase 2 statistics optimizations (13)
+│   ├── test_compression_efficiency.py           # An error is not 0.0 (12)
 │   ├── test_config_loader.py                    # Where config.toml comes from, quietly (11)
 │   ├── test_section_renderers.py                # Section rendering (11)
 │   ├── test_log_helpers.py                      # Logging helpers & startup env checks (9)
