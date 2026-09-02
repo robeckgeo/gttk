@@ -47,12 +47,12 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,640
+- **Total Tests**: 1,648
 - **Success Rate**: 100%
 - **Test Categories**:
   - Unit Tests: 1,419 tests (models, processors, extractors, formatters, utilities)
   - Doctests: 106 (97 in `gttk/`, 9 in `tests/`)
-  - Integration Tests: 57 tests (metadata workflows, statistics validation)
+  - Integration Tests: 65 tests (metadata workflows, statistics validation)
   - E2E Tests: 58 tests (CLI commands)
 
 Counts here and in the tree below are from `pytest --collect-only`; doctests
@@ -101,6 +101,7 @@ tests/
 ├── README.md                                    # This guide
 ├── fixtures/                                    # Mock data factories
 │   ├── custom_vertical_crs.py                   # A vertical CRS with no EPSG code
+│   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
 ├── unit/                                        # Unit tests (1,419)
@@ -155,10 +156,11 @@ tests/
 │   ├── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
 │   ├── test_compare_compression.py              # compare releases both datasets on every path (1)
 │   └── test_statistics_nodata_warnings.py       # An unreadable per-band NoData is reported (1)
-├── integration/                                 # Integration tests (57)
+├── integration/                                 # Integration tests (65)
 │   ├── test_validation_integration.py           # End-to-end validation workflows (20)
 │   ├── test_installed_wheel.py                  # GTTK works from an installed wheel (6)
 │   ├── test_metadata_workflow.py                # Metadata extraction workflows (13)
+│   ├── test_gdal_runner_fake_osgeo4w.py         # gdal_runner run for real through a fake OSGeo4W (8)
 │   ├── test_statistics_blocked_path.py          # Block-based statistics (9)
 │   └── test_statistics_native_dtype.py          # Native dtype statistics (9)
 ├── e2e/                                         # End-to-end CLI tests (58)
@@ -551,6 +553,19 @@ def test_with_temp_dir(tmp_path):
 ```
 
 ---
+
+### The fake OSGeo4W tree (`tests/fixtures/fake_osgeo4w.py`)
+
+The ArcGIS Pro path runs GDAL in a separate OSGeo4W interpreter: `gdal_runner`
+launches `<OSGeo4W>/bin/python.exe` on itself with a JSON payload of commands and
+resolves each command against `<OSGeo4W>/bin`. On Linux none of that could run, so it
+was tested through stubs that replaced the functions under test. `build_fake_osgeo4w(root)`
+lays out the directories the code looks for -- `bin/python.exe`, `bin/gdal_translate`,
+`apps/Python312/Scripts/gdal_calc.py`, `share/gdal`, `share/proj` -- as shell shims that
+`exec` the conda environment's interpreter and tools, and symlinks to its data
+directories. Point `paths.osgeo4w` at it (the tests monkeypatch `config.get`) and the real
+runner, the real payload protocol and the real GDAL do the work. POSIX only: on Windows
+the real OSGeo4W is the fixture, and these tests skip.
 
 ## Coverage Reports
 

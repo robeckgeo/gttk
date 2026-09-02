@@ -101,12 +101,12 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1640 tests total (1419 unit, 57 integration, 58 E2E, 106 doctests -- 97 in `gttk/`
+1648 tests total (1419 unit, 65 integration, 58 E2E, 106 doctests -- 97 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 328 validation tests
 - `tests/integration/` - Component interaction tests
 - `tests/e2e/` - Full CLI workflow tests
-- `tests/fixtures/` - Mock GeoTIFF factory (`mock_geotiff_factory.py`)
+- `tests/fixtures/` - Mock GeoTIFF factory (`mock_geotiff_factory.py`) and the fake OSGeo4W tree (`fake_osgeo4w.py`)
 - `tests/conftest.py` - Mock GeoTIFF fixtures and assertion formatting
 - `conftest.py` (repo root) - `PROJ_LIB` bootstrap, `gdal.UseExceptions()`, and the doctest sandbox
 
@@ -173,6 +173,10 @@ Toolbox language coverage:
 - `test_i18n_catalog.py` - every `_()` string in the `.pyt` has a Spanish entry, no orphans, placeholders intact
 - `test_toolbox_sidecars.py` - each language's `.pyt.xml` documents exactly the dialog's parameters and labels
 - `test_optimize_arc_wiring.py` - the ArcGIS optimize path binds its GDAL options and logs to the GP pane
+
+ArcGIS path coverage (POSIX, through `tests/fixtures/fake_osgeo4w.py`, an OSGeo4W-shaped tree whose
+tools are the conda environment's; skipped on Windows, where the real OSGeo4W is the fixture):
+- `test_gdal_runner_fake_osgeo4w.py` - the isolated environment, command resolution, the stdin payload protocol and projection extraction, run for real
 
 Documentation coverage:
 - `test_developer_guide.py` - runs DEVELOPER.md's two worked examples straight out of the markdown

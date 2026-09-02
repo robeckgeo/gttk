@@ -34,6 +34,14 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **The ArcGIS Pro path runs on Linux, against a fake OSGeo4W.** `gdal_runner` launches
+  OSGeo4W's Python on a JSON payload of GDAL commands and resolves each one against
+  `<OSGeo4W>/bin`, so outside Windows none of it ran, and its tests stubbed the functions
+  under test. `tests/fixtures/fake_osgeo4w.py` lays that directory tree out over the conda
+  environment's interpreter and tools, and `tests/integration/test_gdal_runner_fake_osgeo4w.py`
+  drives the real runner through it: the isolated environment, `gdalinfo` and `gdal_calc.py`
+  resolved by name, the script launched by path with a payload on stdin, and the projection
+  reader on a raster whose name is a Python statement.
 - **A `dev` extra, and a test that installs the wheel.** `pip install -e ".[dev]"` brings
   `pytest` and `pytest-cov`, which only `environment.yml` and `requirements.txt` listed
   before. `tests/integration/test_installed_wheel.py` builds the wheel from what git would
@@ -113,6 +121,12 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **`optimize-arc` no longer assumes OSGeo4W's Python is 3.12.** `gdal_runner` hard-coded
+  `apps/Python312`, both for `PYTHONHOME` and for the `Scripts` directory that holds
+  `gdal_calc.py`, so an OSGeo4W that ships a newer Python pointed the isolated interpreter at
+  a directory that does not exist. The runner now discovers `apps/Python3*` and takes the
+  newest. It also joins and splits `PATH` with the platform's separator instead of a
+  literal `;`.
 - **What a fallback could not read is said, not skipped.** The projection script run under
   OSGeo4W for ArcGIS Pro swallowed seven kinds of failure with `pass` and still exited 0
   with valid JSON; it now lists each one and the parent logs them by file. A per-band NoData
