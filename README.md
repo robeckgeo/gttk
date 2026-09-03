@@ -3,7 +3,7 @@
 # GeoTIFF ToolKit (GTTK): GeoTIFF Analysis and Optimization Tools
 
 <p align="left">
-  <img src="https://img.shields.io/badge/version-0.11.0-orange" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.12.0-orange" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 </p>
 

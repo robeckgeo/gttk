@@ -8,8 +8,8 @@ authors:
     orcid: "https://orcid.org/0000-0002-2603-7990"
 title: "GeoTIFF ToolKit (GTTK)"
 abstract: "A unified Python toolkit for analyzing, optimizing, and compressing GeoTIFF files. GTTK provides a modular command-line interface and ArcGIS Toolbox for professional geospatial workflows, including optimization/COG creation, metadata extraction, and compression benchmarking."
-version: 0.11.0
-date-released: 2026-09-02
+version: 0.12.0
+date-released: 2026-09-03
 license: MIT
 repository-code: "https://github.com/robeckgeo/gttk"
 url: "https://github.com/robeckgeo/gttk"

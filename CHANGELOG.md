@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-03
+
 ### Added
 
 - **`tests/benchmarks/benchmark_optimize.py`** measures what one `gttk optimize` run costs:

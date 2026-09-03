@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "geotiff-toolkit"
-version = "0.11.0"
+version = "0.12.0"
 description = "GeoTIFF ToolKit (GTTK): A Python toolkit for analyzing and optimizing GeoTIFF data."
 readme = "README.md"
 requires-python = ">=3.12"
