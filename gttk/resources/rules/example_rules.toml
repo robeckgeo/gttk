@@ -749,3 +749,65 @@ data_type = "email"
 constraint = "exists"
 optional = false
 comment = "Point of Contact email address"
+
+# ==============================================================================
+# TILE-PLACEHOLDERS-EXAMPLE - Demonstrates File-Name Placeholders
+# ==============================================================================
+# A rule's expected value may refer to the file being validated:
+#   - {stem} and {name} (the file name without and with its extension) are
+#     always available, in any product
+#   - the named groups of the product's [PRODUCT.filename] pattern add more;
+#     the pattern is matched against the file stem
+# Inside a regex constraint the inserted value is escaped, so a dot in a file
+# name matches a dot. Regex quantifiers such as \d{2} are not placeholders, and
+# \{word\} keeps a literal brace.
+# A rule that uses a placeholder the pattern does not define is rejected when
+# the rules load. A file whose stem does not match the pattern fails every rule
+# that uses a placeholder; the rules without one still run.
+
+[TILE-PLACEHOLDERS-EXAMPLE]
+title = "Tiled DEM with file-name placeholders"
+description = "Demonstrates expected values resolved from the file name: {stem}, {name} and the named groups of filename.pattern"
+author = "GeoTIFF ToolKit examples"
+updated = "2026-10-21"
+
+# The filename table is product-level: a table, not an array of tables.
+# Its named groups become the placeholders {geocell} and {edition}.
+[TILE-PLACEHOLDERS-EXAMPLE.filename]
+pattern = "^TILE_(?P<geocell>[NS]\\d{2}[EW]\\d{3})_(?P<edition>\\d{2})_DEM$"
+
+# A plain rule: no placeholder, so it runs whatever the file is named.
+[[TILE-PLACEHOLDERS-EXAMPLE.tag]]
+tag = 258
+description = "BitsPerSample"
+data_type = "integer"
+constraint = "exact"
+expected = 32
+comment = "32-bit float elevation"
+
+# {stem} needs no filename table.
+[[TILE-PLACEHOLDERS-EXAMPLE.gdal]]
+name = "IDENTIFIER"
+description = "Identifier is the file stem"
+data_type = "string"
+constraint = "exact"
+expected = "{stem}"
+comment = "TILE_N00E000_01_DEM.tif must carry IDENTIFIER=TILE_N00E000_01_DEM"
+
+# A named group of filename.pattern.
+[[TILE-PLACEHOLDERS-EXAMPLE.gdal]]
+name = "TILE_ID"
+description = "Tile id is the geocell from the file name"
+data_type = "string"
+constraint = "exact"
+expected = "{geocell}"
+comment = "TILE_N00E000_01_DEM.tif must carry TILE_ID=N00E000"
+
+# Inside a regex the value is inserted escaped; \d{2} is a quantifier, not a placeholder.
+[[TILE-PLACEHOLDERS-EXAMPLE.geo]]
+xpath = "/gmd:MD_Metadata/gmd:fileIdentifier/gco:CharacterString"
+description = "The embedded record names the tile"
+data_type = "string"
+constraint = "regex"
+expected = "^SRC_{geocell}_\\d{2}(\\.xml)?$"
+comment = "The source record for TILE_N00E000_01_DEM.tif is SRC_N00E000_<edition>.xml"

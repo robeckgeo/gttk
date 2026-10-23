@@ -127,6 +127,56 @@ author = "Organization or person who created these rules"
 updated = "2026-01-17"  # Last modification date
 ```
 
+### Filename pattern and placeholders
+
+A rule may compare a value with the name of the file being validated. Two placeholders are always available in a rule's `expected`: `{stem}`, the file name without its extension, and `{name}`, the file name with it. A product defines more by adding a `filename` table with a `pattern`: a regular expression that is matched against the file stem, whose named groups become placeholders.
+
+```toml
+[TILE-PLACEHOLDERS-EXAMPLE]
+title = "Tiled DEM with file-name placeholders"
+description = "Demonstrates expected values resolved from the file name"
+author = "GeoTIFF ToolKit examples"
+updated = "2026-10-21"
+
+# A product-level table, not an array of rules
+[TILE-PLACEHOLDERS-EXAMPLE.filename]
+pattern = "^TILE_(?P<geocell>[NS]\\d{2}[EW]\\d{3})_(?P<edition>\\d{2})_DEM$"
+
+[[TILE-PLACEHOLDERS-EXAMPLE.gdal]]
+name = "IDENTIFIER"
+description = "Identifier is the file stem"
+data_type = "string"
+constraint = "exact"
+expected = "{stem}"
+
+[[TILE-PLACEHOLDERS-EXAMPLE.gdal]]
+name = "TILE_ID"
+description = "Tile id is the geocell from the file name"
+data_type = "string"
+constraint = "exact"
+expected = "{geocell}"
+
+[[TILE-PLACEHOLDERS-EXAMPLE.geo]]
+xpath = "/gmd:MD_Metadata/gmd:fileIdentifier/gco:CharacterString"
+description = "The embedded record names the tile"
+data_type = "string"
+constraint = "regex"
+expected = "^SRC_{geocell}_\\d{2}(\\.xml)?$"
+```
+
+For `TILE_N00E000_01_DEM.tif` these rules expect `IDENTIFIER` to be `TILE_N00E000_01_DEM`, `TILE_ID` to be `N00E000`, and the embedded record's file identifier to match `^SRC_N00E000_\d{2}(\.xml)?$`; for `TILE_N00E001_01_DEM.tif` the same rules expect `N00E001`.
+
+How placeholders behave:
+
+- `{stem}` and `{name}` need no `filename` table. Every other placeholder must be a named group of `filename.pattern`. A rule that uses a name the pattern does not define is rejected when the rules load, with a message listing the available names; a group may not be named `stem` or `name`.
+- Only identifier-shaped names in braces are placeholders. Regex quantifiers such as `\d{2}` and `a{1,3}` are left alone, so a `regex` constraint can carry both. To keep a literal brace, escape it: `\{word\}` stays as written.
+- In a `regex` constraint the inserted value is escaped, so a dot or a bracket in a file name matches literally. In `exact` and `enum` constraints it is inserted as written; an `enum` list is substituted element by element.
+- The message of a rule whose expected value came from the file name ends with `(from filename)`, and the JSON results and reports show the resolved value.
+- When a product has a `filename` table and a file's stem does not match the pattern, every rule whose `expected` uses a placeholder fails, optional or not and whether or not the value is present, with a message naming the file, the pattern and the placeholder that could not be resolved. Rules without placeholders run normally, and the log carries one warning for the file.
+- Rules without placeholders, and products without a `filename` table, behave exactly as before.
+
+The bundled `example_rules.toml` carries this product as `TILE-PLACEHOLDERS-EXAMPLE`.
+
 ### Rule Definitions
 
 Rules are defined as arrays of tables using TOML's `[[...]]` syntax:
@@ -397,7 +447,7 @@ constraint = "exists"
 
 **Sidecar File Discovery:**
 The validator searches for XML files with matching base names:
-- `file.tif` → `file.xml`, `file.tif.xml`
+- `file.tif` → `file.xml`, then `file_meta.xml`, beside the raster; then the same two names in the parent directory; then `metadatos/file.xml` beside the raster's directory (the lookup every tool shares, `gttk.utils.path_helpers.find_xml_metadata_file`)
 
 ### PROJJSON (`projjson`)
 
@@ -449,6 +499,8 @@ expected = ".*USGS.*National.*"      # Contains text
 ```
 
 **Note:** Backslashes must be escaped in TOML strings (`\\d` instead of `\d`).
+
+**Note:** A placeholder such as `{geocell}` is filled from the file name before the pattern is used, with the value escaped so that it matches literally; see [Filename pattern and placeholders](#filename-pattern-and-placeholders). Quantifiers such as `\d{2}` are not placeholders.
 
 ### `range`
 
@@ -905,6 +957,16 @@ comment = "Recommended: Include processing description"
 **"Invalid data type"**
 - Valid types: `string`, `integer`, `float`, `boolean`, `date`, `datetime`, `url`, `email`
 - Check spelling and case sensitivity
+
+**"uses placeholder {X}; available: ..."**
+- A rule's `expected` names a placeholder that is neither `{stem}`, `{name}` nor a named group of the product's `filename.pattern`
+- Add the group to the `pattern` in `[PRODUCT.filename]`, or add that table if the product has none
+- A regex quantifier such as `\d{2}` is not a placeholder; only identifier-shaped names in braces are. To match a literal brace, write `\{word\}`
+
+**"Filename 'X.tif' does not match filename.pattern"**
+- The file's stem (its name without the extension) does not match the product's `filename.pattern`, so the rules that use placeholders cannot be resolved and fail
+- Check the pattern against the stem, not the full name; it must match from the first character
+- Rules without placeholders are unaffected, and the log names the file once
 
 ### Debugging Tips
 

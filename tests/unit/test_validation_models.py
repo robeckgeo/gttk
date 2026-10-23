@@ -24,8 +24,12 @@ Organization:
 - Clear docstrings explain what each test verifies
 """
 
+from pathlib import Path
+
 import pytest
 from gttk.utils.validation.models import (
+    BUILTIN_PLACEHOLDERS,
+    FilenamePattern,
     ValidationStatus,
     ConstraintType,
     SectionType,
@@ -663,3 +667,55 @@ class TestMessageFunctions:
         assert get_section_icon('geokey') == 'key'
         assert get_section_icon('gdal') == 'earth'
         assert get_section_icon('unknown') == 'checkbox'
+
+
+# =============================================================================
+# FilenamePattern Tests
+# =============================================================================
+
+@pytest.mark.unit
+class TestFilenamePattern:
+    """FilenamePattern: a product's [P.filename] pattern and the placeholders it defines."""
+
+    PATTERN = r'^TILE_(?P<geocell>[NS]\d{2}[EW]\d{3})_(?P<edition>\d{2})_DEM$'
+
+    def test_lists_named_groups_in_order(self):
+        assert FilenamePattern(self.PATTERN).groups == ['geocell', 'edition']
+        assert FilenamePattern(r'^(?P<b>.)(?P<a>.)(.)$').groups == ['b', 'a']   # unnamed groups are not placeholders
+        assert FilenamePattern(r'^TILE_.*$').groups == []
+
+    def test_values_for_matches_the_stem_not_the_name(self):
+        fp = FilenamePattern(self.PATTERN)
+        assert fp.values_for(Path('/data/TILE_N00E000_01_DEM.tif')) == {'geocell': 'N00E000', 'edition': '01'}
+        assert fp.values_for(Path('TILE_N00E000_01_DEM.tiff')) == {'geocell': 'N00E000', 'edition': '01'}
+        assert fp.values_for(Path('TILE_N00E000_01_DEM_v2.tif')) is None
+        # A pattern that spells out the extension never matches: it sees the stem
+        assert FilenamePattern(r'^TILE_.*\.tif$').values_for(Path('TILE_N00E000_01_DEM.tif')) is None
+
+    def test_invalid_regex_is_a_value_error(self):
+        with pytest.raises(ValueError) as excinfo:
+            FilenamePattern('^TILE_(?P<geocell>[NS]')
+        assert '^TILE_(?P<geocell>[NS]' in str(excinfo.value)
+
+    def test_group_named_stem_or_name_is_rejected(self):
+        for shadow in ('stem', 'name'):
+            with pytest.raises(ValueError) as excinfo:
+                FilenamePattern(rf'^(?P<{shadow}>.*)$')
+            assert f"'{shadow}'" in str(excinfo.value)
+            assert 'built-in' in str(excinfo.value)
+
+    def test_unmatched_optional_group_is_empty_string(self):
+        fp = FilenamePattern(r'^TILE_(?P<geocell>[NS]\d{2}[EW]\d{3})(?:_(?P<edition>\d{2}))?$')
+        assert fp.values_for(Path('TILE_N00E000.tif')) == {'geocell': 'N00E000', 'edition': ''}
+        assert fp.values_for(Path('TILE_N00E000_02.tif')) == {'geocell': 'N00E000', 'edition': '02'}
+
+    def test_rule_default_has_no_pattern(self):
+        rule = ValidationRule(
+            product='TILE', section='tag', key='258', key_type='tag',
+            description='BitsPerSample', data_type='integer', constraint='exact', expected=32
+        )
+        assert rule.filename_pattern is None
+        assert BUILTIN_PLACEHOLDERS == ('stem', 'name')
+        # Equal patterns are one key in the engine's per-file cache
+        assert FilenamePattern(self.PATTERN) == FilenamePattern(self.PATTERN)
+        assert len({FilenamePattern(self.PATTERN), FilenamePattern(self.PATTERN)}) == 1

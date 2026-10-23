@@ -42,11 +42,13 @@ Functions:
     validate_datetime_format: Validate ISO 8601 datetime format
     validate_url_format: Validate URL format
     validate_email_format: Validate email address format
+    placeholder_names: The file-name placeholders an expected value uses
+    substitute_placeholders: Fill them from the file being validated
 """
 
 import re
 from datetime import datetime as dt
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Mapping, Optional, Tuple, Union
 from urllib.parse import urlparse
 
 
@@ -708,3 +710,91 @@ def apply_constraint(
         raise ValueError(f"Unknown constraint type: '{constraint}'")
 
     return constraint_functions[constraint](value, expected)
+
+
+# =============================================================================
+# File-name placeholders
+# =============================================================================
+
+# A placeholder is an identifier in braces: {stem}, {geocell}. A regex quantifier
+# ({2}, {1,3}) is not identifier-shaped, and a brace escaped as \{year\} is left
+# alone, so a regex expected can carry both.
+PLACEHOLDER_RE = re.compile(r'(?<!\\)\{([A-Za-z_][A-Za-z0-9_]*)\}')
+
+
+def placeholder_names(expected: Any) -> List[str]:
+    """
+    The placeholders an ``expected`` value uses, in order of first appearance.
+
+    A string is scanned, and so are the string elements of a list (an ``enum``);
+    any other type uses none.
+
+    Example:
+        >>> placeholder_names('{stem}')
+        ['stem']
+        >>> placeholder_names(r'^SRC_{geocell}_\\d{2}(\\.xml)?$')
+        ['geocell']
+        >>> placeholder_names(r'\\{year\\}_{name}_{name}')
+        ['name']
+        >>> placeholder_names(['{stem}', 'FIXED', '{geocell}'])
+        ['stem', 'geocell']
+        >>> placeholder_names(32)
+        []
+    """
+    if isinstance(expected, str):
+        texts = [expected]
+    elif isinstance(expected, list):
+        texts = [item for item in expected if isinstance(item, str)]
+    else:
+        return []
+
+    names: List[str] = []
+    for text in texts:
+        for name in PLACEHOLDER_RE.findall(text):
+            if name not in names:
+                names.append(name)
+    return names
+
+
+def substitute_placeholders(expected: Any, values: Mapping[str, str], constraint: str) -> Any:
+    """
+    ``expected`` with its placeholders filled from ``values``.
+
+    A string comes back as a string and a list as a new list with its string
+    elements substituted; any other type is returned as it is. Under a ``regex``
+    constraint the inserted value is ``re.escape``d, so a dot or a bracket in a
+    file name matches literally; under every other constraint it is inserted raw.
+    The text is scanned once, so an inserted value is never itself read for
+    placeholders, and a name ``values`` does not define is left as written.
+
+    Example:
+        >>> substitute_placeholders('{stem}', {'stem': 'TILE_N00E000_01_DEM'}, 'exact')
+        'TILE_N00E000_01_DEM'
+        >>> print(substitute_placeholders(r'^SRC_{geocell}_\\d{2}$', {'geocell': 'N00E000'}, 'regex'))
+        ^SRC_N00E000_\\d{2}$
+        >>> print(substitute_placeholders('^{name}$', {'name': 'A.tif'}, 'regex'))
+        ^A\\.tif$
+        >>> print(substitute_placeholders(r'\\{year\\}_{geocell}', {'geocell': 'N00E000'}, 'exact'))
+        \\{year\\}_N00E000
+        >>> substitute_placeholders(['{stem}', 'FIXED'], {'stem': 'A'}, 'enum')
+        ['A', 'FIXED']
+        >>> substitute_placeholders(32, {'stem': 'A'}, 'exact')
+        32
+    """
+    escape = constraint == 'regex'
+
+    def fill(match: re.Match) -> str:
+        name = match.group(1)
+        if name not in values:
+            return match.group(0)
+        value = values[name]
+        return re.escape(value) if escape else value
+
+    def substitute(text: str) -> str:
+        return PLACEHOLDER_RE.sub(fill, text)
+
+    if isinstance(expected, str):
+        return substitute(expected)
+    if isinstance(expected, list):
+        return [substitute(item) if isinstance(item, str) else item for item in expected]
+    return expected

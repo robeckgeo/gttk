@@ -73,6 +73,7 @@ Located in `gttk/utils/validation/`:
 - **7 constraint types**: exact, enum, regex, range, ranges, exists, forbidden
 - **On-demand statistics**: STATISTICS_* keys computed from raster data, not stored metadata
 - **Extended data types**: date, datetime, url, email validation
+- **Filename placeholders**: `{stem}`, `{name}` and the named groups of a product's `[PRODUCT.filename]` `pattern` in `expected` (`FilenamePattern` in `models.py`; `placeholder_names`/`substitute_placeholders` in `constraints.py`; resolved per file in `validator.py`, escaped inside `regex` constraints, rejected at load time when undefined); the bundled `TILE-PLACEHOLDERS-EXAMPLE` product shows the syntax
 - `models.py` - ValidationRule, ValidationResult, ValidationSummary dataclasses
 - `loader.py` - TOML rule file parser
 - `extractors.py` - Value extraction from GeoTIFF sections with XPath/JSONPath support
@@ -102,9 +103,9 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1774 tests total (1512 unit, 83 integration, 58 E2E, 13 benchmark smoke, 108 doctests -- 99 in `gttk/`
+1821 tests total (1551 unit, 86 integration, 59 E2E, 13 benchmark smoke, 112 doctests -- 103 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
-- `tests/unit/` - Isolated component tests including 326 validation tests
+- `tests/unit/` - Isolated component tests including 365 validation tests
 - `tests/integration/` - Component interaction tests
 - `tests/e2e/` - Full CLI workflow tests
 - `tests/benchmarks/` - The statistics and optimize benchmarks, hand-run at full size, and a smoke test that runs each at 256×256
@@ -168,7 +169,7 @@ Validation test coverage:
 - `test_validation_phase5.py` - JSONPath, extended data types
 - `test_validation_report.py` - Report generation
 - `test_validation_output.py` - Output folder, report and input-file path construction
-- `test_validation_integration.py` - End-to-end validation workflows
+- `test_validation_integration.py` - End-to-end validation workflows (in `tests/integration/`)
 
 Toolbox language coverage:
 - `test_i18n.py` - detection precedence, catalogs, `Picklist`, sidecar sync

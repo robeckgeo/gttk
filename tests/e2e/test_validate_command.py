@@ -19,6 +19,8 @@ nowhere else -- an installed copy run from a data directory failed with
 therefore runs the CLI with `cwd` set to a temporary directory.
 """
 
+import json
+import shutil
 import subprocess
 import sys
 
@@ -100,3 +102,74 @@ class TestValidateCommand:
         results = list(tmp_path.rglob('*_validation_results.json'))
         assert results, output
         assert any('A.TIF' in r.read_text(encoding='utf-8') for r in results)
+
+
+# ISO 19139 for the GEO_METADATA tag (50909), naming the tile's source record.
+TILE_RECORD = '''<?xml version="1.0" encoding="UTF-8"?>
+<gmd:MD_Metadata xmlns:gmd="http://www.isotc211.org/2005/gmd"
+                 xmlns:gco="http://www.isotc211.org/2005/gco">
+  <gmd:fileIdentifier>
+    <gco:CharacterString>SRC_N00E000_01.xml</gco:CharacterString>
+  </gmd:fileIdentifier>
+</gmd:MD_Metadata>
+'''
+
+
+def write_tile(path):
+    """A 64x64 DEM whose metadata describes tile N00E000, whatever the file is called."""
+    MockGeoTIFF(width=64, height=64, data_type=gdal.GDT_Float32).save_to_file(path)
+    ds = gdal.Open(str(path), gdal.GA_Update)
+    ds.SetMetadataItem('IDENTIFIER', 'TILE_N00E000_01_DEM')
+    ds.SetMetadataItem('TILE_ID', 'N00E000')
+    ds.SetMetadataItem('GEO_METADATA', TILE_RECORD)
+    ds.FlushCache()
+    ds = None
+
+
+@pytest.mark.e2e
+class TestFilenamePlaceholders:
+
+    def test_placeholders_resolve_per_file_in_a_directory_run(self, tmp_path):
+        """
+        Two tiles with identical metadata, one named for the geocell it describes and
+        one for another. The bundled TILE-PLACEHOLDERS-EXAMPLE rules pass the first
+        and fail the second on exactly the rules whose expected value names the file.
+        """
+        tiles = tmp_path / 'tiles'
+        tiles.mkdir()
+        write_tile(tiles / 'TILE_N00E000_01_DEM.tif')
+        shutil.copy(tiles / 'TILE_N00E000_01_DEM.tif', tiles / 'TILE_N00E001_01_DEM.tif')
+
+        code, output = run_validate(tmp_path, '-i', 'tiles', '-p', 'TILE-PLACEHOLDERS-EXAMPLE',
+                                    '--open-report', 'false', '--write-reports', 'false')
+
+        assert code == 0, output
+        results = list(tmp_path.rglob('*_validation_results.json'))
+        assert len(results) == 1, output
+        report = json.loads(results[0].read_text(encoding='utf-8'))
+        by_name = {f['name']: f for f in report['files']}
+        assert set(by_name) == {'TILE_N00E000_01_DEM.tif', 'TILE_N00E001_01_DEM.tif'}
+
+        def statuses(file_result):
+            return {(section, r['key']): r['status']
+                    for section, section_results in file_result['validation'].items()
+                    for r in section_results}
+
+        placeholder_rules = {
+            ('gdal', 'IDENTIFIER'),
+            ('gdal', 'TILE_ID'),
+            ('geo', '/gmd:MD_Metadata/gmd:fileIdentifier/gco:CharacterString'),
+        }
+        named_for_its_tile = statuses(by_name['TILE_N00E000_01_DEM.tif'])
+        assert placeholder_rules <= set(named_for_its_tile)
+        assert set(named_for_its_tile.values()) == {'PASS'}, named_for_its_tile
+
+        named_for_another = statuses(by_name['TILE_N00E001_01_DEM.tif'])
+        assert {key for key, status in named_for_another.items() if status == 'FAIL'} == placeholder_rules, named_for_another
+        assert named_for_another[('tag', '258')] == 'PASS'
+
+        # The JSON carries the value each file was held to
+        expected = {r['key']: r['expected']
+                    for r in by_name['TILE_N00E001_01_DEM.tif']['validation']['gdal']}
+        assert expected == {'IDENTIFIER': 'TILE_N00E001_01_DEM', 'TILE_ID': 'N00E001'}
+        assert report['files_passed'] == 1 and report['files_failed'] == 1

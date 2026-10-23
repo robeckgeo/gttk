@@ -47,13 +47,13 @@ open htmlcov/index.html   # macOS/Linux
 
 ### Statistics
 
-- **Total Tests**: 1,774
+- **Total Tests**: 1,821
 - **Success Rate**: 100%
 - **Test Categories**:
-  - Unit Tests: 1,512 tests (models, processors, extractors, formatters, utilities)
-  - Doctests: 108 (99 in `gttk/`, 9 in `tests/`)
-  - Integration Tests: 83 tests (metadata workflows, statistics validation)
-  - E2E Tests: 58 tests (CLI commands)
+  - Unit Tests: 1,551 tests (models, processors, extractors, formatters, utilities)
+  - Doctests: 112 (103 in `gttk/`, 9 in `tests/`)
+  - Integration Tests: 86 tests (metadata workflows, statistics validation)
+  - E2E Tests: 59 tests (CLI commands)
   - Benchmark smoke tests: 13 tests (every statistics benchmark, once at 256×256)
 
 Counts here and in the tree below are from `pytest --collect-only`; doctests
@@ -105,7 +105,7 @@ tests/
 │   ├── fake_osgeo4w.py                          # An OSGeo4W-shaped tree over the conda tools (POSIX)
 │   ├── mock_geotiff_factory.py                  # MockGeoTIFF generator
 │   └── statistics_helpers.py                    # Statistics test utilities
-├── unit/                                        # Unit tests (1,512)
+├── unit/                                        # Unit tests (1,551)
 │   ├── test_data_models.py                      # Data classes (129)
 │   ├── test_cli_help.py                         # Rendered command-line help (99)
 │   ├── test_readme_option_tables.py             # README option tables pinned to the parser (14)
@@ -116,18 +116,18 @@ tests/
 │   ├── test_srs_logic.py                        # SRS/CRS logic (58)
 │   ├── test_validation_extractors.py            # Validation value extraction (58)
 │   ├── test_toolbox_sidecars.py                 # .pyt.xml help sidecars pinned to the dialog (51)
-│   ├── test_validation_constraints.py           # All 7 constraint types (52)
+│   ├── test_validation_constraints.py           # All 7 constraint types (64)
 │   ├── test_metadata_extractor.py               # Metadata extraction (52)
 │   ├── test_xml_formatter.py                    # XML formatting (44)
-│   ├── test_validation_models.py                # Validation data models (42)
+│   ├── test_validation_models.py                # Validation data models (48)
 │   ├── test_validation_xml.py                   # XPath extraction with namespaces (38)
 │   ├── test_validation_phase5.py                # JSONPath & extended data types (36)
-│   ├── test_validation_validator.py             # ValidationEngine (35)
+│   ├── test_validation_validator.py             # ValidationEngine (46)
 │   ├── test_statistics_type_utilities.py        # Native dtype utilities (32)
 │   ├── test_import_side_effects.py              # Importing GTTK leaves the host process alone (44)
 │   ├── test_discard_lsb.py                      # DISCARD_LSB decimals-to-bits helper (30)
 │   ├── test_report_formatters.py                # Report formatting (30)
-│   ├── test_validation_loader.py                # TOML rule loading, in name order (30)
+│   ├── test_validation_loader.py                # TOML rule loading, in name order (40)
 │   ├── test_mock_factory.py                     # MockGeoTIFF factory itself (27)
 │   ├── test_preprocessor.py                     # Data preprocessing (36)
 │   ├── test_xml_safety.py                       # XML from rasters and sidecars never reads a file (25)
@@ -165,8 +165,8 @@ tests/
 │   ├── test_custom_vertical_datum_storage.py    # Vertical datum without an EPSG code (1)
 │   ├── test_compare_compression.py              # compare releases both datasets on every path (1)
 │   └── test_statistics_nodata_warnings.py       # An unreadable per-band NoData is reported (1)
-├── integration/                                 # Integration tests (83)
-│   ├── test_validation_integration.py           # End-to-end validation workflows (20)
+├── integration/                                 # Integration tests (86)
+│   ├── test_validation_integration.py           # End-to-end validation workflows (23)
 │   ├── test_installed_wheel.py                  # GTTK works from an installed wheel (6)
 │   ├── test_metadata_workflow.py                # Metadata extraction workflows (13)
 │   ├── test_statistics_phase2_accuracy.py       # Blocked path against NumPy and the fast path (12)
@@ -175,12 +175,12 @@ tests/
 │   ├── test_optimize_arc_on_linux.py            # optimize-arc's orchestration, end to end, on Linux (3)
 │   ├── test_statistics_blocked_path.py          # Block-based statistics (9)
 │   └── test_statistics_native_dtype.py          # Native dtype statistics (9)
-├── e2e/                                         # End-to-end CLI tests (58)
+├── e2e/                                         # End-to-end CLI tests (59)
 │   ├── test_read_command.py                     # `gttk read` (17)
 │   ├── test_compare_command.py                  # `gttk compare` (15)
 │   ├── test_optimize_command.py                 # `gttk optimize` (14)
 │   ├── test_test_command.py                     # `gttk test` (8)
-│   └── test_validate_command.py                 # `gttk validate`, run from outside the repo (4)
+│   └── test_validate_command.py                 # `gttk validate`, run from outside the repo (5)
 └── benchmarks/                                  # Statistics benchmarks and their smoke test (13)
     ├── benchmark_optimize.py                    # Hand-run: python -m tests.benchmarks.benchmark_optimize
     ├── benchmark_statistics.py                  # Hand-run: python -m tests.benchmarks.benchmark_statistics

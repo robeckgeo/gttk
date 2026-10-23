@@ -23,13 +23,16 @@ Organization:
 - Tests verify status and message generation
 """
 
+import logging
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional, List, Dict, Any
 
 from gttk.utils.validation.validator import ValidationEngine, validate_file
 from gttk.utils.validation.models import (
+    FilenamePattern,
     ValidationRule,
     ValidationResult,
     ValidationStatus,
@@ -927,3 +930,182 @@ class TestMessagesSayWhenAValueCouldNotBeCompared:
         from gttk.utils.validation.validator import _with_comparison_failure
         message = _with_comparison_failure('Tag 258 value 300 is outside range 0 to 255', 300, {'min': 0, 'max': 255}, 'range')
         assert 'could not be compared' not in message
+
+
+# =============================================================================
+# File-name placeholders in expected
+# =============================================================================
+
+TILE_PATTERN = FilenamePattern(r'^TILE_(?P<geocell>[NS]\d{2}[EW]\d{3})_(?P<edition>\d{2})_DEM$')
+
+TILE_GDAL = '''<GDALMetadata>
+  <Item name="IDENTIFIER">TILE_N00E000_01_DEM</Item>
+  <Item name="TILE_ID">N00E000</Item>
+</GDALMetadata>'''
+
+
+def tile_record(file_identifier):
+    """A minimal ISO 19139 record whose fileIdentifier names a source record."""
+    return f'''<?xml version="1.0" encoding="UTF-8"?>
+<gmd:MD_Metadata xmlns:gmd="http://www.isotc211.org/2005/gmd"
+                 xmlns:gco="http://www.isotc211.org/2005/gco">
+  <gmd:fileIdentifier>
+    <gco:CharacterString>{file_identifier}</gco:CharacterString>
+  </gmd:fileIdentifier>
+</gmd:MD_Metadata>
+'''
+
+
+@pytest.mark.unit
+class TestPlaceholdersInExpected:
+    """
+    A rule's expected value may name the file being validated: {stem}, {name} and the
+    named groups of the product's filename.pattern, resolved per file by the engine.
+    """
+
+    @pytest.fixture
+    def tile_extractor(self, mock_extractor):
+        mock_extractor.filepath = Path('/data/TILE_N00E000_01_DEM.tif')
+        mock_extractor.extract_gdal_metadata.return_value = MockXmlMetadata(content=TILE_GDAL)
+        mock_extractor.extract_geo_metadata.return_value = MockXmlMetadata(
+            content=tile_record('SRC_N00E000_01.xml'))
+        return mock_extractor
+
+    @pytest.fixture
+    def misnamed_extractor(self, tile_extractor):
+        """The same metadata in a file whose stem the pattern does not match."""
+        tile_extractor.filepath = Path('/data/TILE_bad.tif')
+        return tile_extractor
+
+    @staticmethod
+    def gdal_rule(name, expected, constraint='exact', pattern=TILE_PATTERN, **kwargs):
+        return ValidationRule(
+            product='TILE', section='gdal', key=name, key_type='name',
+            description=f'{name} from the file name', data_type='string',
+            constraint=constraint, expected=expected, filename_pattern=pattern, **kwargs
+        )
+
+    @staticmethod
+    def geo_rule(expected, pattern=TILE_PATTERN):
+        return ValidationRule(
+            product='TILE', section='geo',
+            key='/gmd:MD_Metadata/gmd:fileIdentifier/gco:CharacterString', key_type='xpath',
+            description='The embedded record names the tile', data_type='string',
+            constraint='regex', expected=expected, filename_pattern=pattern
+        )
+
+    def test_stem_resolves_without_a_filename_pattern(self, tile_extractor):
+        rule = self.gdal_rule('IDENTIFIER', '{stem}', pattern=None)
+        result = ValidationEngine(tile_extractor).validate_rule(rule)
+        assert result.passed, result.message
+        assert result.rule.expected == 'TILE_N00E000_01_DEM'
+        assert result.message == 'Name IDENTIFIER value matches expected value: TILE_N00E000_01_DEM (from filename)'
+
+    def test_named_group_resolves_for_exact(self, tile_extractor):
+        result = ValidationEngine(tile_extractor).validate_rule(self.gdal_rule('TILE_ID', '{geocell}'))
+        assert result.passed, result.message
+        assert result.rule.expected == 'N00E000'
+        assert result.value == 'N00E000'
+        assert result.message.endswith(' (from filename)')
+
+    def test_named_group_is_escaped_inside_regex(self, tile_extractor):
+        rule = self.geo_rule(r'^SRC_{geocell}_\d{2}(\.xml)?$')
+        result = ValidationEngine(tile_extractor).validate_rule(rule)
+        assert result.passed, result.message
+        assert result.rule.expected == r'^SRC_N00E000_\d{2}(\.xml)?$'
+        assert result.message.endswith(' (from filename)')
+
+        tile_extractor.extract_geo_metadata.return_value = MockXmlMetadata(
+            content=tile_record('SRC_N00E001_01.xml'))
+        result = ValidationEngine(tile_extractor).validate_rule(rule)
+        assert result.failed
+        assert "value 'SRC_N00E001_01.xml' does not match pattern '^SRC_N00E000_\\d{2}(\\.xml)?$'" in result.message
+        assert result.message.endswith(' (from filename)')
+
+    def test_shared_rule_is_not_mutated(self, tile_extractor):
+        rule = self.gdal_rule('TILE_ID', '{geocell}')
+        result = ValidationEngine(tile_extractor).validate_rule(rule)
+        assert rule.expected == '{geocell}'
+        assert result.rule is not rule
+        assert result.rule.expected == 'N00E000'
+        assert result.rule.filename_pattern is rule.filename_pattern
+
+    def test_plain_rule_keeps_the_same_rule_object_and_message(self, tile_extractor, exact_rule):
+        engine = ValidationEngine(tile_extractor)
+        result = engine.validate_rule(exact_rule)
+        assert result.rule is exact_rule
+        assert result.message == 'Tag 258 value matches expected value: 32'
+
+        literal = self.gdal_rule('TILE_ID', 'N00E000')   # the pattern is attached, but nothing uses it
+        result = engine.validate_rule(literal)
+        assert result.rule is literal
+        assert result.message == 'Name TILE_ID value matches expected value: N00E000'
+
+    def test_filename_mismatch_fails_every_placeholder_rule_and_names_the_pattern(self, misnamed_extractor):
+        engine = ValidationEngine(misnamed_extractor)
+        rules = [
+            self.gdal_rule('TILE_ID', '{geocell}'),
+            self.gdal_rule('IDENTIFIER', '{stem}'),            # built-in, but the product's pattern governs
+            self.geo_rule(r'^SRC_{geocell}_\d{2}(\.xml)?$'),
+        ]
+        for rule in rules:
+            result = engine.validate_rule(rule)
+            assert result.failed, result.message
+            assert result.rule is rule
+            assert result.value is not None   # the metadata was read; the name is what is wrong
+            assert result.message.startswith(
+                f"Filename 'TILE_bad.tif' does not match filename.pattern '{TILE_PATTERN.pattern}'; cannot resolve ")
+            assert 'from filename' not in result.message
+        assert engine.validate_rule(rules[0]).message.endswith("cannot resolve {geocell} in expected '{geocell}'")
+        assert engine.validate_rule(rules[1]).message.endswith("cannot resolve {stem} in expected '{stem}'")
+
+    def test_filename_mismatch_leaves_plain_rules_alone(self, misnamed_extractor, exact_rule):
+        engine = ValidationEngine(misnamed_extractor)
+        literal = self.gdal_rule('TILE_ID', 'N00E000')
+        for rule in (exact_rule, literal):
+            result = engine.validate_rule(rule)
+            assert result.passed, result.message
+            assert result.rule is rule
+            assert 'filename' not in result.message
+
+    def test_filename_mismatch_fails_an_optional_rule_with_a_missing_value(self, misnamed_extractor):
+        rule = self.gdal_rule('NOT_THERE', '{geocell}', optional=True)
+        result = ValidationEngine(misnamed_extractor).validate_rule(rule)
+        assert result.failed
+        assert result.value is None
+        assert 'cannot resolve {geocell}' in result.message
+
+    def test_mismatch_is_logged_once_per_file(self, misnamed_extractor, caplog):
+        engine = ValidationEngine(misnamed_extractor)
+        with caplog.at_level(logging.WARNING):
+            engine.validate_rule(self.gdal_rule('TILE_ID', '{geocell}'))
+            # An equal pattern parsed separately is the same key in the engine's cache
+            engine.validate_rule(self.gdal_rule('IDENTIFIER', '{stem}', pattern=FilenamePattern(TILE_PATTERN.pattern)))
+            engine.validate_rule(self.geo_rule(r'^SRC_{geocell}_\d{2}$'))
+        warnings = [r for r in caplog.records
+                    if r.levelno == logging.WARNING and r.name == 'gttk.utils.validation.validator']
+        assert [r.getMessage() for r in warnings] == [
+            f"TILE_bad.tif does not match filename.pattern '{TILE_PATTERN.pattern}'"]
+
+    def test_enum_with_placeholders(self, tile_extractor):
+        rule = self.gdal_rule('TILE_ID', ['{geocell}', 'GLOBAL'], constraint='enum')
+        result = ValidationEngine(tile_extractor).validate_rule(rule)
+        assert result.passed, result.message
+        assert result.rule.expected == ['N00E000', 'GLOBAL']
+        assert rule.expected == ['{geocell}', 'GLOBAL']
+        assert result.message == 'Name TILE_ID value N00E000 is in allowed list (from filename)'
+
+    def test_two_engines_resolve_the_same_rule_against_their_own_files(self, tile_extractor):
+        rule = self.gdal_rule('TILE_ID', '{geocell}')
+        first = ValidationEngine(tile_extractor).validate_rule(rule)
+
+        other = Mock()
+        other.filepath = Path('/data/TILE_S10W020_02_DEM.tif')
+        other.extract_gdal_metadata.return_value = MockXmlMetadata(
+            content='<GDALMetadata>\n  <Item name="TILE_ID">S10W020</Item>\n</GDALMetadata>')
+        second = ValidationEngine(other).validate_rule(rule)
+
+        assert first.passed and second.passed, (first.message, second.message)
+        assert first.rule.expected == 'N00E000'
+        assert second.rule.expected == 'S10W020'
+        assert rule.expected == '{geocell}'

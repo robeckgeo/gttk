@@ -16,6 +16,7 @@ including conflict detection for duplicate product names across files.
 
 Functions:
     load_validation_rules: Load rules for a specific product from TOML files
+    parse_filename_pattern: Parse a product's [P.filename] table
     parse_rule: Parse a rule dictionary from TOML into ValidationRule object
     get_available_products: List all available products in rules directory
 """
@@ -24,9 +25,10 @@ import logging
 import tomllib
 from importlib import resources
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from gttk.utils.validation.models import ValidationRule
+from gttk.utils.validation.constraints import placeholder_names
+from gttk.utils.validation.models import BUILTIN_PLACEHOLDERS, FilenamePattern, ValidationRule
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +73,9 @@ def load_validation_rules(
 
     Scans the rules directory for all .toml files, detects conflicts
     (same product defined in multiple files), and returns the rules
-    for the requested product.
+    for the requested product. A product's ``[P.filename]`` table, when it
+    has one, is parsed once and attached to every rule as its
+    ``filename_pattern``.
 
     Args:
         rules_dir: Directory containing TOML validation rule files
@@ -145,6 +149,11 @@ def load_validation_rules(
     product_data = all_products[product]
     rules_by_section: Dict[str, List[ValidationRule]] = {}
 
+    # The filename table is product-level, not a section: it is read here, once,
+    # and handed to every rule. Only the known section names are iterated below,
+    # so it is never mistaken for a section of rules.
+    filename_pattern = parse_filename_pattern(product, product_data.get('filename'))
+
     for section_name in VALID_SECTIONS:
         if section_name not in product_data:
             continue
@@ -157,7 +166,7 @@ def load_validation_rules(
         section_rules = []
         for rule_dict in product_data[section_name]:
             try:
-                rule = parse_rule(product, section_name, rule_dict)
+                rule = parse_rule(product, section_name, rule_dict, filename_pattern)
                 section_rules.append(rule)
             except (KeyError, ValueError) as e:
                 logger.error(
@@ -182,24 +191,69 @@ def load_validation_rules(
     return rules_by_section, product_sources[product]
 
 
-def parse_rule(product: str, section: str, rule_dict: dict) -> ValidationRule:
+def parse_filename_pattern(product: str, table: Any) -> Optional[FilenamePattern]:
+    """
+    Parse a product's ``[P.filename]`` table into a FilenamePattern.
+
+    Args:
+        product: Product name, for the messages
+        table: The table as TOML parsed it, or None when the product has none
+
+    Returns:
+        FilenamePattern, or None when there is no table
+
+    Raises:
+        ValueError: If the table is an array of tables, lacks a string
+            'pattern', or its pattern is not a valid regular expression
+
+    Example:
+        >>> parse_filename_pattern('TILE', None) is None
+        True
+        >>> parse_filename_pattern('TILE', {'pattern': r'^TILE_(?P<geocell>[NS]\\d{2}[EW]\\d{3})'}).groups
+        ['geocell']
+        >>> parse_filename_pattern('TILE', [{'pattern': '^TILE_'}])
+        Traceback (most recent call last):
+        ...
+        ValueError: [TILE.filename] must be a table, not an array of tables
+    """
+    if table is None:
+        return None
+    if isinstance(table, list):
+        raise ValueError(f"[{product}.filename] must be a table, not an array of tables")
+    if not isinstance(table, dict) or not isinstance(table.get('pattern'), str):
+        raise ValueError(f"[{product}.filename] requires a string 'pattern'")
+    try:
+        return FilenamePattern(table['pattern'])
+    except ValueError as e:
+        raise ValueError(f"Invalid [{product}.filename]: {e}")
+
+
+def parse_rule(
+    product: str,
+    section: str,
+    rule_dict: dict,
+    filename_pattern: Optional[FilenamePattern] = None
+) -> ValidationRule:
     """
     Parse a rule dictionary from TOML into ValidationRule object.
 
     Converts section-specific key fields (tag, geokey, name, xpath, jsonpath)
-    to the generic 'key' field in the ValidationRule model.
+    to the generic 'key' field in the ValidationRule model, and rejects an
+    ``expected`` that uses a placeholder the file name cannot supply.
 
     Args:
         product: Product name
         section: Section type (e.g., 'tag', 'geokey', 'gdal')
         rule_dict: Raw dictionary from TOML
+        filename_pattern: The product's [P.filename] pattern, if it has one
 
     Returns:
         ValidationRule object
 
     Raises:
         KeyError: If required field is missing from rule_dict
-        ValueError: If rule validation fails
+        ValueError: If rule validation fails, or expected names a placeholder
+            that is neither built in nor a named group of filename_pattern
 
     Example:
         >>> rule_dict = {
@@ -231,8 +285,8 @@ def parse_rule(product: str, section: str, rule_dict: dict) -> ValidationRule:
         if field_name not in rule_dict:
             raise KeyError(f"Missing required field '{field_name}'")
 
-    # Build and return the ValidationRule
-    return ValidationRule(
+    # Build the ValidationRule
+    rule = ValidationRule(
         product=product,
         section=section,
         key=key_value,
@@ -242,8 +296,24 @@ def parse_rule(product: str, section: str, rule_dict: dict) -> ValidationRule:
         constraint=rule_dict['constraint'],
         expected=rule_dict.get('expected'),
         optional=rule_dict.get('optional', False),
-        comment=rule_dict.get('comment')
+        comment=rule_dict.get('comment'),
+        filename_pattern=filename_pattern,
     )
+
+    # A placeholder the file name cannot supply is a mistake in the rule file,
+    # caught here rather than as a failure on every file validated.
+    available = list(BUILTIN_PLACEHOLDERS) + (filename_pattern.groups if filename_pattern else [])
+    for name in placeholder_names(rule.expected):
+        if name not in available:
+            message = (
+                f"expected {rule.expected!r} uses placeholder {{{name}}}; "
+                f"available: {', '.join('{' + n + '}' for n in available)}"
+            )
+            if filename_pattern is None:
+                message += f" (add [{product}.filename] pattern with named groups for more)"
+            raise ValueError(message)
+
+    return rule
 
 
 def get_available_products(rules_dir: Path) -> Dict[str, str]:

@@ -520,6 +520,12 @@ The Validate Metadata tool enables automated validation of GeoTIFF files against
 
 Rules are defined in TOML format and organized by data product (e.g., 3DEP, NAIP, GLO-30). See [`gttk/utils/validation/README.md`](gttk/utils/validation/README.md) for comprehensive documentation on creating validation rules.
 
+A rule can compare a value with the file's own name: `{stem}` and `{name}` are always
+available in `expected`, and a product's `[PRODUCT.filename]` `pattern` (a regular expression
+matched against the file stem) adds its named groups, so a tile's identifier or the record it
+embeds can be held to the geocell in its filename. The bundled `TILE-PLACEHOLDERS-EXAMPLE`
+product shows the syntax.
+
 #### Command-Line Arguments
 
 | Argument | Short | Type | Required | Default | Description |

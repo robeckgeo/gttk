@@ -36,7 +36,7 @@ from gttk.utils.validation.loader import (
     KEY_FIELD_MAP,
     bundled_rules_dir,
 )
-from gttk.utils.validation.models import ValidationRule
+from gttk.utils.validation.models import FilenamePattern, ValidationRule
 
 
 # =============================================================================
@@ -569,3 +569,175 @@ class TestInvalidRuleFilesAreNamedWhenSkipped:
         for name in ('m.toml', 'a.toml', 'z.toml', 'k.toml'):
             (tmp_path / name).write_text(f'[{name[0].upper()}]\ntitle = "{name}"\n', encoding='utf-8')
         assert list(get_available_products(tmp_path).values()) == ['a.toml', 'k.toml', 'm.toml', 'z.toml']
+
+
+# =============================================================================
+# [P.filename] Tests
+# =============================================================================
+
+@pytest.mark.unit
+class TestFilenameTable:
+    """[P.filename] is a product-level table whose named groups become placeholders."""
+
+    HEADER = '''
+[TILE]
+title = "Tiled DEM with file-name placeholders"
+'''
+    FILENAME = r'''
+[TILE.filename]
+pattern = "^TILE_(?P<geocell>[NS]\\d{2}[EW]\\d{3})_(?P<edition>\\d{2})_DEM$"
+'''
+    PLAIN_RULE = '''
+[[TILE.tag]]
+tag = 258
+description = "BitsPerSample"
+data_type = "integer"
+constraint = "exact"
+expected = 32
+'''
+    PLACEHOLDER_RULES = '''
+[[TILE.gdal]]
+name = "IDENTIFIER"
+description = "Identifier is the file stem"
+data_type = "string"
+constraint = "exact"
+expected = "{stem}"
+
+[[TILE.gdal]]
+name = "TILE_ID"
+description = "Tile id is the geocell from the file name"
+data_type = "string"
+constraint = "exact"
+expected = "{geocell}"
+'''
+
+    @staticmethod
+    def write(rules_dir, body):
+        (rules_dir / 'tile_rules.toml').write_text(body, encoding='utf-8')
+        return rules_dir
+
+    def test_filename_table_is_attached_to_every_rule(self, temp_rules_dir):
+        self.write(temp_rules_dir, self.HEADER + self.FILENAME + self.PLAIN_RULE + self.PLACEHOLDER_RULES)
+        rules, _ = load_validation_rules(temp_rules_dir, 'TILE')
+        every = [rule for section_rules in rules.values() for rule in section_rules]
+        assert len(every) == 3
+        pattern = every[0].filename_pattern
+        assert isinstance(pattern, FilenamePattern)
+        assert pattern.groups == ['geocell', 'edition']
+        assert all(rule.filename_pattern is pattern for rule in every)
+        assert rules['gdal'][1].expected == '{geocell}'   # resolved per file by the engine, not here
+
+    def test_product_without_filename_table_leaves_rules_unchanged(self, create_test_rules):
+        rules, _ = load_validation_rules(create_test_rules, 'TestProduct')
+        every = [rule for section_rules in rules.values() for rule in section_rules]
+        assert len(every) == 4
+        assert all(rule.filename_pattern is None for rule in every)
+
+    def test_filename_as_array_of_tables_is_rejected(self, temp_rules_dir):
+        self.write(temp_rules_dir, self.HEADER + '\n[[TILE.filename]]\npattern = "^TILE_.*$"\n' + self.PLAIN_RULE)
+        with pytest.raises(ValueError) as excinfo:
+            load_validation_rules(temp_rules_dir, 'TILE')
+        assert str(excinfo.value) == '[TILE.filename] must be a table, not an array of tables'
+
+    def test_filename_table_without_pattern_is_rejected(self, temp_rules_dir):
+        self.write(temp_rules_dir, self.HEADER + '\n[TILE.filename]\nregex = "^TILE_.*$"\n' + self.PLAIN_RULE)
+        with pytest.raises(ValueError) as excinfo:
+            load_validation_rules(temp_rules_dir, 'TILE')
+        assert str(excinfo.value) == "[TILE.filename] requires a string 'pattern'"
+
+    def test_invalid_filename_regex_is_rejected_at_load(self, temp_rules_dir):
+        self.write(temp_rules_dir, self.HEADER + '\n[TILE.filename]\npattern = "^TILE_(?P<geocell>[NS]"\n' + self.PLAIN_RULE)
+        with pytest.raises(ValueError) as excinfo:
+            load_validation_rules(temp_rules_dir, 'TILE')
+        assert str(excinfo.value).startswith('Invalid [TILE.filename]:')
+        assert '^TILE_(?P<geocell>[NS]' in str(excinfo.value)
+
+    def test_placeholder_not_defined_by_pattern_is_rejected_at_load(self, temp_rules_dir):
+        rule = '''
+[[TILE.gdal]]
+name = "TILE_ID"
+description = "Tile id"
+data_type = "string"
+constraint = "exact"
+expected = "{tile}"
+'''
+        self.write(temp_rules_dir, self.HEADER + self.FILENAME + rule)
+        with pytest.raises(ValueError) as excinfo:
+            load_validation_rules(temp_rules_dir, 'TILE')
+        message = str(excinfo.value)
+        assert 'Invalid rule in [TILE.gdal]' in message
+        assert "expected '{tile}' uses placeholder {tile}" in message
+        assert 'available: {stem}, {name}, {geocell}, {edition}' in message
+        assert 'add [TILE.filename]' not in message   # there is a table; it just lacks the group
+
+    def test_stem_and_name_need_no_filename_table(self, temp_rules_dir):
+        rules = '''
+[[TILE.gdal]]
+name = "IDENTIFIER"
+description = "Identifier is the file stem"
+data_type = "string"
+constraint = "exact"
+expected = "{stem}"
+
+[[TILE.tag]]
+tag = 269
+description = "DocumentName is the file name"
+data_type = "string"
+constraint = "regex"
+expected = "^{name}$"
+
+[[TILE.gdal]]
+name = "SOURCE"
+description = "Source is one of the file's names"
+data_type = "string"
+constraint = "enum"
+expected = ["{stem}", "{name}"]
+'''
+        self.write(temp_rules_dir, self.HEADER + rules)
+        loaded, _ = load_validation_rules(temp_rules_dir, 'TILE')
+        assert [rule.expected for rule in loaded['gdal']] == ['{stem}', ['{stem}', '{name}']]
+        assert loaded['tag'][0].expected == '^{name}$'
+        assert all(rule.filename_pattern is None for section in loaded.values() for rule in section)
+
+    def test_unknown_placeholder_without_table_names_the_fix(self, temp_rules_dir):
+        rule = '''
+[[TILE.gdal]]
+name = "TILE_ID"
+description = "Tile id"
+data_type = "string"
+constraint = "exact"
+expected = "{geocell}"
+'''
+        self.write(temp_rules_dir, self.HEADER + rule)
+        with pytest.raises(ValueError) as excinfo:
+            load_validation_rules(temp_rules_dir, 'TILE')
+        message = str(excinfo.value)
+        assert 'Invalid rule in [TILE.gdal]' in message
+        assert 'available: {stem}, {name} (add [TILE.filename] pattern with named groups for more)' in message
+
+    def test_regex_quantifier_is_not_a_placeholder(self, temp_rules_dir):
+        rule = r'''
+[[TILE.tag]]
+tag = 306
+description = "DateTime"
+data_type = "string"
+constraint = "regex"
+expected = "^\\d{2}$"
+
+[[TILE.gdal]]
+name = "VERSION"
+description = "A literal brace, escaped"
+data_type = "string"
+constraint = "regex"
+expected = "^v\\{year\\}$"
+'''
+        self.write(temp_rules_dir, self.HEADER + rule)
+        loaded, _ = load_validation_rules(temp_rules_dir, 'TILE')
+        assert loaded['tag'][0].expected == r'^\d{2}$'
+        assert loaded['gdal'][0].expected == r'^v\{year\}$'
+
+    def test_section_filter_still_attaches_the_pattern(self, temp_rules_dir):
+        self.write(temp_rules_dir, self.HEADER + self.FILENAME + self.PLAIN_RULE + self.PLACEHOLDER_RULES)
+        loaded, _ = load_validation_rules(temp_rules_dir, 'TILE', sections=['gdal'])
+        assert list(loaded) == ['gdal']
+        assert [rule.filename_pattern.groups for rule in loaded['gdal']] == [['geocell', 'edition']] * 2

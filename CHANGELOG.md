@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **Filename placeholders in validation rules**: `{stem}`, `{name}` and the named groups of a
+  product's `[PRODUCT.filename]` `pattern` resolve per file in `expected` (escaped inside `regex`
+  constraints, raw in `exact` and `enum`); an undefined placeholder is rejected when the rules
+  load, and a file whose stem does not match the pattern fails every rule that uses one. The
+  bundled `TILE-PLACEHOLDERS-EXAMPLE` product shows the syntax
+
 ## [0.12.0] - 2026-09-03
 
 ### Added

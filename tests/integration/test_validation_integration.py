@@ -23,6 +23,7 @@ Test coverage:
 """
 
 import pytest
+import shutil
 import tempfile
 from pathlib import Path
 from osgeo import gdal
@@ -34,6 +35,7 @@ from gttk.utils.validation import (
     ValidationRule,
     ValidationResult,
     ValidationStatus,
+    load_validation_rules,
     validate_file,
 )
 
@@ -620,3 +622,129 @@ class TestDEMValidation:
             result = engine.validate_rule(rule)
 
         assert result.passed is True
+
+
+# =============================================================================
+# File-name placeholders, against a real file and a real rules file
+# =============================================================================
+
+TILE_RULES = r'''
+[TILE-PLACEHOLDERS-TEST]
+title = "Tiled DEM with file-name placeholders"
+author = "GeoTIFF ToolKit tests"
+updated = "2026-10-21"
+
+[TILE-PLACEHOLDERS-TEST.filename]
+pattern = "^TILE_(?P<geocell>[NS]\\d{2}[EW]\\d{3})_(?P<edition>\\d{2})_DEM$"
+
+[[TILE-PLACEHOLDERS-TEST.tag]]
+tag = 258
+description = "BitsPerSample"
+data_type = "integer"
+constraint = "exact"
+expected = 32
+
+[[TILE-PLACEHOLDERS-TEST.gdal]]
+name = "IDENTIFIER"
+description = "Identifier is the file stem"
+data_type = "string"
+constraint = "exact"
+expected = "{stem}"
+
+[[TILE-PLACEHOLDERS-TEST.gdal]]
+name = "TILE_ID"
+description = "Tile id is the geocell from the file name"
+data_type = "string"
+constraint = "exact"
+expected = "{geocell}"
+
+[[TILE-PLACEHOLDERS-TEST.geo]]
+xpath = "/gmd:MD_Metadata/gmd:fileIdentifier/gco:CharacterString"
+description = "The embedded record names the tile"
+data_type = "string"
+constraint = "regex"
+expected = "^SRC_{geocell}_\\d{2}(\\.xml)?$"
+'''
+
+# ISO 19139 in the GEO_METADATA tag (50909), naming the tile's source record.
+TILE_RECORD = '''<?xml version="1.0" encoding="UTF-8"?>
+<gmd:MD_Metadata xmlns:gmd="http://www.isotc211.org/2005/gmd"
+                 xmlns:gco="http://www.isotc211.org/2005/gco">
+  <gmd:fileIdentifier>
+    <gco:CharacterString>SRC_N00E000_01.xml</gco:CharacterString>
+  </gmd:fileIdentifier>
+</gmd:MD_Metadata>
+'''
+
+
+@pytest.fixture
+def tile_geotiff(temp_dir):
+    """TILE_N00E000_01_DEM.tif: a DEM whose metadata names its own tile."""
+    filepath = temp_dir / 'TILE_N00E000_01_DEM.tif'
+    MockGeoTIFF(width=64, height=64, bands=1, data_type=gdal.GDT_Float32, crs='EPSG:4326').save_to_file(filepath)
+
+    ds = gdal.Open(str(filepath), gdal.GA_Update)
+    ds.SetMetadataItem('IDENTIFIER', 'TILE_N00E000_01_DEM')
+    ds.SetMetadataItem('TILE_ID', 'N00E000')
+    # GDAL stores the GEO_METADATA item in tag 50909, the tag the geo section reads.
+    ds.SetMetadataItem('GEO_METADATA', TILE_RECORD)
+    ds.FlushCache()
+    ds = None
+    return filepath
+
+
+@pytest.fixture
+def tile_rules_dir(temp_dir):
+    """A rules directory holding only TILE-PLACEHOLDERS-TEST."""
+    rules_dir = temp_dir / 'rules'
+    rules_dir.mkdir()
+    (rules_dir / 'tile_rules.toml').write_text(TILE_RULES, encoding='utf-8')
+    return rules_dir
+
+
+@pytest.mark.integration
+class TestFilenamePlaceholdersWithRealFiles:
+    """The rules file, the loader, the extractor and the engine, end to end."""
+
+    def test_rules_loaded_from_toml_resolve_against_the_file(self, tile_geotiff, tile_rules_dir):
+        rules, _ = load_validation_rules(tile_rules_dir, 'TILE-PLACEHOLDERS-TEST')
+        with MetadataExtractor(str(tile_geotiff)) as extractor:
+            results, total, passed, failed, skipped = validate_file(extractor, rules)
+
+        messages = [r.message for section in results.values() for r in section]
+        assert (total, passed, failed, skipped) == (4, 4, 0, 0), messages
+        assert results['gdal'][0].rule.expected == 'TILE_N00E000_01_DEM'
+        assert results['gdal'][1].rule.expected == 'N00E000'
+        assert results['geo'][0].rule.expected == r'^SRC_N00E000_\d{2}(\.xml)?$'
+        assert [m.endswith(' (from filename)') for m in messages] == [False, True, True, True]
+        # The loaded rules still read as written, ready for the next file
+        assert rules['gdal'][1].expected == '{geocell}'
+
+    def test_a_tile_named_outside_the_pattern_fails_only_the_placeholder_rules(self, tile_geotiff, tile_rules_dir):
+        misnamed = tile_geotiff.with_name('TILE_bad.tif')
+        shutil.copy(tile_geotiff, misnamed)
+        rules, _ = load_validation_rules(tile_rules_dir, 'TILE-PLACEHOLDERS-TEST')
+        with MetadataExtractor(str(misnamed)) as extractor:
+            results, total, passed, failed, skipped = validate_file(extractor, rules)
+
+        assert (total, passed, failed, skipped) == (4, 1, 3, 0)
+        assert results['tag'][0].passed
+        for result in results['gdal'] + results['geo']:
+            assert result.failed
+            assert result.value is not None
+            assert "Filename 'TILE_bad.tif' does not match filename.pattern" in result.message
+
+    def test_validate_single_file_json_reports_the_resolved_expected(self, tile_geotiff, tile_rules_dir):
+        from gttk.tools.validate_metadata import validate_single_file
+
+        rules, rules_file = load_validation_rules(tile_rules_dir, 'TILE-PLACEHOLDERS-TEST')
+        report = validate_single_file(tile_geotiff, rules, 'TILE-PLACEHOLDERS-TEST', rules_file)
+
+        assert (report['total_rules'], report['passed'], report['failed']) == (4, 4, 0)
+        identifier = report['validation']['gdal'][0]
+        assert identifier['key'] == 'IDENTIFIER'
+        assert identifier['expected'] == 'TILE_N00E000_01_DEM'
+        assert identifier['actual'] == 'TILE_N00E000_01_DEM'
+        assert identifier['status'] == 'PASS'
+        assert 'from filename' in identifier['message']
+        assert report['validation']['geo'][0]['expected'] == r'^SRC_N00E000_\d{2}(\.xml)?$'

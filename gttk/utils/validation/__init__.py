@@ -25,6 +25,7 @@ from gttk.utils.validation.models import (
     ValidationStatus,
     ConstraintType,
     SectionType,
+    FilenamePattern,
     ValidationRule,
     ValidationResult,
     ValidationSummary,
@@ -46,6 +47,8 @@ from gttk.utils.validation.constraints import (
     validate_exists,
     validate_forbidden,
     apply_constraint,
+    placeholder_names,
+    substitute_placeholders,
 )
 from gttk.utils.validation.output import generate_output_paths, generate_report_path, get_input_files
 from gttk.utils.validation.extractors import ValueExtractor
@@ -59,6 +62,7 @@ __all__ = [
     'ConstraintType',
     'SectionType',
     # Models
+    'FilenamePattern',
     'ValidationRule',
     'ValidationResult',
     'ValidationSummary',
@@ -82,6 +86,8 @@ __all__ = [
     'validate_exists',
     'validate_forbidden',
     'apply_constraint',
+    'placeholder_names',
+    'substitute_placeholders',
     # Output
     'generate_output_paths',
     'generate_report_path',

@@ -33,6 +33,8 @@ from gttk.utils.validation.constraints import (
     validate_exists,
     validate_forbidden,
     apply_constraint,
+    placeholder_names,
+    substitute_placeholders,
 )
 
 
@@ -416,3 +418,75 @@ class TestAComparisonThatCannotBeMadeSaysSo:
     def test_lists_are_judged_element_by_element(self):
         from gttk.utils.validation.constraints import is_numeric
         assert is_numeric([8, 8, 8]) and not is_numeric([8, 'x']) and not is_numeric([]) and not is_numeric(True)
+
+
+# =============================================================================
+# File-name placeholder Tests
+# =============================================================================
+
+@pytest.mark.unit
+class TestPlaceholderNames:
+    """placeholder_names() finds the {identifier} placeholders an expected value uses."""
+
+    def test_identifier_braces_only(self):
+        assert placeholder_names('{stem}') == ['stem']
+        assert placeholder_names('TILE_{geocell}_{edition}') == ['geocell', 'edition']
+        assert placeholder_names('{_private}{a1}') == ['_private', 'a1']
+
+    def test_quantifiers_and_escaped_braces_are_not_placeholders(self):
+        assert placeholder_names(r'^\d{2}$') == []
+        assert placeholder_names(r'^a{1,3}$') == []
+        assert placeholder_names(r'^(ab){2}$') == []
+        assert placeholder_names(r'\{year\}') == []
+        assert placeholder_names(r'\{year\}_{geocell}_\d{2}') == ['geocell']
+        assert placeholder_names('{1st}') == []   # not identifier-shaped
+
+    def test_names_are_ordered_and_unique(self):
+        assert placeholder_names('{name}_{stem}_{name}_{geocell}_{stem}') == ['name', 'stem', 'geocell']
+
+    def test_non_string_expected_has_none(self):
+        assert placeholder_names(32) == []
+        assert placeholder_names(None) == []
+        assert placeholder_names({'min': 0, 'max': 1}) == []
+        assert placeholder_names([{'min': 0, 'max': 1}]) == []
+
+    def test_list_expected_is_scanned_elementwise(self):
+        assert placeholder_names(['{stem}', 'FIXED', 8, '{geocell}_{stem}']) == ['stem', 'geocell']
+
+
+@pytest.mark.unit
+class TestSubstitutePlaceholders:
+    """substitute_placeholders() fills them from the file name, escaped inside a regex."""
+
+    def test_exact_inserts_raw(self):
+        assert substitute_placeholders('{name}', {'name': 'A.tif'}, 'exact') == 'A.tif'
+        assert substitute_placeholders('{stem}_v{edition}', {'stem': 'A.B', 'edition': '01'}, 'exact') == 'A.B_v01'
+
+    def test_regex_inserts_escaped(self):
+        pattern = substitute_placeholders('^{name}$', {'name': 'A.tif'}, 'regex')
+        assert pattern == r'^A\.tif$'
+        assert validate_regex('A.tif', pattern) is True
+        assert validate_regex('AXtif', pattern) is False
+
+    def test_regex_quantifier_survives_substitution(self):
+        resolved = substitute_placeholders(r'^SRC_{geocell}_\d{2}$', {'geocell': 'N00E000'}, 'regex')
+        assert resolved == r'^SRC_N00E000_\d{2}$'
+        assert validate_regex('SRC_N00E000_01', resolved) is True
+        assert validate_regex('SRC_N00E000_1', resolved) is False
+
+    def test_enum_list_is_substituted_elementwise_raw(self):
+        expected = ['{stem}', '{stem}.tif', 'FIXED', 8]
+        assert substitute_placeholders(expected, {'stem': 'A.B'}, 'enum') == ['A.B', 'A.B.tif', 'FIXED', 8]
+        assert expected == ['{stem}', '{stem}.tif', 'FIXED', 8]   # the rule's own list is untouched
+
+    def test_unknown_name_is_left_as_written(self):
+        assert substitute_placeholders('{stem}_{geocell}', {'stem': 'A'}, 'exact') == 'A_{geocell}'
+
+    def test_non_string_expected_is_returned_unchanged(self):
+        expected = {'min': 0, 'max': 255}
+        assert substitute_placeholders(expected, {'stem': 'A'}, 'range') is expected
+        assert substitute_placeholders(32, {'stem': 'A'}, 'exact') == 32
+        assert substitute_placeholders(None, {'stem': 'A'}, 'exists') is None
+
+    def test_inserted_value_is_not_rescanned(self):
+        assert substitute_placeholders('{stem}', {'stem': '{name}', 'name': 'X'}, 'exact') == '{name}'

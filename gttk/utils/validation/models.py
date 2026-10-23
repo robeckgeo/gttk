@@ -19,12 +19,14 @@ Classes:
     ValidationStatus: Enum for validation result status (PASS, FAIL, SKIP)
     ConstraintType: Enum for supported constraint types
     SectionType: Enum for metadata section types
+    FilenamePattern: A product's [P.filename] pattern and the placeholders it defines
     ValidationRule: Represents a single validation rule from TOML
     ValidationResult: Represents the result of validating a single rule
     ValidationSummary: Summary statistics for a validation report
     ValidationTableData: Presentation data for validation results table
 """
 
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -60,6 +62,67 @@ class SectionType(Enum):
     PROJJSON = 'projjson'
 
 
+#: Placeholders a rule's ``expected`` may always use, with or without a
+#: ``[P.filename]`` table: the file stem and the file name.
+BUILTIN_PLACEHOLDERS = ('stem', 'name')
+
+
+@dataclass(frozen=True)
+class FilenamePattern:
+    """
+    A product's ``[P.filename]`` table: the regex the stem of each of its files must match.
+
+    The pattern's named groups become placeholders that a rule's ``expected`` may
+    use alongside the built-in ``{stem}`` and ``{name}``. The pattern is matched
+    against the file stem (the name without its extension), from the start.
+
+    Attributes:
+        pattern: The regular expression, as written in the TOML table
+        regex: The compiled pattern (derived; takes no part in equality or repr)
+
+    Example:
+        >>> fp = FilenamePattern(r'^TILE_(?P<geocell>[NS]\\d{2}[EW]\\d{3})_(?P<edition>\\d{2})_DEM$')
+        >>> fp.groups
+        ['geocell', 'edition']
+        >>> fp.values_for(Path('TILE_N00E000_01_DEM.tif'))
+        {'geocell': 'N00E000', 'edition': '01'}
+        >>> fp.values_for(Path('TILE_bad.tif')) is None
+        True
+    """
+    pattern: str
+    regex: re.Pattern = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self):
+        """Compile the pattern; refuse one that is invalid or shadows a built-in placeholder."""
+        try:
+            compiled = re.compile(self.pattern)
+        except re.error as e:
+            raise ValueError(f"Invalid filename pattern '{self.pattern}': {e}")
+        shadowed = [name for name in BUILTIN_PLACEHOLDERS if name in compiled.groupindex]
+        if shadowed:
+            raise ValueError(
+                f"Filename pattern '{self.pattern}' names a group '{shadowed[0]}', "
+                f"which shadows the built-in placeholder {{{shadowed[0]}}}"
+            )
+        object.__setattr__(self, 'regex', compiled)
+
+    @property
+    def groups(self) -> List[str]:
+        """The named groups, in declaration order."""
+        return list(self.regex.groupindex)
+
+    def values_for(self, filepath: Path) -> Optional[Dict[str, str]]:
+        """
+        The named groups' values for ``filepath``'s stem, or None when it does not match.
+
+        A group that took no part in the match (an optional one) is the empty string.
+        """
+        match = self.regex.match(filepath.stem)
+        if match is None:
+            return None
+        return match.groupdict(default='')
+
+
 @dataclass
 class ValidationRule:
     """
@@ -74,9 +137,13 @@ class ValidationRule:
         data_type: Expected data type. Basic: 'string', 'integer', 'float', 'boolean'.
                    Extended (Phase 5): 'date', 'datetime', 'url', 'email'.
         constraint: Validation method ('exact', 'enum', 'regex', 'range', etc.)
-        expected: Expected value(s) for validation (varies by constraint type)
+        expected: Expected value(s) for validation (varies by constraint type).
+                  May carry placeholders ({stem}, {name}, or a named group of the
+                  product's filename pattern) that the engine resolves per file.
         optional: Whether the field is optional (default: False)
         comment: Additional notes/documentation about the rule
+        filename_pattern: The product's [P.filename] pattern, when it has one; the
+                          source of every placeholder beyond {stem} and {name}
 
     Example:
         >>> rule = ValidationRule(
@@ -100,6 +167,7 @@ class ValidationRule:
     expected: Optional[Any] = None
     optional: bool = False
     comment: Optional[str] = None
+    filename_pattern: Optional[FilenamePattern] = None
 
     # Valid data types: basic + extended (Phase 5)
     VALID_DATA_TYPES = [

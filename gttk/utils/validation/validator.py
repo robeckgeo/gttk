@@ -19,13 +19,16 @@ Classes:
     ValidationEngine: Core validation engine that evaluates rules against metadata
 """
 
+import dataclasses
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from gttk.utils.metadata_extractor import MetadataExtractor
 
 from gttk.utils.validation.models import (
+    FilenamePattern,
     ValidationRule,
     ValidationResult,
     ValidationStatus,
@@ -34,6 +37,8 @@ from gttk.utils.validation.models import (
 )
 from gttk.utils.validation.constraints import (
     comparison_failure,
+    placeholder_names,
+    substitute_placeholders,
     validate_exact,
     validate_enum,
     validate_regex,
@@ -74,6 +79,10 @@ class ValidationEngine:
         extractor: MetadataExtractor instance with open file handles
         value_extractor: ValueExtractor for retrieving values by key
 
+    A rule whose ``expected`` names the file ({stem}, {name}, or a named group of
+    the product's filename pattern) is resolved against this engine's file before
+    its constraint is applied; the result carries the resolved copy of the rule.
+
     Example:
         >>> from gttk.utils.metadata_extractor import MetadataExtractor
         >>> rule = ValidationRule(
@@ -99,6 +108,9 @@ class ValidationEngine:
         """
         self.extractor = extractor
         self.value_extractor = ValueExtractor(extractor)
+        # The placeholder values this file's name provides, per filename pattern.
+        # Filled on first use: nothing reads the extractor's path at construction.
+        self._filename_values_cache: Dict[Optional[FilenamePattern], Optional[Dict[str, str]]] = {}
 
     def validate_all_sections(
         self,
@@ -197,6 +209,80 @@ class ValidationEngine:
         # Extract value for this rule
         value = self.value_extractor.extract_value(rule.section, rule.key)
 
+        # Resolve the file-name placeholders before the missing-value branch, by
+        # design: a file named outside the product's pattern fails every rule that
+        # depends on its name, whether or not the value is there and optional or not.
+        resolved, problem = self._resolve_expected(rule)
+        if problem is not None:
+            return ValidationResult(
+                rule=rule,
+                value=value,
+                status=ValidationStatus.FAIL.value,
+                message=problem
+            )
+
+        result = self._evaluate(resolved, value)
+        if resolved is not rule:
+            result.message = f"{result.message} (from filename)"
+        return result
+
+    def _filename_values(self, pattern: Optional[FilenamePattern]) -> Optional[Dict[str, str]]:
+        """
+        The placeholder values this engine's file name provides, memoized per pattern.
+
+        Always {stem} and {name}; with a pattern, its named groups as well. None when
+        the file's stem does not match the pattern, which is logged once per file and
+        pattern rather than once per rule that needed it.
+        """
+        if pattern not in self._filename_values_cache:
+            filepath = Path(self.extractor.filepath)
+            values: Optional[Dict[str, str]] = {'stem': filepath.stem, 'name': filepath.name}
+            if pattern is not None:
+                groups = pattern.values_for(filepath)
+                if groups is None:
+                    logger.warning(f"{filepath.name} does not match filename.pattern '{pattern.pattern}'")
+                    values = None
+                else:
+                    values.update(groups)
+            self._filename_values_cache[pattern] = values
+        return self._filename_values_cache[pattern]
+
+    def _resolve_expected(self, rule: ValidationRule) -> Tuple[ValidationRule, Optional[str]]:
+        """
+        The rule with its placeholders filled from this engine's file name.
+
+        Returns the rule itself when its expected value has no placeholders; a copy
+        with them substituted when it does; or the rule and the reason they could
+        not be filled, which is that the file's stem does not match the product's
+        filename pattern. The shared rule is never modified.
+        """
+        names = placeholder_names(rule.expected)
+        if not names:
+            return rule, None
+
+        values = self._filename_values(rule.filename_pattern)
+        if values is None:
+            filename = Path(self.extractor.filepath).name
+            return rule, (
+                f"Filename '{filename}' does not match filename.pattern "
+                f"'{rule.filename_pattern.pattern}'; cannot resolve {{{names[0]}}} "
+                f"in expected '{rule.expected}'"
+            )
+
+        resolved = substitute_placeholders(rule.expected, values, rule.constraint)
+        return dataclasses.replace(rule, expected=resolved), None
+
+    def _evaluate(self, rule: ValidationRule, value: Any) -> ValidationResult:
+        """
+        Judge an extracted value against a rule whose expected value is final.
+
+        Args:
+            rule: The ValidationRule to evaluate, placeholders already resolved
+            value: The value extracted for it, None when absent
+
+        Returns:
+            ValidationResult with appropriate status and message
+        """
         # Handle missing value cases
         if value is None:
             return self._handle_missing_value(rule)
