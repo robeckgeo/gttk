@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-10-22
+
 ### Added
 
 - **`--software-stamp {True,False}`** on `gttk optimize` and `optimize-arc` (default True): False
@@ -38,6 +40,10 @@ All notable changes to this project will be documented in this file.
   network flag is counted under a lock so overlapping operations restore the host's setting;
   `arcMode` and the shared progress dictionary are gone. What stays per process
   (`UseExceptions()`, the PROJ flag) is documented in the README and DEVELOPER.md
+- **GDAL floor raised to 3.12** (`environment.yml`, the `[gdal]` extra, the README); the
+  GEO_METADATA embedding product pipelines rely on is verified on 3.12.1 and 3.12.2
+- **numpy floor relaxed to 2.0**: nothing in the package needs a 2.2 API (audited), and hosts
+  pinned below 2.2 can now run GTTK in process
 - **DEVELOPER.md** describes the pipeline as it runs (NoData handling, strip rounding, the
   metadata step, the early overview build of the rounding workflow) and the thread-safety
   contract; `optimize_compression`'s module docstring no longer claims in-memory-only intermediates

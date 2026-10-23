@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "geotiff-toolkit"
-version = "0.12.0"
+version = "0.13.0"
 description = "GeoTIFF ToolKit (GTTK): A Python toolkit for analyzing and optimizing GeoTIFF data."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -39,7 +39,7 @@ dependencies = [
   "lxml>=5.3.1",
   "matplotlib>=3.10.0",
   "mistune>=3.0.0",
-  "numpy>=2.2.0",
+  "numpy>=2.0",
   "openpyxl>=3.1.5",
   "psutil>=5.9.0",
   "tifffile>=2025.1.10",
@@ -49,7 +49,7 @@ dependencies = [
 # Only useful where the GDAL C++ library and its development headers are already
 # installed; otherwise this builds from source and fails. conda-forge is the supported
 # route: `conda env create -f environment.yml`.
-gdal = ["gdal>=3.11"]
+gdal = ["gdal>=3.12"]
 # The test suite's own tools: `pip install -e ".[dev]"`. environment.yml carries the same.
 dev = ["pytest>=7.0.0", "pytest-cov>=4.0.0"]
 

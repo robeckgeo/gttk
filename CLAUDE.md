@@ -102,7 +102,7 @@ Located in `gttk/utils/validation/`:
 - `pytest.ini` - Test configuration with markers (`slow`, `unit`, `integration`, `e2e`, `renderer`, `models`); no coverage flags, those live in `pyproject.toml` `[tool.coverage]`
 - `.github/workflows/tests.yml` - CI: the fast suite (`-m "not slow"`) on every push and pull request, the full suite on `main`, `coverage.xml` kept as a run artifact
 - `.gitattributes` - LF line endings on every checkout, Windows clones included
-- `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
+- `environment.yml` - Conda environment (Python 3.12+, GDAL 3.12+)
 
 ## Test Structure
 1940 tests total (1635 unit, 103 integration, 70 E2E, 13 benchmark smoke, 119 doctests -- 110 in `gttk/`
@@ -209,10 +209,10 @@ Documentation coverage:
 - `test_versions.py` - `gttk.__version__` against `pyproject.toml`, `CITATION.cff`, both README badges and the changelog's newest release; no module carries a version of its own
 
 ## Key Dependencies
-- **GDAL** (>=3.11) - Core geospatial operations
+- **GDAL** (>=3.12) - Core geospatial operations; GEO_METADATA (tag 50909) embedding is verified on 3.12.1 and 3.12.2
 - **tifffile** - Low-level TIFF manipulation
 - **lxml** - XML processing (also used for XPath in validation)
-- **numpy** - Array operations
+- **numpy** (>=2.0) - Array operations; nothing needs a newer API, and the floor is what in-process hosts can meet
 - **matplotlib** - Histogram generation
 - **mistune** - Markdown to HTML conversion
 - **jsonpath-ng** - JSONPath expressions for PROJJSON validation

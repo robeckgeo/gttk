@@ -3,7 +3,7 @@ channels:
   - conda-forge
 dependencies:
   - python>=3.12
-  - gdal>=3.11
+  - gdal>=3.12
   - jsonpath-ng
   - lxml
   - matplotlib

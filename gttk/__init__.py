@@ -23,7 +23,7 @@ declared dependency of GTTK. Install it from conda-forge:
 
 or, into an environment you already have:
 
-    conda install -c conda-forge "gdal>=3.11"
+    conda install -c conda-forge "gdal>=3.12"
 
 On Windows, OSGeo4W works too. If the GDAL library *and* its development headers are
 already present, `pip install "geotiff-toolkit[gdal]"` will build the bindings.

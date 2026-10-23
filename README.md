@@ -3,7 +3,7 @@
 # GeoTIFF ToolKit (GTTK): GeoTIFF Analysis and Optimization Tools
 
 <p align="left">
-  <img src="https://img.shields.io/badge/version-0.12.0-orange" alt="Version">
+  <img src="https://img.shields.io/badge/version-0.13.0-orange" alt="Version">
   <img src="https://img.shields.io/badge/license-MIT-green" alt="License">
 </p>
 
@@ -70,7 +70,9 @@ GTTK is more than a compression script—it's an optimization engine that combin
 ### Prerequisites
 
 - **Python 3.12+**
-- **GDAL 3.11+**: Required for all geospatial operations
+- **GDAL 3.12+**: Required for all geospatial operations. Embedding a record in the
+  GEO_METADATA tag (50909), which product pipelines rely on, is exercised by the test suite and
+  has been verified on GDAL 3.12.1 and 3.12.2; older releases are not tested
 
 ### Recommended: Conda Environment
 
@@ -113,12 +115,12 @@ This makes the `gttk` command available within your Conda environment.
 The `environment.yml` includes:
 
 - `python>=3.12`
-- `gdal>=3.11` – from conda-forge, not pip (see above)
+- `gdal>=3.12` – from conda-forge, not pip (see above)
 - `jsonpath-ng`
 - `lxml`
 - `matplotlib`
 - `mistune`
-- `numpy`
+- `numpy>=2.0`
 - `openpyxl`
 - `tifffile`
 - `psutil`
