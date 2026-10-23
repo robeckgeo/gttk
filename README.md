@@ -113,7 +113,7 @@ This makes the `gttk` command available within your Conda environment.
 The `environment.yml` includes:
 
 - `python>=3.12`
-- `gdal>=3.11` — from conda-forge, not pip (see above)
+- `gdal>=3.11` – from conda-forge, not pip (see above)
 - `jsonpath-ng`
 - `lxml`
 - `matplotlib`
@@ -211,7 +211,7 @@ gttk compare -i baseline.tif -o optimized.tif --report-format md
 
 This powerful tool combines multiple optimization techniques into a single, streamlined workflow:
 
-- **In-memory processing** for maximum performance using GDAL's virtual file system
+- **Intermediates in memory** (GDAL's virtual file system) when they fit, beside the output when they would not
 - **Automatic predictor selection** for optimal lossless compression (LZW/DEFLATE/ZSTD)
 - **Native compound CRS handling** for elevation data with vertical datums
 - **Alpha-to-mask conversion** for imagery (RGBA → RGB + internal mask)
@@ -246,7 +246,8 @@ This powerful tool combines multiple optimization techniques into a single, stre
 | `--max-z-error` | `-z` | float | No | Profile | Max Z error for LERC compression |
 | `--level` | `-l` | int | No | 6 (DEFLATE), 9 (ZSTD) | Compression level for DEFLATE or ZSTD |
 | `--quality` | `-q` | int | No | `90` | JPEG/JXL quality (75-100) for image products |
-| `--geo-metadata` | `-g` | bool | No | `False` | Write external XML metadata to the GEO_METADATA tag |
+| `--geo-metadata` | `-g` | bool or path | No | `False` | Embed an XML metadata record in the GEO_METADATA tag: `True` embeds the external XML file found beside the input, a path embeds that record. The record is pretty-printed without being changed |
+| `--software-stamp` | - | bool | No | `True` | Append " - optimized by GeoTIFF ToolKit v<version>" to `TIFFTAG_SOFTWARE`, or set it when the input has none. `False` leaves the input's tag as it is, for a product header the pipeline has already written |
 | `--write-pam-xml` | `-w` | bool | No | `True` | Write an Esri-compatible .aux.xml PAM statistics file |
 | `--tile-size` | - | int | No | `512` | Tile size in pixels for primary layer and overviews |
 | `--mask-alpha` | - | bool | No | Profile | Convert alpha band to internal mask (RGB+mask) vs. preserve RGBA; `True` except for `thematic` |
@@ -467,6 +468,23 @@ for an external XML metadata file by name and use the first match: `<stem>.xml`,
 directory; then `<stem>.xml` in a `metadatos/` directory beside the raster's directory, which
 is INEGI's delivery layout. A batch run over a directory therefore reads XML from one level
 above the directory it was pointed at, on purpose.
+
+#### The GEO_METADATA Tag and Product Headers
+
+`gttk optimize` can embed an XML metadata record (ISO 19115/19139, FGDC, an agency profile)
+in the GEO_METADATA tag (50909): `--geo-metadata True` embeds the external file found as
+above, `--geo-metadata PATH` embeds that record. Either way the record is pretty-printed, so
+that `gdalinfo` and a QGIS layer's properties show it readably, and the formatting is checked
+to have changed nothing: the formatted record and the file canonicalize (C14N) to the same
+bytes, or lxml's own indentation is used instead. The text is embedded as UTF-8 whatever the
+file's encoding was. A record that cannot be read or is not well-formed XML fails the run.
+
+A record that is already in the input's GEO_METADATA tag is never touched: it reaches the
+output byte for byte, as do every GDAL metadata item and `TIFFTAG_*` value the input carries.
+The one tag GTTK writes on its own is `TIFFTAG_SOFTWARE`, to which it appends
+` - optimized by GeoTIFF ToolKit v<version>` (or which it sets when the input has none);
+`--software-stamp False` leaves it exactly as the producer wrote it, for a product header a
+pipeline has already finished.
 
 #### Example Usage
 
@@ -895,6 +913,25 @@ Two options matter when scripting over many files:
   single run and oversubscribes badly when you run several `gttk` processes in parallel.
 
 Directory input never auto-opens reports, whatever `--open-report` says.
+
+#### Exit Status
+
+`gttk optimize` (and `python -m gttk optimize`) exits 0 only when everything asked for was
+produced. It exits 1 when the output could not be written, when a requested report or
+`.aux.xml` was not, when an overview could not be rounded, or when a `--geo-metadata`
+record could not be embedded; a directory run finishes every file first and then exits 1 if
+any of them failed, naming them in the log. Argument errors exit 2. `-g True` with no sidecar
+to find is not an error, and neither is a report that could not be opened.
+
+#### Running GTTK in Parallel
+
+Several `gttk` processes may run at once; cap `--num-threads` as above. Several threads in
+one process may too: each operation applies its GDAL configuration to its own thread only,
+keeps its state in its own objects, and names its intermediates uniquely. Two things stay
+per process, by GDAL's and PROJ's design: `gdal.UseExceptions()`, which the command line
+enables once at startup and a library host decides for itself, and PROJ's network access,
+which is switched off while any GTTK operation runs. Concurrent runs in one process share
+the console, so give them `arc_mode=True` (no progress bar) or keep batch work in processes.
 
 #### Rounding for Improved Compression
 

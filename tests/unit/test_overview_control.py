@@ -30,27 +30,7 @@ from gttk.utils.preprocessor import Workspace
 from gttk.utils.script_arguments import OptimizeArguments
 from tests.fixtures.mock_geotiff_factory import MockGeoTIFF
 
-# `optimize_compression` sets GDAL config options process-wide at import, and pytest
-# imports every test module during collection -- so importing it here would change how
-# the whole suite exports WKT.  Capture what it sets, put the process back, and reapply
-# only for the duration of these tests.
-_GLOBAL_GDAL_CONFIG = ('GDAL_NUM_THREADS', 'ESRI_XML_PAM', 'OSR_WKT_FORMAT', 'GTIFF_WRITE_SRS_WKT2')
-_config_before_import = {k: gdal.GetConfigOption(k) for k in _GLOBAL_GDAL_CONFIG}
-import gttk.tools.optimize_compression as ocmp  # noqa: E402  (import has side effects)
-_config_after_import = {k: gdal.GetConfigOption(k) for k in _GLOBAL_GDAL_CONFIG}
-for _key, _value in _config_before_import.items():
-    gdal.SetConfigOption(_key, _value)
-
-
-@pytest.fixture(autouse=True)
-def _module_gdal_config():
-    """Run these tests with the config `optimize_compression` expects, and only these."""
-    restore = {k: gdal.GetConfigOption(k) for k in _GLOBAL_GDAL_CONFIG}
-    for key, value in _config_after_import.items():
-        gdal.SetConfigOption(key, value)
-    yield
-    for key, value in restore.items():
-        gdal.SetConfigOption(key, value)
+import gttk.tools.optimize_compression as ocmp
 
 
 # --- Helpers ---------------------------------------------------------------
@@ -70,12 +50,9 @@ def _thematic_source(tmp_path, name="classes.tif", size=600):
 
 
 def _run(args):
-    """Run the optimization without report generation, quietly."""
-    prior, ocmp.arcMode = ocmp.arcMode, True
-    try:
-        ocmp._orchestrate_geotiff_optimization(args, Workspace(), None)
-    finally:
-        ocmp.arcMode = prior
+    """Run the optimization without report generation or a progress bar."""
+    args.arc_mode = True
+    ocmp._orchestrate_geotiff_optimization(args, Workspace(), None)
 
 
 def _creation_options(monkeypatch, args):
@@ -438,8 +415,12 @@ class TestReportOptOut:
     def test_report_true_still_generates(self, tmp_path, monkeypatch):
         src, _ = _thematic_source(tmp_path, size=128)
         calls = []
-        monkeypatch.setattr(ocmp, 'generate_report_for_datasets',
-                            lambda *a, **kw: calls.append(a))
+
+        def fake_report(*a, **kw):
+            calls.append(a)
+            return tmp_path / 'out_comp.html'   # a report that was written; None would now be a failure
+
+        monkeypatch.setattr(ocmp, 'generate_report_for_datasets', fake_report)
         args = OptimizeArguments(input_path=src, output_path=tmp_path / "out.tif",
                                  product_type='thematic', algorithm='ZSTD',
                                  report=True, write_pam_xml=False, open_report=False)

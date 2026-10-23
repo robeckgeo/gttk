@@ -44,6 +44,7 @@ from gttk.utils.geotiff_processor import (
     is_nodata_valid,
     remap_nodata_value,
     mask_nodata_value,
+    nodata_mask,
     
     # Projection functions
     _parse_json_projection_info,
@@ -1157,3 +1158,62 @@ class TestErrorHandlingAndEdgeCases:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+
+class TestNoDataAtTheBandsPrecision:
+    """NoData is compared and written in the band's own data type, not as the double GDAL reports."""
+
+    @staticmethod
+    def _dataset(data, nodata):
+        gdal_type = {np.float32: gdal.GDT_Float32, np.float64: gdal.GDT_Float64,
+                     np.int16: gdal.GDT_Int16}[data.dtype.type]
+        ds = gdal.GetDriverByName('MEM').Create('', data.shape[1], data.shape[0], 1, gdal_type)
+        band = ds.GetRasterBand(1)
+        band.WriteArray(data)
+        band.SetNoDataValue(float(nodata))
+        return ds
+
+    def test_a_fractional_float32_nodata_is_found_and_remapped(self):
+        data = np.full((8, 8), 123.456, np.float32)
+        data[0, :3] = -99999.123
+        ds = remap_nodata_value(self._dataset(data, -99999.123), -99999.123, float('nan'))
+        result = ds.GetRasterBand(1).ReadAsArray()
+        assert result.dtype == np.float32
+        assert np.all(np.isnan(result[0, :3]))
+        assert np.all(result[0, 3:] == np.float32(123.456)) and np.all(result[1:] == np.float32(123.456))
+
+    def test_an_int16_band_stays_int16_and_exact(self):
+        data = np.array([[1, 2, -9999], [-9999, 5, 6]], dtype=np.int16)
+        ds = remap_nodata_value(self._dataset(data, -9999.0), -9999.0, -32768.0)
+        result = ds.GetRasterBand(1).ReadAsArray()
+        assert result.dtype == np.int16
+        assert result.tolist() == [[1, 2, -32768], [-32768, 5, 6]]
+
+    def test_a_float64_band_keeps_its_digits(self):
+        data = np.array([[1.000000001, -9999.0]], dtype=np.float64)
+        ds = remap_nodata_value(self._dataset(data, -9999.0), -9999.0, float('nan'))
+        result = ds.GetRasterBand(1).ReadAsArray()
+        assert result.dtype == np.float64
+        assert result[0, 0] == 1.000000001 and np.isnan(result[0, 1])
+
+    def test_a_target_the_band_cannot_hold_is_refused(self):
+        data = np.array([[1, -9999]], dtype=np.int16)
+        with pytest.raises(ValueError, match='cannot be stored in int16'):
+            remap_nodata_value(self._dataset(data, -9999.0), -9999.0, float('nan'))
+
+    def test_mask_nodata_value_finds_a_fractional_float32_nodata(self):
+        data = np.full((8, 8), 123.456, np.float32)
+        data[:2, :] = -99999.123
+        ds = mask_nodata_value(self._dataset(data, -99999.123), -99999.123)
+        band = ds.GetRasterBand(1)
+        assert band.GetMaskFlags() & gdal.GMF_PER_DATASET
+        mask = band.GetMaskBand().ReadAsArray()
+        assert np.all(mask[:2, :] == 0) and np.all(mask[2:, :] == 255)
+        assert band.GetNoDataValue() is None
+
+    def test_nodata_mask_matches_what_the_dtype_can_hold(self):
+        assert nodata_mask(np.array([1, 2], dtype=np.int16), -9999.5).tolist() == [False, False]
+        assert nodata_mask(np.array([1, 2], dtype=np.uint8), 300.0).tolist() == [False, False]
+        assert nodata_mask(np.array([1.0, np.inf], dtype=np.float32), -3.5e38).tolist() == [False, False]
+        assert nodata_mask(np.array([1.0, -np.inf], dtype=np.float32), -3.5e38).tolist() == [False, True]

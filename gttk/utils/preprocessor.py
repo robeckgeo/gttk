@@ -9,15 +9,23 @@
 # ******************************************************************************
 
 """
-In-Memory GeoTIFF Preprocessing Pipeline.
+GeoTIFF Preprocessing Pipeline.
 
-This module contains the core logic for the optimization preprocessing pipeline.
-It orchestrates a series of in-memory operations using GDAL's virtual file system
-(`/vsimem/`), including NoData value handling, alpha-to-mask conversion, data
-rounding, and metadata updates, before the final compression stage.
+This module contains the core logic for the optimization preprocessing pipeline. It
+builds a tiled intermediate copy of the input (in GDAL's ``/vsimem`` when it fits, beside
+the output when it does not), converts an alpha band to an internal mask, remaps or masks
+NoData, rounds floating-point data strip by strip without touching NoData or non-finite
+pixels, carries the source metadata across (stamping ``TIFFTAG_SOFTWARE`` unless told not
+to), sets the raster type and the CRS, and embeds an XML record in the GEO_METADATA tag
+when asked, before the final compression stage.
 
 Classes:
     Workspace: A context manager for this run's intermediates, in memory or on disk.
+
+Functions:
+    software_tag: The ``TIFFTAG_SOFTWARE`` value an optimized file carries.
+    round_overviews: Round built overviews the same way as the data.
+    preprocess_geotiff: The pipeline.
 """
 import logging
 import numpy as np
@@ -67,6 +75,81 @@ def _discard_lsb_float(array, decimals, valid_mask):
     keep = uint_t(np.iinfo(uint_t).max) ^ uint_t((1 << k) - 1)
     u[valid_mask] = (u[valid_mask] + half) & keep
     return out, k
+
+
+def software_tag(existing: Optional[str], stamp: bool = True) -> Optional[str]:
+    """The ``TIFFTAG_SOFTWARE`` value an optimized file carries.
+
+    With ``stamp`` the tag records that GTTK wrote the file: ``"<existing> - optimized by
+    GeoTIFF ToolKit v<version>"``, or ``"GeoTIFF ToolKit v<version>"`` when the input had
+    none. Without it the input's value comes back as it is, None included, so that nothing
+    is written: a product pipeline that sets the tag itself before calling GTTK keeps it.
+
+    Example:
+        >>> software_tag('Producer 1.0', stamp=False)
+        'Producer 1.0'
+        >>> software_tag(None, stamp=False) is None
+        True
+        >>> software_tag('Producer 1.0').startswith('Producer 1.0 - optimized by GeoTIFF ToolKit v')
+        True
+        >>> software_tag(None).startswith('GeoTIFF ToolKit v')
+        True
+    """
+    if not stamp:
+        return existing
+    existing = (existing or '').strip()
+    if existing:
+        return f"{existing} - optimized by GeoTIFF ToolKit v{__version__}"
+    return f"GeoTIFF ToolKit v{__version__}"
+
+
+#: Rounding reads full-width strips of about this many bytes (a whole number of block rows).
+STRIP_TARGET_BYTES = 16 * 1024 * 1024
+
+
+def _round_band_blockwise(band: gdal.Band, decimals: int, nodata: Optional[float]) -> bool:
+    """Round a float band to ``decimals`` places strip by strip, leaving NoData alone.
+
+    Only finite pixels that are not the NoData value are rounded, through float64 so that
+    decimals beyond the dtype's precision become a true no-op. NaN, +/-inf and the NoData
+    value never enter the arithmetic and keep their exact bit patterns. The strips are a
+    whole number of block rows, sized toward :data:`STRIP_TARGET_BYTES`, so a
+    9001 x 9001 Float32 band costs about 9 MB at a time rather than the whole band twice.
+
+    Returns:
+        Whether any pixel changed.
+
+    Raises:
+        ProcessingStepFailedError: when a strip cannot be read or written back.
+    """
+    xsize, ysize = band.XSize, band.YSize
+    block_rows = max(1, int((band.GetBlockSize() or [xsize, 1])[1]))
+    bytes_per_row = max(1, xsize * max(1, gdal.GetDataTypeSize(band.DataType) // 8))
+    rows = max(block_rows, (STRIP_TARGET_BYTES // bytes_per_row // block_rows) * block_rows)
+    rows = min(rows, ysize)
+    changed = False
+    for y in range(0, ysize, rows):
+        height = min(rows, ysize - y)
+        strip = band.ReadAsArray(0, y, xsize, height)
+        if strip is None:
+            raise ProcessingStepFailedError(f"Could not read rows {y}-{y + height} of the band for rounding.")
+        valid = np.isfinite(strip)
+        if nodata is not None and not np.isnan(nodata):
+            # At the band's precision: a Float32 band holds float32(-99999.123), which is
+            # not equal to the float64 GDAL reports for it.
+            valid &= (strip != strip.dtype.type(nodata))
+        if not valid.any():
+            continue
+        values = strip[valid]
+        rounded = np.round(values.astype(np.float64), decimals).astype(strip.dtype)
+        if np.array_equal(rounded, values):
+            continue
+        strip[valid] = rounded
+        if band.WriteArray(strip, 0, y) != 0:
+            raise ProcessingStepFailedError(f"Could not write rows {y}-{y + height} of the band after rounding.")
+        changed = True
+    band.FlushCache()
+    return changed
 
 
 # --- Workspace ---
@@ -297,23 +380,25 @@ def _create_intermediate_with_mask(temp_ds: gdal.Dataset, workspace: "Workspace"
 
 def round_overviews(ds: gdal.Dataset, decimals: int) -> gdal.Dataset:
     """
-    Round all overview bands in a dataset to specified decimal places.
-    
-    This function rounds each overview level for all bands to improve compression
-    efficiency when using lossless compression algorithms (LZW, DEFLATE, ZSTD).
-    Bilinear resampling used to generate overviews introduces interpolated values
-    with more decimal places than the main image, reducing compression efficiency.
-    
-    IMPORTANT: Overviews must be built with COMPRESS=NONE for this to work correctly.
-    Compressed overviews cannot be modified in-place.
-    
+    Round every overview level of every band to ``decimals`` places.
+
+    Bilinear resampling gives overview pixels more decimals than the rounded data they were
+    built from, which costs compression with a lossless codec. Each level is rounded the way
+    the data was: strip by strip, and never touching NoData or non-finite pixels.
+
+    IMPORTANT: the overviews must have been built with COMPRESS=NONE. A compressed overview
+    cannot be rewritten in place, and the write then fails.
+
     Args:
         ds: GDAL dataset with existing UNCOMPRESSED overviews
         decimals: Number of decimal places to round to
-    
+
     Returns:
-        The same dataset with rounded overviews, reopened to ensure changes are visible
-    
+        The same dataset, reopened so the rewritten overviews are visible.
+
+    Raises:
+        ProcessingStepFailedError: when an overview cannot be read or written back.
+
     Example:
         >>> ds = gdal.Open('example.tif', gdal.GA_Update)
         >>> ds.BuildOverviews('BILINEAR', [2, 4, 8], options=['COMPRESS=NONE'])
@@ -325,72 +410,39 @@ def round_overviews(ds: gdal.Dataset, decimals: int) -> gdal.Dataset:
     if not ds or ds.RasterCount == 0:
         logger.warning("Dataset is None or has no bands. Cannot round overviews.")
         return ds
-    
+
     filepath = ds.GetDescription()
-    band = ds.GetRasterBand(1)
-    overview_count = band.GetOverviewCount()
-    
-    if overview_count == 0:
+    if ds.GetRasterBand(1).GetOverviewCount() == 0:
         logger.info("No overviews found to round.")
         return ds
-    
-    logger.info(f"Rounding {overview_count} overview level(s) to {decimals} decimal places...")
-    
-    total_overviews_processed = 0
+
+    processed = 0
     for band_idx in range(1, ds.RasterCount + 1):
         band = ds.GetRasterBand(band_idx)
         overview_count = band.GetOverviewCount()
-        
         if overview_count == 0:
             continue
-        
-        logger.info(f"  Processing {overview_count} overviews for band {band_idx}")
-        
+        logger.info(f"Rounding {overview_count} overview level(s) of band {band_idx} to {decimals} decimal places...")
         for ovr_idx in range(overview_count):
+            overview_band = band.GetOverview(ovr_idx)
+            if overview_band is None:
+                raise ProcessingStepFailedError(f"Overview {ovr_idx} of band {band_idx} could not be opened for rounding.")
             try:
-                overview_band = band.GetOverview(ovr_idx)
-                if not overview_band:
-                    logger.warning(f"    Overview {ovr_idx} is None, skipping")
-                    continue
-                
-                # Read overview data
-                array = overview_band.ReadAsArray()
-                if array is None:
-                    logger.warning(f"    Failed to read overview {ovr_idx}, skipping")
-                    continue
-                
-                # Round to specified decimals
-                array = np.round(array, decimals)
-                
-                # Write back - this only works for uncompressed overviews
-                write_result = overview_band.WriteArray(array)
-                if write_result != 0:
-                    logger.warning(f"    Failed to write overview {ovr_idx} (error code: {write_result})")
-                    logger.warning("    This may occur if overviews are compressed. Overviews must be uncompressed to round.")
-                    continue
-                
-                overview_band.FlushCache()
-                total_overviews_processed += 1
-                logger.debug(f"    Rounded overview {ovr_idx} ({overview_band.XSize}x{overview_band.YSize})")
-                
-            except Exception as e:
-                logger.error(f"    Error processing overview {ovr_idx}: {e}")
-                continue
-    
-    # Flush the dataset
+                _round_band_blockwise(overview_band, decimals, overview_band.GetNoDataValue())
+            except (ProcessingStepFailedError, RuntimeError) as e:
+                raise ProcessingStepFailedError(
+                    f"Overview {ovr_idx} of band {band_idx} could not be rounded ({e}). "
+                    f"Overviews must be built uncompressed to be rounded in place.") from e
+            processed += 1
+            logger.debug(f"    Rounded overview {ovr_idx} ({overview_band.XSize}x{overview_band.YSize})")
+
     ds.FlushCache()
-    
-    # Reopen to ensure changes are visible
-    filepath_str = filepath  # Store before setting ds to None
     ds = None  # type: ignore[assignment]
-    reopened_ds = gdal.Open(filepath_str, gdal.GA_Update)
-    
-    if total_overviews_processed > 0:
-        logger.info(f"Overview rounding complete. Processed {total_overviews_processed} overview(s).")
-    else:
-        logger.warning("No overviews were successfully rounded. Ensure overviews are uncompressed before rounding.")
-    
-    return reopened_ds if reopened_ds else ds
+    reopened_ds = gdal.Open(filepath, gdal.GA_Update)
+    if reopened_ds is None:
+        raise ProcessingStepFailedError(f"Could not reopen {filepath} after rounding its overviews.")
+    logger.info(f"Overview rounding complete. Processed {processed} overview(s).")
+    return reopened_ds
 
 def preprocess_geotiff(
     original_ds: gdal.Dataset,
@@ -560,12 +612,14 @@ def preprocess_geotiff(
         use_lsb = getattr(args, 'discard_lsb', False)
         for i in range(1, ds.RasterCount + 1):
             band = ds.GetRasterBand(i)
-            array = band.ReadAsArray()
             if use_lsb:
+                # Benchmark-only path (no CLI flag). It is sized from the band's maximum
+                # magnitude, which needs the whole band, so it still reads it in one piece.
+                array = band.ReadAsArray()
                 nd = band.GetNoDataValue()
                 valid = np.isfinite(array)
                 if nd is not None and not np.isnan(nd):
-                    valid &= (array != nd)
+                    valid &= (array != array.dtype.type(nd))
                 array, k = _discard_lsb_float(array, int(args.decimals), valid)
                 if k > 0:
                     band.WriteArray(array)
@@ -573,18 +627,13 @@ def preprocess_geotiff(
                     logger.info(f"DISCARD_LSB: cleared {k} low mantissa bit(s) on band {i} "
                                 f"for ~{args.decimals}-decimal precision.")
             else:
-                # Round via float64 then cast back: avoids the float32 x10^n round-trip noise
-                # (so decimals beyond the dtype's precision become a true no-op) and is more
-                # accurate at usable precisions.
-                rounded = np.round(array.astype(np.float64), int(args.decimals)).astype(array.dtype)
-                if np.array_equal(rounded, array, equal_nan=True):
-                    if i == 1:
-                        logger.warning(f"--decimals {args.decimals} exceeds the precision "
-                                       f"{info.data_type} can represent at this magnitude; no "
-                                       f"rounding applied (equivalent to --decimals none).")
-                else:
-                    band.WriteArray(rounded)
-                    band.FlushCache()
+                # Strip by strip, finite non-NoData pixels only: NoData and NaN survive
+                # bit-exact, and a 9001 x 9001 band is never held twice in memory.
+                changed = _round_band_blockwise(band, int(args.decimals), band.GetNoDataValue())
+                if not changed and i == 1:
+                    logger.warning(f"--decimals {args.decimals} exceeds the precision "
+                                   f"{info.data_type} can represent at this magnitude; no "
+                                   f"rounding applied (equivalent to --decimals none).")
 
     # --- 4. Set Final NoData Value ---
     if target_nodata is not None:
@@ -612,8 +661,11 @@ def preprocess_geotiff(
         if 'AREA_OR_POINT' in metadata:
             metadata.pop('AREA_OR_POINT')
 
-        software_tag = metadata.get('TIFFTAG_SOFTWARE', '')
-        metadata['TIFFTAG_SOFTWARE'] = f"{software_tag.strip()} - optimized by GeoTIFF ToolKit v{__version__}" if software_tag else f"GeoTIFF ToolKit v{__version__}"
+        software = software_tag(metadata.get('TIFFTAG_SOFTWARE'), getattr(args, 'software_stamp', True))
+        if software is None:
+            metadata.pop('TIFFTAG_SOFTWARE', None)
+        else:
+            metadata['TIFFTAG_SOFTWARE'] = software
         ds.SetMetadata(metadata)
 
     # --- 6. Set Area/Point Metadata ---
@@ -641,15 +693,25 @@ def preprocess_geotiff(
                 ds.SetMetadataItem('COMPOUND_CRS_WKT2', wkt2_full)
 
     # --- 7. Write GEO_METADATA tag if requested ---
-    if args.geo_metadata:
-        xml_path = find_xml_metadata_file(Path(info.filepath))
-        if xml_path:
+    # A record the input already carries in the tag is not touched here: it came across
+    # with the source metadata above and reaches the output byte for byte.
+    geo_metadata = getattr(args, 'geo_metadata', False)
+    if geo_metadata:
+        if isinstance(geo_metadata, bool):
+            xml_path = find_xml_metadata_file(Path(info.filepath))
+            if xml_path is None:
+                logger.info("XML metadata file not found. Skipping metadata embedding.")
+        else:
+            xml_path = Path(geo_metadata)
+        if xml_path is not None:
             ds.FlushCache()
             write_geo_metadata(ds, xml_path)
-            ds = gdal.Open(ds.GetDescription(), gdal.GA_Update)
-            logger.info(f"XML metadata file {str(xml_path)} was embedded in the GEO_METADATA tag.")
-        else:
-            logger.info("XML metadata file not found. Skipping metadata embedding.")
+            description = ds.GetDescription()
+            ds = None  # type: ignore[assignment]
+            ds = gdal.Open(description, gdal.GA_Update)
+            if ds is None:
+                raise ProcessingStepFailedError(f"Could not reopen {description} after writing GEO_METADATA.")
+            logger.info(f"Embedded {xml_path} in the GEO_METADATA tag.")
 
     # The intermediate carried STATISTICS_* band metadata from here, computed by a full
     # read of it. Nothing consumed that: the metadata sat in a named domain that neither

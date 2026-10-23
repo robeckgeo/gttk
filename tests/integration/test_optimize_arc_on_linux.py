@@ -90,3 +90,36 @@ class TestImageThroughTheTree:
         ds = gdal.Open(str(out))
         assert ds.GetMetadataItem('LAYOUT', 'IMAGE_STRUCTURE') == 'COG'
         assert ds.GetRasterBand(1).GetMaskFlags() & gdal.GMF_PER_DATASET
+
+
+class TestProductHeaderThroughTheTree:
+    """The ArcGIS path honours the same product-header rules as the in-process path."""
+
+    def test_nodata_survives_rounding_and_the_software_tag_is_kept(self, configured, tmp_path):
+        import numpy as np
+        source, out = tmp_path / 'dem.tif', tmp_path / 'dem_cog.tif'
+        data = np.full((1, 128, 128), 123.456, np.float32)
+        data[0, :8, :] = np.nan
+        MockGeoTIFF(width=128, height=128, data_type=gdal.GDT_Float32, crs='EPSG:32610',
+                    nodata_value=np.nan, pixel_data=data).save_to_file(source)
+        ds = gdal.Open(str(source), gdal.GA_Update)
+        ds.SetMetadataItem('TIFFTAG_SOFTWARE', 'PRODUCER')
+        ds = None
+        assert _optimize(source, out, decimals=2, software_stamp=False, write_pam_xml=False) == 0
+        ds = gdal.Open(str(out))
+        band = ds.GetRasterBand(1)
+        result = band.ReadAsArray()
+        assert np.isnan(band.GetNoDataValue())
+        assert np.all(np.isnan(result[:8, :]))
+        assert np.all(result[8:, :] == np.float32(123.46))
+        assert ds.GetMetadataItem('TIFFTAG_SOFTWARE') == 'PRODUCER'
+
+    def test_an_explicit_record_is_embedded_readable_and_unchanged(self, configured, tmp_path):
+        from gttk.utils.xml_formatter import canonical_xml
+        record = tmp_path / 'record.xml'
+        record.write_text('<record><id>SRC_N00E000_01.xml</id><a x="1"><b>t</b></a></record>', encoding='utf-8')
+        source, out = _dem(tmp_path / 'dem.tif'), tmp_path / 'dem_cog.tif'
+        assert _optimize(source, out, geo_metadata=record, write_pam_xml=False) == 0
+        embedded = gdal.Open(str(out)).GetMetadataItem('GEO_METADATA')
+        assert canonical_xml(embedded) == canonical_xml(record.read_text(encoding='utf-8'))
+        assert '\n  <a x="1">\n    <b>t</b>' in embedded

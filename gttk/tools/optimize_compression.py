@@ -14,19 +14,23 @@ Optimize Compression (CLI).
 This script provides a command-line utility to optimize and compress GeoTIFF files
 into Cloud-Optimized GeoTIFFs (COGs).
 
-It combines a robust, multi-step processing pipeline with user-friendly reporting
-to create a comprehensive tool for preparing geospatial raster data for efficient
-cloud-native storage and access. The script handles various processing steps,
-including resampling, handling complex vertical and horizontal reference systems,
-converting alpha bands to internal masks, performing memory-efficient rounding of
-float data, and applying various compression algorithms with intelligent defaults.
+It combines a multi-step processing pipeline with reporting into one tool for preparing
+raster data for cloud-native storage and access: compound vertical and horizontal
+reference systems, alpha bands converted to internal masks, NoData remapped or masked,
+float data rounded strip by strip without touching NoData, overviews built and rounded
+the same way, an XML record embedded in GEO_METADATA, and compression settings chosen
+per product type.
 
-All intermediate steps are handled in-memory using GDAL's virtual file system
-to maximize performance and avoid creating temporary files on disk.
+The intermediates live in GDAL's virtual file system when they fit in memory and beside
+the output when they do not (see ``gttk.utils.preprocessor.Workspace``). Every run keeps
+its state in its own objects: the GDAL configuration is thread-local for the duration of
+the call, and nothing is held in module globals, so several runs may share a process.
+
+The entry point returns 0 on success and 1 when a file could not be optimized, which
+``gttk.main`` passes on as the process exit status.
 """
 
 import logging
-import os
 import sys
 import traceback
 from osgeo import gdal
@@ -48,51 +52,46 @@ from gttk.utils.statistics import calculate_statistics, build_pam_data_from_stat
 
 from gttk import __version__
 
-# Global logger variables
-log_file_path = None  # Path to the log file so it can be deleted by ArcPy
-arcMode = False
-arcpy = None
-base_path = os.path.dirname(os.path.abspath(__file__))
-
 # GDAL configuration is applied per operation by gdal_env(), not at import: setting it
 # here made it process-global for anything that merely imported this module.
 
 logger = logging.getLogger(__name__)
 
-# --- Helper Functions ---
-def format_gdal_progress(complete: float, message: str, data: Any) -> int:
+
+class ProgressBar:
     """
-    A GDAL progress callback that displays a single-line percentage bar.
+    A single-line percentage bar for one run, usable as a GDAL progress callback.
 
-    This function is designed to be passed to GDAL functions that support a
-    progress callback. It avoids printing a new line for each update, instead
-    overwriting the current line to show a clean, updating progress bar.
+    One instance per run. GDAL calls it with the fraction done and a message; it rewrites
+    the current line rather than printing one per update, and remembers the last
+    percentage it printed so that nothing is printed twice. That memory used to be a
+    module-level dictionary shared by every run in the process; it is here so that two
+    runs on two threads cannot trample each other's. In ArcGIS mode no bar is created at
+    all, ArcPy has its own progress dialog.
 
-    Args:
-        complete: The fraction of work completed (0.0 to 1.0).
-        message: A message string passed from the GDAL function.
-        data: A user-supplied dictionary to maintain state, specifically to
-              track the 'last_reported_percent' to avoid redundant prints.
-
-    Returns:
-        An integer (1) to continue the GDAL operation.
+    Example:
+        >>> import io
+        >>> bar = ProgressBar(io.StringIO())
+        >>> bar(0.5, 'half', None), bar(1.0, '', None)
+        (1, 1)
+        >>> bar.stream.getvalue().replace(chr(13), '').startswith('Progress: 50% half')
+        True
     """
-    if arcMode:
-        # In ArcGIS mode, suppress the stdout progress bar to avoid clutter.
-        # ArcPy has its own progress dialog.
-        return 1
-    percent = int(complete * 100)
-    if data and 'last_reported_percent' in data and data['last_reported_percent'] == percent and percent < 100:
-        return 1
-    sys.stdout.write(f'\rProgress: {percent}% {message if message else "":<80}')
-    sys.stdout.flush()
-    if data:
-        data['last_reported_percent'] = percent
-    if complete >= 1.0:
-        sys.stdout.write('\n')
-    return 1
 
-progress_callback_data = {'last_reported_percent': -1}
+    def __init__(self, stream=None):
+        self.stream = stream if stream is not None else sys.stdout
+        self.last_reported_percent = -1
+
+    def __call__(self, complete: float, message: str, data: Any = None) -> int:
+        percent = int(complete * 100)
+        if percent == self.last_reported_percent and percent < 100:
+            return 1
+        self.stream.write(f'\rProgress: {percent}% {message if message else "":<80}')
+        self.stream.flush()
+        self.last_reported_percent = percent
+        if complete >= 1.0:
+            self.stream.write('\n')
+        return 1
 
 def _process_single_file(args: OptimizeArguments, tracker: Optional[PerformanceTracker] = None):
     """Processes a single GeoTIFF file."""
@@ -121,7 +120,7 @@ def _process_single_file(args: OptimizeArguments, tracker: Optional[PerformanceT
 
                 # Use shared report generation function passing PATHS instead of open datasets
                 # to avoid file locking issues affecting tifffile/metadata extraction
-                generate_report_for_datasets(
+                report_path = generate_report_for_datasets(
                     str(args.input_path),
                     str(args.output_path),
                     args,
@@ -129,6 +128,10 @@ def _process_single_file(args: OptimizeArguments, tracker: Optional[PerformanceT
                     'Output File',
                     args.report_suffix or '_comp'
                 )
+                if not report_path:
+                    raise ProcessingStepFailedError(
+                        f"The comparison report could not be generated; the output "
+                        f"{args.output_path} itself was written.")
                 logger.info("Report generation complete.")
 
                 if tracker:
@@ -273,300 +276,295 @@ def _orchestrate_geotiff_optimization_inner(args: OptimizeArguments, workspace: 
     temp_ds = None
     final_ds = None
     try:
-        with workspace as run_workspace:
-            temp_path = run_workspace.get_temp_path("intermediate.tif")
+        # --- 1. Perform all preprocessing steps on the intermediate ---
+        if tracker:
+            tracker.start("intermediate_processing")
 
-            # --- 1. Perform all in-memory preprocessing steps ---
-            if tracker:
-                tracker.start("intermediate_processing")
+        temp_ds = preprocess_geotiff(
+            original_ds=original_input_ds,
+            workspace=workspace,
+            args=args,
+            info=input_info,
+            srs=target_srs,
+            metadata=source_metadata
+        )
+    
+        if tracker:
+            tracker.stop("intermediate_processing")
 
-            temp_ds = preprocess_geotiff(
-                original_ds=original_input_ds,
-                workspace=run_workspace,
-                args=args,
-                info=input_info,
-                srs=target_srs,
-                metadata=source_metadata
-            )
-        
-            if tracker:
-                tracker.stop("intermediate_processing")
+        # --- 2. Detect internal mask and determine overview strategy ---
+        has_internal_mask = False
+        if temp_ds.RasterCount > 0:
+            band = temp_ds.GetRasterBand(1)
+            mask_flags = band.GetMaskFlags()
+            # GMF_PER_DATASET (0x02) indicates an internal mask
+            has_internal_mask = (mask_flags & gdal.GMF_PER_DATASET) != 0
+            logger.debug(f"Internal mask detected: {has_internal_mask}")
+    
+        # Determine if we should round overviews (all conditions must be met)
+        should_round_overviews = (
+            args.overviews and
+            isinstance(args.decimals, int) and
+            not getattr(args, 'discard_lsb', False) and  # LSB mode quantizes at write time, not via np.round
+            args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and
+            args.product_type in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value] and
+            'Float' in str(input_info.data_type) and
+            not has_internal_mask  # Don't round if mask present
+        )
+    
+        # Log the decision
+        if args.overviews:
+            if should_round_overviews:
+                logger.info("Overview strategy: ROUNDING workflow (float data, lossless compression, no mask)")
+            elif has_internal_mask:
+                logger.info("Overview strategy: STANDARD workflow (internal mask detected)")
+            else:
+                logger.info("Overview strategy: STANDARD workflow (rounding conditions not met)")
 
-            # --- 2. Detect internal mask and determine overview strategy ---
-            has_internal_mask = False
-            if temp_ds.RasterCount > 0:
-                band = temp_ds.GetRasterBand(1)
-                mask_flags = band.GetMaskFlags()
-                # GMF_PER_DATASET (0x02) indicates an internal mask
-                has_internal_mask = (mask_flags & gdal.GMF_PER_DATASET) != 0
-                logger.debug(f"Internal mask detected: {has_internal_mask}")
+        # --- 3. Build creation options based on overview strategy ---
+        final_creation_options = [
+            'GEOTIFF_VERSION=1.1',
+            'BIGTIFF=IF_SAFER',
+            f'NUM_THREADS={args.num_threads}',
+            f'COMPRESS={args.algorithm}'
+        ]
         
-            # Determine if we should round overviews (all conditions must be met)
-            should_round_overviews = (
-                args.overviews and
-                isinstance(args.decimals, int) and
-                not getattr(args, 'discard_lsb', False) and  # LSB mode quantizes at write time, not via np.round
-                args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value] and
-                args.product_type in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value] and
-                'Float' in str(input_info.data_type) and
-                not has_internal_mask  # Don't round if mask present
-            )
+        if args.cog:
+            final_creation_options += [f'BLOCKSIZE={args.tile_size}']
         
-            # Log the decision
             if args.overviews:
                 if should_round_overviews:
-                    logger.info("Overview strategy: ROUNDING workflow (float data, lossless compression, no mask)")
-                elif has_internal_mask:
-                    logger.info("Overview strategy: STANDARD workflow (internal mask detected)")
+                    # Use existing overviews (built on intermediate and rounded)
+                    final_creation_options.append('OVERVIEWS=FORCE_USE_EXISTING')
                 else:
-                    logger.info("Overview strategy: STANDARD workflow (rounding conditions not met)")
-
-            # --- 3. Build creation options based on overview strategy ---
-            final_creation_options = [
-                'GEOTIFF_VERSION=1.1',
-                'BIGTIFF=IF_SAFER',
-                f'NUM_THREADS={args.num_threads}',
-                f'COMPRESS={args.algorithm}'
+                    # Let COG driver build overviews (standard workflow).  The driver's
+                    # own default is an interpolating kernel for any band without a
+                    # colour table, which invents class codes in categorical data, so
+                    # state the kernel explicitly.  It is only consulted on this branch:
+                    # FORCE_USE_EXISTING copies the pyramid built on the intermediate.
+                    final_creation_options.append('OVERVIEWS=AUTO')
+                    final_creation_options.append(
+                        f'OVERVIEW_RESAMPLING={args.overview_resampling}')
+                # The COG driver defaults OVERVIEW_COMPRESS to LZW regardless of
+                # COMPRESS, which silently mixes codecs within one file.
+                final_creation_options.append(f'OVERVIEW_COMPRESS={args.overview_compress}')
+                if (args.overview_compress in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value]
+                        and args.overview_predictor and int(args.overview_predictor) != 1):
+                    final_creation_options.append(
+                        f'OVERVIEW_PREDICTOR={args.overview_predictor}')
+            else:
+                final_creation_options.append('OVERVIEWS=NONE')
+        else:
+            final_creation_options += [
+                'TILED=YES',
+                f'BLOCKXSIZE={args.tile_size}',
+                f'BLOCKYSIZE={args.tile_size}'
             ]
-            
-            if args.cog:
-                final_creation_options += [f'BLOCKSIZE={args.tile_size}']
-            
-                if args.overviews:
-                    if should_round_overviews:
-                        # Use existing overviews (built on intermediate and rounded)
-                        final_creation_options.append('OVERVIEWS=FORCE_USE_EXISTING')
-                    else:
-                        # Let COG driver build overviews (standard workflow).  The driver's
-                        # own default is an interpolating kernel for any band without a
-                        # colour table, which invents class codes in categorical data, so
-                        # state the kernel explicitly.  It is only consulted on this branch:
-                        # FORCE_USE_EXISTING copies the pyramid built on the intermediate.
-                        final_creation_options.append('OVERVIEWS=AUTO')
-                        final_creation_options.append(
-                            f'OVERVIEW_RESAMPLING={args.overview_resampling}')
-                    # The COG driver defaults OVERVIEW_COMPRESS to LZW regardless of
-                    # COMPRESS, which silently mixes codecs within one file.
-                    final_creation_options.append(f'OVERVIEW_COMPRESS={args.overview_compress}')
-                    if (args.overview_compress in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value]
-                            and args.overview_predictor and int(args.overview_predictor) != 1):
-                        final_creation_options.append(
-                            f'OVERVIEW_PREDICTOR={args.overview_predictor}')
+        
+            if args.overviews:
+                if should_round_overviews:
+                    # Copy existing overviews from intermediate
+                    final_creation_options.append('COPY_SRC_OVERVIEWS=YES')
                 else:
-                    final_creation_options.append('OVERVIEWS=NONE')
-            else:
-                final_creation_options += [
-                    'TILED=YES',
-                    f'BLOCKXSIZE={args.tile_size}',
-                    f'BLOCKYSIZE={args.tile_size}'
-                ]
-            
-                if args.overviews:
-                    if should_round_overviews:
-                        # Copy existing overviews from intermediate
-                        final_creation_options.append('COPY_SRC_OVERVIEWS=YES')
-                    else:
-                        # Don't copy - will build external overviews after
-                        final_creation_options.append('COPY_SRC_OVERVIEWS=NO')
-                else:
+                    # Don't copy - will build external overviews after
                     final_creation_options.append('COPY_SRC_OVERVIEWS=NO')
+            else:
+                final_creation_options.append('COPY_SRC_OVERVIEWS=NO')
 
-            # Algorithm-specific creation options
-            # PREDICTOR=1 is "no predictor" and is the default for both drivers, but they
-            # spell it differently: the COG driver warns on '1' (its value list is
-            # NO/YES/STANDARD/FLOATING_POINT) and GTiff errors on 'NO'.  Omit it instead.
-            if (args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value]
-                    and args.predictor and int(args.predictor) != 1):
-                final_creation_options.append(f'PREDICTOR={args.predictor}')
-            elif args.algorithm == CA.JPEG.value:
+        # Algorithm-specific creation options
+        # PREDICTOR=1 is "no predictor" and is the default for both drivers, but they
+        # spell it differently: the COG driver warns on '1' (its value list is
+        # NO/YES/STANDARD/FLOATING_POINT) and GTiff errors on 'NO'.  Omit it instead.
+        if (args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value]
+                and args.predictor and int(args.predictor) != 1):
+            final_creation_options.append(f'PREDICTOR={args.predictor}')
+        elif args.algorithm == CA.JPEG.value:
+            if args.cog:
+                final_creation_options.append(f"QUALITY={args.quality}")
+            else:
+                final_creation_options.append(f"JPEG_QUALITY={args.quality}")
+                final_creation_options.append('PHOTOMETRIC=YCBCR')
+        elif args.algorithm == CA.JXL.value and args.quality is not None:
+            jxl_options = _get_jxl_options(args.quality)
+            final_creation_options.extend(jxl_options)
+        elif args.algorithm in [CA.LERC.value, CA.LERC_DEFLATE.value, CA.LERC_ZSTD.value]:
+            final_creation_options.append(f'MAX_Z_ERROR={args.max_z_error}')
+
+        # Compression level: the COG driver uses LEVEL; the GTiff driver uses ZLEVEL
+        # (deflate) / ZSTD_LEVEL (zstd) -- which also covers the LERC_DEFLATE/LERC_ZSTD
+        # backends. Passing LEVEL= to the GTiff driver is silently ignored, so branch.
+        if args.level:
+            if args.algorithm in [CA.DEFLATE.value, CA.LERC_DEFLATE.value]:
+                final_creation_options.append(f'LEVEL={args.level}' if args.cog else f'ZLEVEL={args.level}')
+            elif args.algorithm in [CA.ZSTD.value, CA.LERC_ZSTD.value]:
+                final_creation_options.append(f'LEVEL={args.level}' if args.cog else f'ZSTD_LEVEL={args.level}')
+
+        logger.info(f"Final creation options set: {final_creation_options}")
+
+        # --- 4. Build and round overviews on intermediate file (ONLY if rounding workflow) ---
+        if should_round_overviews:
+            if tracker:
+                tracker.start("overview_creation")
+        
+            # Type guard: should_round_overviews is True means args.decimals is not None
+            assert args.decimals is not None, "args.decimals must be set when should_round_overviews is True"
+        
+            logger.info("Building internal overviews on intermediate file for rounding (float data, no mask).")
+            resample_alg = args.overview_resampling
+            overview_list = _calculate_overview_levels(input_info.x_size, input_info.y_size, tile_size=args.tile_size)
+            logger.info(f"Using overview levels: {', '.join(map(str, overview_list))}")
+
+            overview_options = [
+                'COMPRESS=NONE',  # Always uncompressed on intermediate file for rounding
+            ]
+
+            # The overview block size is a GDAL config option (TILED/BLOCKXSIZE/BLOCKYSIZE
+            # are not overview options); thread-local, and restored however this exits.
+            with gdal.config_option('GDAL_TIFF_OVR_BLOCKSIZE', str(args.tile_size)):
+                temp_ds.BuildOverviews(resampling=resample_alg, overviewlist=overview_list, options=overview_options)
+        
+            logger.info(f"Rounding overviews to {args.decimals} decimal places...")
+            temp_ds = round_overviews(temp_ds, args.decimals)
+        
+            if tracker:
+                tracker.stop("overview_creation")
+
+        # --- 5. Create final COG or GeoTIFF ---
+        if tracker:
+            tracker.start("final_translate")
+        
+        final_options_dict = {
+            'format': 'COG' if args.cog else 'GTiff',
+            'creationOptions': final_creation_options,
+            'stats': True,
+            'callback': None if args.arc_mode else ProgressBar(),
+        }
+
+        # Re-assert the resolved SRS on the final write rather than letting it flow
+        # through the intermediate's GeoTIFF keys.  A compound CRS survives that
+        # round-trip only partially: the vertical component comes back identified by
+        # its datum (VerticalDatumGeoKey) and loses its own EPSG code, so the output
+        # names EGM2008 without ever citing EPSG:3855.  This is -a_srs, an assignment:
+        # pixels and the geotransform are untouched.
+        if target_srs is not None:
+            final_options_dict['outputSRS'] = target_srs.ExportToWkt(['FORMAT=WKT2_2019'])
+
+        # Note: Alpha band stripping is handled entirely by the preprocessor via _create_intermediate_with_mask()
+        # which converts alpha to an internal mask. The final translate will preserve this structure automatically.
+
+        # Handle NoData value for final output
+        # Note: preprocessor may have unset NoData if it was invalid
+        if input_info.nodata is not None:
+            if args.mask_nodata:
+                # Unset NoData value when using internal mask
                 if args.cog:
-                    final_creation_options.append(f"QUALITY={args.quality}")
-                else:
-                    final_creation_options.append(f"JPEG_QUALITY={args.quality}")
-                    final_creation_options.append('PHOTOMETRIC=YCBCR')
-            elif args.algorithm == CA.JXL.value and args.quality is not None:
-                jxl_options = _get_jxl_options(args.quality)
-                final_creation_options.extend(jxl_options)
-            elif args.algorithm in [CA.LERC.value, CA.LERC_DEFLATE.value, CA.LERC_ZSTD.value]:
-                final_creation_options.append(f'MAX_Z_ERROR={args.max_z_error}')
+                    final_options_dict['noData'] = 'none'
+            elif args.nodata is not None:  # User specified a NoData value
+                final_options_dict['noData'] = args.nodata
+            else:  # Keep existing valid NoData from source (may have been modified by preprocessor)
+                final_options_dict['noData'] = input_info.nodata
+        elif args.nodata is not None:  # New NoData assignment
+            final_options_dict['noData'] = args.nodata
 
-            # Compression level: the COG driver uses LEVEL; the GTiff driver uses ZLEVEL
-            # (deflate) / ZSTD_LEVEL (zstd) -- which also covers the LERC_DEFLATE/LERC_ZSTD
-            # backends. Passing LEVEL= to the GTiff driver is silently ignored, so branch.
-            if args.level:
-                if args.algorithm in [CA.DEFLATE.value, CA.LERC_DEFLATE.value]:
-                    final_creation_options.append(f'LEVEL={args.level}' if args.cog else f'ZLEVEL={args.level}')
-                elif args.algorithm in [CA.ZSTD.value, CA.LERC_ZSTD.value]:
-                    final_creation_options.append(f'LEVEL={args.level}' if args.cog else f'ZSTD_LEVEL={args.level}')
+        stats = calculate_statistics(temp_ds)
+        if args.product_type in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value]:
+            final_options_dict['resampleAlg'] = gdal.GRA_Bilinear
+        else:
+            final_options_dict['resampleAlg'] = gdal.GRA_NearestNeighbour
 
-            logger.info(f"Final creation options set: {final_creation_options}")
+        # Ensure output directory exists before attempting to write the file
+        if args.output_path is None:
+            raise ProcessingStepFailedError("No output_path provided for the final output file.")
+        out_dir = args.output_path.parent
+        try:
+            if not out_dir.exists():
+                logger.info(f"Creating output directory: {out_dir}")
+                out_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            raise ProcessingStepFailedError(f"Failed to create output directory '{out_dir}': {e}")
+    
+        logger.info(f"Creating {'COG' if args.cog else 'GeoTIFF'} at {args.output_path}")
 
-            # --- 4. Build and round overviews on intermediate file (ONLY if rounding workflow) ---
-            if should_round_overviews:
-                if tracker:
-                    tracker.start("overview_creation")
-            
-                # Type guard: should_round_overviews is True means args.decimals is not None
-                assert args.decimals is not None, "args.decimals must be set when should_round_overviews is True"
-            
-                logger.info("Building internal overviews on intermediate file for rounding (float data, no mask).")
-                resample_alg = args.overview_resampling
-                overview_list = _calculate_overview_levels(input_info.x_size, input_info.y_size, tile_size=args.tile_size)
-                logger.info(f"Using overview levels: {', '.join(map(str, overview_list))}")
-
-                overview_options = [
-                    'COMPRESS=NONE',  # Always uncompressed on intermediate file for rounding
+        # Use the actual dataset description (file path), not the original temp_path
+        # If alpha was converted to mask, temp_ds points to "masked.tif", not "intermediate.tif"
+        actual_temp_path = temp_ds.GetDescription()       
+        if args.cog:
+            # For COG driver, use Translate
+            final_options = gdal.TranslateOptions(**final_options_dict)
+            final_ds = gdal.Translate(str(args.output_path), actual_temp_path, options=final_options)
+            if final_ds is None:
+                raise ProcessingStepFailedError("gdal.Translate failed to create COG.")
+        else:
+            # For GTiff driver (cog=False), use CreateCopy to preserve all internal structures
+            logger.info("Using CreateCopy() for GTiff format to preserve internal structures.")
+            driver = gdal.GetDriverByName('GTiff')
+            final_ds = driver.CreateCopy(str(args.output_path), temp_ds, options=final_creation_options)
+            if final_ds is None:
+                raise ProcessingStepFailedError("CreateCopy failed to create GeoTIFF.")
+        final_ds.FlushCache()
+        if not Path(args.output_path).is_file():
+            raise ProcessingStepFailedError(f"The output {args.output_path} was not written.")
+    
+        if tracker:
+            tracker.stop("final_translate")
+    
+        # --- 6. Build external overviews for GTiff if using standard workflow ---
+        if not args.cog and args.overviews and not should_round_overviews:
+            if tracker:
+                tracker.start("external_overviews")
+        
+            logger.info("Building external overviews on final GTiff file (standard workflow)...")
+            resample_alg = args.overview_resampling
+            overview_list = _calculate_overview_levels(input_info.x_size, input_info.y_size, tile_size=args.tile_size)
+            logger.info(f"Using overview levels: {', '.join(map(str, overview_list))}")
+        
+            # Reopen as update to build overviews
+            final_ds_for_overviews = gdal.Open(str(args.output_path), gdal.GA_Update)
+            if final_ds_for_overviews:
+                overview_options_external = [
+                    f'COMPRESS={args.algorithm}',
                 ]
 
-                # Set overview block size using GDAL config option (TILED/BLOCKXSIZE/BLOCKYSIZE not supported for overviews)
-                old_ovr_blocksize = gdal.GetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE')
-                gdal.SetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE', str(args.tile_size))
+                # Add predictor if applicable
+                if (args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value]
+                        and args.predictor and int(args.predictor) != 1):
+                    overview_options_external.append(f'PREDICTOR={args.predictor}')
 
-                temp_ds.BuildOverviews(resampling=resample_alg, overviewlist=overview_list, options=overview_options)
+                # Match the main-band compression level on external GTiff overviews
+                if args.level and args.algorithm == CA.DEFLATE.value:
+                    overview_options_external.append(f'ZLEVEL={args.level}')
+                elif args.level and args.algorithm == CA.ZSTD.value:
+                    overview_options_external.append(f'ZSTD_LEVEL={args.level}')
 
-                # Restore original config option
-                gdal.SetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE', old_ovr_blocksize)
-            
-                logger.info(f"Rounding overviews to {args.decimals} decimal places...")
-                temp_ds = round_overviews(temp_ds, args.decimals)
-            
-                if tracker:
-                    tracker.stop("overview_creation")
-
-            # --- 5. Create final COG or GeoTIFF ---
-            if tracker:
-                tracker.start("final_translate")
-            
-            final_options_dict = {
-                'format': 'COG' if args.cog else 'GTiff',
-                'creationOptions': final_creation_options,
-                'stats': True,
-                'callback': format_gdal_progress if not arcMode else None,
-                'callback_data': progress_callback_data if not arcMode else None
-            }
-
-            # Re-assert the resolved SRS on the final write rather than letting it flow
-            # through the intermediate's GeoTIFF keys.  A compound CRS survives that
-            # round-trip only partially: the vertical component comes back identified by
-            # its datum (VerticalDatumGeoKey) and loses its own EPSG code, so the output
-            # names EGM2008 without ever citing EPSG:3855.  This is -a_srs, an assignment:
-            # pixels and the geotransform are untouched.
-            if target_srs is not None:
-                final_options_dict['outputSRS'] = target_srs.ExportToWkt(['FORMAT=WKT2_2019'])
-
-            # Note: Alpha band stripping is handled entirely by the preprocessor via _create_intermediate_with_mask()
-            # which converts alpha to an internal mask. The final translate will preserve this structure automatically.
-
-            # Handle NoData value for final output
-            # Note: preprocessor may have unset NoData if it was invalid
-            if input_info.nodata is not None:
-                if args.mask_nodata:
-                    # Unset NoData value when using internal mask
-                    if args.cog:
-                        final_options_dict['noData'] = 'none'
-                elif args.nodata is not None:  # User specified a NoData value
-                    final_options_dict['noData'] = args.nodata
-                else:  # Keep existing valid NoData from source (may have been modified by preprocessor)
-                    final_options_dict['noData'] = input_info.nodata
-            elif args.nodata is not None:  # New NoData assignment
-                final_options_dict['noData'] = args.nodata
-
-            stats = calculate_statistics(temp_ds)
-            if args.product_type in [PT.DEM.value, PT.ERROR.value, PT.SCIENTIFIC.value]:
-                final_options_dict['resampleAlg'] = gdal.GRA_Bilinear
-            else:
-                final_options_dict['resampleAlg'] = gdal.GRA_NearestNeighbour
-
-            # Ensure output directory exists before attempting to write the file
-            if args.output_path is None:
-                raise ProcessingStepFailedError("No output_path provided for the final output file.")
-            out_dir = args.output_path.parent
-            try:
-                if not out_dir.exists():
-                    logger.info(f"Creating output directory: {out_dir}")
-                    out_dir.mkdir(parents=True, exist_ok=True)
-            except Exception as e:
-                raise ProcessingStepFailedError(f"Failed to create output directory '{out_dir}': {e}")
-        
-            logger.info(f"Creating {'COG' if args.cog else 'GeoTIFF'} at {args.output_path}")
-
-            # Use the actual dataset description (file path), not the original temp_path
-            # If alpha was converted to mask, temp_ds points to "masked.tif", not "intermediate.tif"
-            actual_temp_path = temp_ds.GetDescription()       
-            if args.cog:
-                # For COG driver, use Translate
-                final_options = gdal.TranslateOptions(**final_options_dict)
-                final_ds = gdal.Translate(str(args.output_path), actual_temp_path, options=final_options)
-                if final_ds is None:
-                    raise ProcessingStepFailedError("gdal.Translate failed to create COG.")
-            else:
-                # For GTiff driver (cog=False), use CreateCopy to preserve all internal structures
-                logger.info("Using CreateCopy() for GTiff format to preserve internal structures.")
-                driver = gdal.GetDriverByName('GTiff')
-                final_ds = driver.CreateCopy(str(args.output_path), temp_ds, options=final_creation_options)
-                if final_ds is None:
-                    raise ProcessingStepFailedError("CreateCopy failed to create GeoTIFF.")
-        
-            if tracker:
-                tracker.stop("final_translate")
-        
-            # --- 6. Build external overviews for GTiff if using standard workflow ---
-            if not args.cog and args.overviews and not should_round_overviews:
-                if tracker:
-                    tracker.start("external_overviews")
-            
-                logger.info("Building external overviews on final GTiff file (standard workflow)...")
-                resample_alg = args.overview_resampling
-                overview_list = _calculate_overview_levels(input_info.x_size, input_info.y_size, tile_size=args.tile_size)
-                logger.info(f"Using overview levels: {', '.join(map(str, overview_list))}")
-            
-                # Reopen as update to build overviews
-                final_ds_for_overviews = gdal.Open(str(args.output_path), gdal.GA_Update)
-                if final_ds_for_overviews:
-                    overview_options_external = [
-                        f'COMPRESS={args.algorithm}',
-                    ]
-
-                    # Add predictor if applicable
-                    if (args.algorithm in [CA.LZW.value, CA.DEFLATE.value, CA.ZSTD.value]
-                            and args.predictor and int(args.predictor) != 1):
-                        overview_options_external.append(f'PREDICTOR={args.predictor}')
-
-                    # Match the main-band compression level on external GTiff overviews
-                    if args.level and args.algorithm == CA.DEFLATE.value:
-                        overview_options_external.append(f'ZLEVEL={args.level}')
-                    elif args.level and args.algorithm == CA.ZSTD.value:
-                        overview_options_external.append(f'ZSTD_LEVEL={args.level}')
-
-                    # Set overview block size using GDAL config option (TILED/BLOCKXSIZE/BLOCKYSIZE not supported for overviews)
-                    old_ovr_blocksize = gdal.GetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE')
-                    gdal.SetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE', str(args.tile_size))
-
+                with gdal.config_option('GDAL_TIFF_OVR_BLOCKSIZE', str(args.tile_size)):
                     final_ds_for_overviews.BuildOverviews(
                         resampling=resample_alg.upper(),
                         overviewlist=overview_list,
                         options=overview_options_external
                     )
 
-                    # Restore original config option
-                    gdal.SetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE', old_ovr_blocksize)
-
-                    final_ds_for_overviews = None
-                    logger.info(f"External overviews built successfully with {args.algorithm} compression.")
-                else:
-                    logger.warning("Failed to open final file for external overview building.")
-            
-                if tracker:
-                    tracker.stop("external_overviews")
+                final_ds_for_overviews = None
+                logger.info(f"External overviews built successfully with {args.algorithm} compression.")
+            else:
+                raise ProcessingStepFailedError(
+                    f"Could not reopen {args.output_path} to build the requested overviews.")
         
-            # --- 7. Write external .aux.xml if requested ---
-            if args.write_pam_xml:
-                logger.info("Writing external .aux.xml file for the final dataset...")
-                if stats:
-                    pam_data = build_pam_data_from_stats(stats, temp_ds)
-                    write_pam_xml(str(args.output_path), pam_data)
-                else:
-                    logger.warning("No statistics available to write to .aux.xml file.")
+            if tracker:
+                tracker.stop("external_overviews")
+    
+        # --- 7. Write external .aux.xml if requested ---
+        if args.write_pam_xml:
+            logger.info("Writing external .aux.xml file for the final dataset...")
+            if not stats:
+                raise ProcessingStepFailedError(
+                    f"Statistics could not be computed, so the requested .aux.xml was not written; "
+                    f"the output {args.output_path} itself was.")
+            pam_data = build_pam_data_from_stats(stats, temp_ds)
+            write_pam_xml(str(args.output_path), pam_data)
+            if not Path(f"{args.output_path}.aux.xml").is_file():
+                raise ProcessingStepFailedError(
+                    f"The requested .aux.xml was not written beside {args.output_path}, "
+                    f"which itself was.")
 
     finally:
         # GDAL releases a dataset only when the last Python reference goes away.
@@ -585,10 +583,8 @@ def optimize_compression(args: OptimizeArguments, tracker: Optional[PerformanceT
         return _optimize_compression_inner(args, tracker)
 
 
-def _optimize_compression_inner(args: OptimizeArguments, tracker: Optional[PerformanceTracker] = None):
-    global arcMode
-    arcMode = args.arc_mode or False
-
+def _optimize_compression_inner(args: OptimizeArguments, tracker: Optional[PerformanceTracker] = None) -> int:
+    """0 when every file was optimized, 1 when any was not."""
     if not args.input_path:
         logger.error("A valid input path is required.")
         return 1
@@ -605,21 +601,29 @@ def _optimize_compression_inner(args: OptimizeArguments, tracker: Optional[Perfo
             if args.open_report and args.report:
                 logger.info("Directory input: not auto-opening one report per file.")
                 args.open_report = False
-            
+
+            failed = []
             for file_path_str in geotiff_files:
                 file_path = Path(file_path_str)
                 out_file = prepare_output_path(str(args.input_path), str(output_dir), str(file_path))
                 
-                # Create a copy of the arguments for each file
-                current_args = OptimizeArguments(**vars(args))
-                current_args.input_path = file_path
-                current_args.output_path = Path(out_file)
+                # One argument set per file, validated for that file: built with the file's
+                # own paths, so the per-file checks (single-band DEMs, not in place) run on
+                # it. Building it with the directory and assigning the paths afterwards let a
+                # multi-band raster through a `-t dem` batch unchecked.
+                current_args = OptimizeArguments(**{**vars(args), 'input_path': file_path,
+                                                    'output_path': Path(out_file)})
                 
                 try:
                     _process_single_file(current_args, tracker)
                 except Exception as e:
                     logger.error(f"Error processing {file_path.name}: {e}")
+                    failed.append(file_path.name)
                     continue
+            if failed:
+                logger.error(f"{len(failed)} of {len(geotiff_files)} files failed: {', '.join(failed[:10])}"
+                             f"{'...' if len(failed) > 10 else ''}")
+                return 1
         else: # single file case
             try:
                 return _process_single_file(args, tracker)

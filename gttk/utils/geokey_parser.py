@@ -513,10 +513,13 @@ def is_geotiff(filepath: Path) -> bool:
         return False
 
     try:
-        # Suppress GDAL errors for invalid files
+        # Suppress GDAL errors for invalid files. The pop runs whether or not Open raises
+        # (it does, with exceptions on), or the quiet handler stays on this thread's stack.
         gdal.PushErrorHandler('CPLQuietErrorHandler')
-        ds = gdal.Open(str(filepath))
-        gdal.PopErrorHandler()
+        try:
+            ds = gdal.Open(str(filepath))
+        finally:
+            gdal.PopErrorHandler()
 
         if ds is None:
             logger.warning(f"{filepath}: GDAL could not open it; skipped")

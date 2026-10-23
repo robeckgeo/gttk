@@ -189,8 +189,10 @@ def validate(ds, check_tiled=True, full_check=False):
     opened_ds = None
     if isinstance(ds, (str, unicode_type)):
         gdal.PushErrorHandler()
-        ds = gdal.Open(ds)
-        gdal.PopErrorHandler()
+        try:
+            ds = gdal.Open(ds)
+        finally:
+            gdal.PopErrorHandler()
         if ds is None:
             raise ValidateCloudOptimizedGeoTIFFException(
                 "Invalid file : %s" % gdal.GetLastErrorMsg()

@@ -959,3 +959,238 @@ class TestMainPreprocessingPipeline:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
+
+
+# ==============================================================================
+# CATEGORY 6: PRODUCT HEADERS -- THE SOFTWARE STAMP, NODATA-SAFE ROUNDING, GEO_METADATA
+# ==============================================================================
+
+from gttk.utils.xml_formatter import canonical_xml  # noqa: E402
+
+
+def _dem_args(**overrides):
+    """OptimizeArguments-shaped mock for a Float32 DEM run through DEFLATE."""
+    args = Mock(spec=OptimizeArguments)
+    values = dict(algorithm='DEFLATE', product_type='dem', decimals=2, nodata=None, mask_nodata=None,
+                  mask_alpha=False, vertical_srs=None, raster_type=None, geo_metadata=False,
+                  discard_lsb=False, software_stamp=True)
+    values.update(overrides)
+    for name, value in values.items():
+        setattr(args, name, value)
+    return args
+
+
+def _float_dataset(data: np.ndarray, nodata=None) -> gdal.Dataset:
+    ds = gdal.GetDriverByName('MEM').Create('', data.shape[1], data.shape[0], 1, gdal.GDT_Float32)
+    band = ds.GetRasterBand(1)
+    band.WriteArray(data)
+    if nodata is not None:
+        band.SetNoDataValue(float(nodata))
+    return ds
+
+
+def _run(original_ds, args, info, metadata=None):
+    """(pixels, nodata, dataset metadata) of the preprocessed intermediate."""
+    with Workspace() as workspace:
+        result = preprocess_geotiff(original_ds, workspace, args, info, None, metadata if metadata is not None else {})
+        band = result.GetRasterBand(1)
+        return band.ReadAsArray(), band.GetNoDataValue(), result.GetMetadata()
+
+
+def _capture(logger_name):
+    """A list that receives the records a logger emits; detach with the returned handler."""
+    records = []
+    handler = logging.Handler()
+    handler.emit = records.append
+    logging.getLogger(logger_name).addHandler(handler)
+    return records, handler
+
+
+class TestSoftwareStamp:
+    """--software-stamp False leaves TIFFTAG_SOFTWARE as the producer wrote it."""
+
+    def test_helper_text(self):
+        from gttk import __version__
+        suffix = f' - optimized by GeoTIFF ToolKit v{__version__}'
+        assert pre.software_tag('Producer 1.0') == 'Producer 1.0' + suffix
+        assert pre.software_tag(' Producer 1.0 ') == 'Producer 1.0' + suffix
+        assert pre.software_tag(None) == f'GeoTIFF ToolKit v{__version__}'
+        assert pre.software_tag('') == f'GeoTIFF ToolKit v{__version__}'
+        assert pre.software_tag('Producer 1.0', stamp=False) == 'Producer 1.0'
+        assert pre.software_tag(None, stamp=False) is None
+
+    def test_stamp_true_writes_the_exact_text(self, mock_geotiff_info):
+        from gttk import __version__
+        data = np.full((32, 32), 1.5, np.float32)
+        _, _, metadata = _run(_float_dataset(data), _dem_args(decimals=None), mock_geotiff_info,
+                              {'TIFFTAG_SOFTWARE': 'PRODUCER', 'CUSTOM': 'kept'})
+        assert metadata['TIFFTAG_SOFTWARE'] == f'PRODUCER - optimized by GeoTIFF ToolKit v{__version__}'
+        assert metadata['CUSTOM'] == 'kept'
+
+    def test_stamp_false_leaves_the_tag_as_the_producer_wrote_it(self, mock_geotiff_info):
+        data = np.full((32, 32), 1.5, np.float32)
+        _, _, metadata = _run(_float_dataset(data), _dem_args(decimals=None, software_stamp=False),
+                              mock_geotiff_info, {'TIFFTAG_SOFTWARE': 'PRODUCER', 'CUSTOM': 'kept'})
+        assert metadata['TIFFTAG_SOFTWARE'] == 'PRODUCER'
+        assert metadata['CUSTOM'] == 'kept'
+
+    def test_stamp_false_adds_no_tag(self, mock_geotiff_info):
+        data = np.full((32, 32), 1.5, np.float32)
+        _, _, metadata = _run(_float_dataset(data), _dem_args(decimals=None, software_stamp=False),
+                              mock_geotiff_info, {'CUSTOM': 'kept'})
+        assert 'TIFFTAG_SOFTWARE' not in metadata
+
+
+class TestRoundingNeverTouchesNoData:
+    """--decimals rounds the data, and only the data: NoData and non-finite pixels keep their bits."""
+
+    @staticmethod
+    def _data(nodata):
+        data = np.full((300, 64), 123.456, np.float32)   # 300 rows: more than one 256-row block
+        data[0, 0], data[0, 1], data[0, 2] = np.nan, np.inf, -np.inf
+        if not np.isnan(nodata):
+            data[1, :5] = nodata
+        data[2, :] = 0.0049                               # rounds to zero
+        return data
+
+    @pytest.mark.parametrize('nodata', [-99999.123, -9999.0, np.nan])
+    def test_sentinels_survive_bit_exact(self, mock_geotiff_info, nodata):
+        source = self._data(nodata)
+        mock_geotiff_info.nodata = nodata   # the pipeline reads the input's NoData from its info
+        result, nd, _ = _run(_float_dataset(source, nodata), _dem_args(decimals=2), mock_geotiff_info)
+        sentinel = ~np.isfinite(source)
+        if not np.isnan(nodata):
+            sentinel |= (source == np.float32(nodata))
+        assert sentinel.sum() == (3 if np.isnan(nodata) else 8)
+        assert np.array_equal(result.view(np.uint32)[sentinel], source.view(np.uint32)[sentinel])
+        expected = np.round(source[~sentinel].astype(np.float64), 2).astype(np.float32)
+        assert np.array_equal(result[~sentinel], expected)
+        assert np.isnan(nd) if np.isnan(nodata) else nd == nodata
+
+    def test_reads_strips_not_the_whole_band(self, mock_geotiff_info, monkeypatch):
+        monkeypatch.setattr(pre, 'STRIP_TARGET_BYTES', 1024)
+        calls = []
+        real = gdal.Band.ReadAsArray
+
+        def spy(self, *args, **kwargs):
+            calls.append(args)
+            return real(self, *args, **kwargs)
+
+        monkeypatch.setattr(gdal.Band, 'ReadAsArray', spy)
+        source = self._data(np.nan)
+        _run(_float_dataset(source, np.nan), _dem_args(decimals=2), mock_geotiff_info)
+        strips = [a for a in calls if len(a) == 4 and a[2] == 64]
+        assert [(a[1], a[3]) for a in strips] == [(0, 256), (256, 44)]
+
+    def test_an_all_nodata_band_warns_and_succeeds(self, mock_geotiff_info):
+        records, handler = _capture('gttk.utils.preprocessor')
+        try:
+            source = np.full((32, 32), np.nan, np.float32)
+            result, _, _ = _run(_float_dataset(source, np.nan), _dem_args(decimals=2), mock_geotiff_info)
+        finally:
+            logging.getLogger('gttk.utils.preprocessor').removeHandler(handler)
+        assert np.all(np.isnan(result))
+        assert any('no rounding applied' in r.getMessage() for r in records)
+
+    def test_a_failed_write_raises(self, mock_geotiff_info, monkeypatch):
+        source_ds = _float_dataset(self._data(np.nan), np.nan)
+        monkeypatch.setattr(gdal.Band, 'WriteArray', lambda self, *a, **kw: 1)
+        with pytest.raises(ProcessingStepFailedError, match='after rounding'):
+            _run(source_ds, _dem_args(decimals=2), mock_geotiff_info)
+
+
+class TestOverviewRoundingKeepsNoData:
+
+    @staticmethod
+    def _with_overviews(path, nodata):
+        data = np.full((300, 300), 123.456, np.float32)
+        data[:60, :] = np.float32(nodata)
+        ds = gdal.GetDriverByName('GTiff').Create(str(path), 300, 300, 1, gdal.GDT_Float32)
+        band = ds.GetRasterBand(1)
+        band.WriteArray(data)
+        band.SetNoDataValue(nodata)
+        ds.FlushCache()
+        ds.BuildOverviews('NEAREST', [2], options=['COMPRESS=NONE'])
+        return ds
+
+    def test_overview_nodata_pixels_are_untouched(self, tmp_path):
+        nodata = -99999.123
+        ds = round_overviews(self._with_overviews(tmp_path / 'ovr.tif', nodata), 2)
+        overview = ds.GetRasterBand(1).GetOverview(0).ReadAsArray()
+        ds = None
+        assert np.all(overview[:30, :] == np.float32(nodata))
+        assert np.all(overview[30:, :] == np.float32(123.46))
+
+    def test_a_failed_overview_write_raises(self, tmp_path, monkeypatch):
+        ds = self._with_overviews(tmp_path / 'ovr.tif', -9999.0)
+        monkeypatch.setattr(gdal.Band, 'WriteArray', lambda self, *a, **kw: 1)
+        with pytest.raises(ProcessingStepFailedError, match='Overview 0 of band 1'):
+            round_overviews(ds, 2)
+        ds = None
+
+
+class TestGeoMetadataStep:
+    """-g True finds a sidecar; a path names the record; either is embedded readable and unchanged."""
+
+    RECORD = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+              '<?xml-stylesheet type="text/xsl" href="record.xsl"?>\n'
+              '<gmd:MD_Metadata xmlns:gmd="http://www.isotc211.org/2005/gmd" '
+              'xmlns:gco="http://www.isotc211.org/2005/gco"><gmd:fileIdentifier>'
+              '<gco:CharacterString>SRC_N00E000_01.xml</gco:CharacterString></gmd:fileIdentifier>'
+              '</gmd:MD_Metadata>\n')
+
+    @staticmethod
+    def _info(tmp_path, name='dem.tif'):
+        info = Mock(spec=GeoTiffInfo)
+        info.x_size, info.y_size, info.bands = 32, 32, 1
+        info.nodata, info.data_type, info.has_alpha = None, 'Float32', False
+        info.transparency_info, info.vertical_srs = {}, None
+        info.filepath = str(tmp_path / name)
+        return info
+
+    @staticmethod
+    def _source(existing_record=None):
+        ds = _float_dataset(np.full((32, 32), 1.0, np.float32))
+        if existing_record:
+            ds.SetMetadataItem('GEO_METADATA', existing_record)
+        return ds
+
+    def test_an_explicit_record_is_embedded_and_readable(self, tmp_path):
+        record = tmp_path / 'record.xml'
+        record.write_text(self.RECORD, encoding='utf-8')
+        _, _, metadata = _run(self._source(), _dem_args(decimals=None, geo_metadata=record), self._info(tmp_path))
+        embedded = metadata['GEO_METADATA']
+        assert canonical_xml(embedded) == canonical_xml(self.RECORD)
+        assert '\n  <gmd:fileIdentifier>\n    <gco:CharacterString>' in embedded
+        assert '<?xml-stylesheet type="text/xsl" href="record.xsl"?>' in embedded
+
+    def test_an_explicit_record_replaces_the_inputs(self, tmp_path):
+        record = tmp_path / 'record.xml'
+        record.write_text(self.RECORD, encoding='utf-8')
+        _, _, metadata = _run(self._source('<old/>'), _dem_args(decimals=None, geo_metadata=record),
+                              self._info(tmp_path))
+        assert canonical_xml(metadata['GEO_METADATA']) == canonical_xml(self.RECORD)
+
+    def test_the_inputs_record_passes_through_untouched(self, tmp_path):
+        flat = '<old a="1"><b>t</b></old>'
+        _, _, metadata = _run(self._source(flat), _dem_args(decimals=None), self._info(tmp_path))
+        assert metadata['GEO_METADATA'] == flat
+
+    def test_a_missing_record_raises(self, tmp_path):
+        with pytest.raises(ProcessingStepFailedError, match='not found'):
+            _run(self._source(), _dem_args(decimals=None, geo_metadata=tmp_path / 'missing.xml'), self._info(tmp_path))
+
+    def test_a_malformed_record_raises(self, tmp_path):
+        bad = tmp_path / 'bad.xml'
+        bad.write_text('<unclosed>', encoding='utf-8')
+        with pytest.raises(ProcessingStepFailedError, match='well-formed'):
+            _run(self._source(), _dem_args(decimals=None, geo_metadata=bad), self._info(tmp_path))
+
+    def test_true_without_a_sidecar_is_a_success(self, tmp_path):
+        _, _, metadata = _run(self._source(), _dem_args(decimals=None, geo_metadata=True), self._info(tmp_path, 'alone.tif'))
+        assert 'GEO_METADATA' not in metadata
+
+    def test_true_with_a_sidecar_embeds_it(self, tmp_path):
+        (tmp_path / 'dem.xml').write_text(self.RECORD, encoding='utf-8')
+        _, _, metadata = _run(self._source(), _dem_args(decimals=None, geo_metadata=True), self._info(tmp_path, 'dem.tif'))
+        assert canonical_xml(metadata['GEO_METADATA']) == canonical_xml(self.RECORD)

@@ -206,6 +206,19 @@ GTTK does not call it at import. The CLI (`gttk/main.py`), the ArcGIS toolbox an
 test suite each call it for themselves; a library consumer should do the same, or rely on
 `gdal_env()` around the calls it makes.
 
+**Operations may share a process.** `gdal_env()` applies GTTK's configuration through
+GDAL's thread-local options, which every GDAL call on that thread consults before the
+process-wide value, so two threads running GTTK operations do not see each other's
+settings and a host thread keeps its own; GDAL's exception mode is per thread as well.
+Every option GTTK sets is read on the thread that makes the call (the SRS export format,
+the GeoTIFF open and create paths, PAM, the overview block size). Per-run state lives in
+per-call objects: `optimize_compression.ProgressBar` and the `Workspace`, whose
+`/vsimem` prefix is a fresh UUID. Two things are per process by design and are documented
+in the README: `UseExceptions()`, and PROJ's network flag, which `gdal_env()` counts under
+a lock so that the first operation to enter switches it off and the last to leave restores
+the host's setting. `tests/unit/test_import_side_effects.py` holds all of this, and
+`tests/integration/test_concurrent_optimize.py` runs two optimizations on two threads.
+
 **Logging goes to the `gttk` logger, never root.** Every module uses
 `logging.getLogger(__name__)`, which places it under `gttk.*`, and logs through that
 logger -- never through `logging.debug()` and its siblings, which are the root logger's
@@ -232,19 +245,25 @@ the formatters that render them.
 
 ## Understanding the Processing Pipeline
 
-`gttk optimize` uses a sophisticated, multi-step pipeline to process your data. Its intermediate
-rasters are held in GDAL's virtual file system, so nothing is written to disk between the steps --
-unless they would not fit in memory. `Workspace.plan_for` sizes them from the input (two copies,
-uncompressed) and writes them beside the output when they exceed half the free memory, which for
-a 91,445 x 53,704 four-band orthophoto is about 36 GB. The output is the same either way.
+`gttk optimize` is a multi-step pipeline (`gttk/tools/optimize_compression.py` orchestrates,
+`gttk/utils/preprocessor.py` does the preprocessing). Its intermediate rasters are held in
+GDAL's virtual file system, so nothing is written to disk between the steps -- unless they would
+not fit in memory. `Workspace.plan_for` sizes them from the input (two copies, uncompressed)
+before the first one is created and writes them beside the output when they exceed half the
+free memory, which for a 91,445 x 53,704 four-band orthophoto is about 36 GB. The output is the
+same either way.
 
 1. **Initial Read & Analysis**: Opens the input file and gathers key metadata (resolution, data type, spatial reference system)
 2. **SRS Handling**: Checks for and parses compound SRS; creates new compound SRS if `--vertical-srs` is provided
-3. **SRS Assignment**: Writes the resolved SRS as WKT2. This is an assignment, not a warp -- pixels and the geotransform are never touched, so a file's georeferencing cannot shift. GTTK does not reproject; use `gdalwarp` first if you need a different CRS
+3. **Intermediate Copy**: A tiled, LZW-compressed copy of the input, in memory or beside the output
 4. **Alpha-to-Mask Conversion** (for images): Converts alpha channel to internal mask for better COG compatibility and compression
-5. **Rounding** (for floats): Performs block-based rounding for large floating-point rasters, allowing efficient processing of files too large for RAM
-6. **Statistics**: One pass over the intermediate. Its numbers become the `.aux.xml` sidecar; a raster too large for memory is read block by block, so this pass is not free and there is only one of it.
-7. **Final Compression and COG Creation**: The processed dataset is passed to the COG driver for compression and writing. Overviews are generated at this stage.
+5. **NoData**: An invalid or extreme NoData value is remapped (to NaN for float data); `--nodata` remaps; `--mask-nodata` moves NoData into the mask
+6. **Rounding** (for floats): `--decimals` rounds the data strip by strip (a whole number of block rows, about 16 MB at a time), through float64 so that decimals beyond the dtype's precision are a true no-op. Only finite pixels that are not the NoData value are touched: NoData, NaN and infinities keep their exact bits
+7. **Metadata**: The input's metadata items and `TIFFTAG_*` values are carried across; `TIFFTAG_SOFTWARE` is stamped unless `--software-stamp False`; `AREA_OR_POINT` is set for the product type; a `--geo-metadata` record is pretty-printed losslessly (verified by C14N) and embedded in tag 50909, while a record the input already carries passes through byte for byte
+8. **SRS Assignment**: Writes the resolved SRS as WKT2. This is an assignment, not a warp -- pixels and the geotransform are never touched, so a file's georeferencing cannot shift. GTTK does not reproject; use `gdalwarp` first if you need a different CRS
+9. **Overviews**: For rounded float data with a lossless codec and no mask they are built uncompressed on the intermediate and rounded the same way as the data, then copied into the output; otherwise the COG driver builds them with the stated kernel
+10. **Statistics**: One pass over the intermediate. Its numbers become the `.aux.xml` sidecar; a raster too large for memory is read block by block, so this pass is not free and there is only one of it
+11. **Final Compression and COG Creation**: The processed dataset is passed to the COG driver for compression and writing. The run then checks that the output, and every artifact asked for (the report, the `.aux.xml`), exists; a missing one is a failure and the exit status says so
 
 ## Esri CRS Name to EPSG Lookup
 

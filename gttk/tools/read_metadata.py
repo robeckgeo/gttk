@@ -112,8 +112,10 @@ def _generate_report_summary(input_path: str) -> str:
     # Build FileInfo table
     try:
         gdal.PushErrorHandler('CPLQuietErrorHandler')
-        ds = gdal.Open(str(filepath), gdal.GA_ReadOnly)
-        gdal.PopErrorHandler()
+        try:
+            ds = gdal.Open(str(filepath), gdal.GA_ReadOnly)
+        finally:
+            gdal.PopErrorHandler()
 
         if ds and ds.RasterCount > 0:
             # Get metadata for FileInfo

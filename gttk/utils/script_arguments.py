@@ -94,7 +94,12 @@ class OptimizeArguments(BaseArguments):
     max_z_error: Optional[float] = None
     level: Optional[int] = None
     quality: Optional[int] = None
-    geo_metadata: bool = False
+    #: False: nothing. True: embed the external XML record found beside the input
+    #: (find_xml_metadata_file). A path: embed that record.
+    geo_metadata: Union[bool, str, Path] = False
+    #: Append " - optimized by GeoTIFF ToolKit v<version>" to TIFFTAG_SOFTWARE (or set it).
+    #: False leaves the input's tag as it is, for a product header already written.
+    software_stamp: bool = True
     write_pam_xml: bool = True
     tile_size: int = 512
     mask_alpha: Optional[bool] = None
@@ -188,6 +193,12 @@ class OptimizeArguments(BaseArguments):
             raise ValueError("Vertical SRS must be specified for DEM product type.")
         if self.product_type == PT.THEMATIC.value and self.mask_nodata is True:
             raise ValueError("Thematic products should not have transparency masks.")
+
+        if self.geo_metadata and not isinstance(self.geo_metadata, bool):
+            record = Path(self.geo_metadata)
+            if not record.is_file():
+                raise ValueError(f"GEO_METADATA record not found: {record}")
+            self.geo_metadata = record
 
         if self.input_path and isinstance(self.input_path, Path):
             if not self.input_path.exists():

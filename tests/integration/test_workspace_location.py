@@ -60,7 +60,7 @@ def _digests(source, out_dir, name, **overrides):
     kwargs = dict(input_path=source, output_path=output, product_type='image', algorithm='JPEG',
                   quality=90, report=False, open_report=False, arc_mode=True)
     kwargs.update(overrides)
-    assert ocmp.optimize_compression(OptimizeArguments(**kwargs)) != 1
+    assert ocmp.optimize_compression(OptimizeArguments(**kwargs)) == 0
     sidecar = out_dir / f'{name}.tif.aux.xml'
     return (hashlib.md5(output.read_bytes()).hexdigest(),
             hashlib.md5(sidecar.read_bytes()).hexdigest())
@@ -73,6 +73,26 @@ class TestEitherLocationGivesTheSameFile:
         monkeypatch.setattr(preprocessor, 'workspace_fits_in_memory', lambda *a, **kw: False)
         on_disk = _digests(rgba, tmp_path, 'disk')
         assert on_disk == in_memory
+
+    def test_the_disk_path_is_actually_taken(self, rgba, tmp_path, monkeypatch):
+        """0.12.0 registered an intermediate before the workspace was sized, so plan_for()
+        saw a committed workspace and never chose disk: this test passed on the memory path
+        twice. The intermediates must now exist beside the output while the run is going."""
+        monkeypatch.setattr(preprocessor, 'workspace_fits_in_memory', lambda *a, **kw: False)
+        seen = {}
+        real = preprocessor.Workspace.get_temp_path
+
+        def spy(self, filename):
+            path = real(self, filename)
+            seen['on_disk'] = self.on_disk
+            seen['beside_output'] = sorted(p.name[:15] for p in tmp_path.iterdir() if p.is_dir())
+            return path
+
+        monkeypatch.setattr(preprocessor.Workspace, 'get_temp_path', spy)
+        _digests(rgba, tmp_path, 'disk')
+        assert seen['on_disk'] is True
+        assert seen['beside_output'] == ['gttk_workspace_']
+        assert sorted(p.name for p in tmp_path.iterdir()) == ['disk.tif', 'disk.tif.aux.xml', 'image.tif']
 
     def test_a_disk_run_leaves_nothing_behind(self, rgba, tmp_path, monkeypatch):
         """The intermediates are beside the output; a run that forgot them would leave

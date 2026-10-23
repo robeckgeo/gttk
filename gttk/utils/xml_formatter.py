@@ -20,9 +20,9 @@ import logging
 import re
 import textwrap
 import lxml.etree as etree
-from gttk.utils.xml_safety import untrusted_parser
+from gttk.utils.xml_safety import parse_untrusted, untrusted_parser
 from pathlib import Path
-from typing import Optional, Dict
+from typing import Optional, Dict, Union
 
 logger = logging.getLogger(__name__)
 
@@ -474,8 +474,201 @@ def xml_to_html(text: str, colors: dict[str, str], for_tables: bool = False, sam
     html += "</div></body>\n<!--EndFragment-->\n</html>"
     return html
 
+_XML_DECLARATION_ENCODING = re.compile(
+    r'(<\?xml[^>]+encoding\s*=\s*["\'])([^"\']+)(["\'][^>]*\?>)', re.IGNORECASE)
+
+
+def _as_utf8_bytes(xml_string: str) -> bytes:
+    """``xml_string`` as UTF-8 bytes whose declaration, if it has one, says UTF-8.
+
+    A decoded document still carries the declaration of the file it came from. Handing lxml
+    UTF-8 bytes that claim ISO-8859-1 would read every non-ASCII character wrong.
+    """
+    if '<?xml' in xml_string[:100]:
+        xml_string = _XML_DECLARATION_ENCODING.sub(r'\g<1>utf-8\g<3>', xml_string, count=1)
+    return xml_string.encode('utf-8')
+
+
+def canonical_xml(document: Union[str, bytes]) -> Optional[bytes]:
+    """The C14N form of ``document``, or None when it cannot be canonicalized.
+
+    Whitespace-only text between elements is dropped before canonicalizing, so two
+    serializations of one document that differ only in indentation, attribute order,
+    quoting or character references canonicalize to the same bytes, and a change to any
+    value, attribute, comment or processing instruction does not. None means the document
+    is not well-formed, or carries something C14N cannot express (an entity reference the
+    safe parser left unresolved); a caller then has nothing to compare against.
+
+    Example:
+        >>> canonical_xml('<a x="1" y="2"><b>t</b></a>') == canonical_xml("<a y='2'\\n   x='1'>\\n  <b>t</b>\\n</a>")
+        True
+        >>> canonical_xml('<a x="1&#xA;2"/>') == canonical_xml('<a x="1\\n2"/>')
+        False
+        >>> canonical_xml('<unclosed>') is None
+        True
+    """
+    data = _as_utf8_bytes(document) if isinstance(document, str) else document
+    try:
+        root = parse_untrusted(data, remove_blank_text=True, strip_cdata=False)
+        return etree.tostring(root.getroottree(), method='c14n')
+    except (etree.LxmlError, ValueError):
+        return None
+
+
+def _layout_attributes(formatted_xml: str) -> str:
+    """Put long or namespaced attribute lists one attribute per line, aligned under the first.
+
+    Works on lxml's serialized lines. It is only ever used through the C14N check in
+    :func:`pretty_print_xml`: its output has to parse back to the same document.
+    """
+    # Now process it line by line to handle attributes specially
+    lines = formatted_xml.split('\n')
+    result_lines = []
+    
+    i = 0
+    current_indent_len = 0 # Track indentation for attribute alignment
+    
+    while i < len(lines):
+        line = lines[i]
+
+        # Check if this is a line with attributes that should be reformatted
+        should_reformat = (
+            (len(line) > 100 and line.count('="') > 1) or  # Long lines with multiple attributes
+            (line.count('="') >= 1 and any(p in line for p in ['xmlns:', 'ism:', 'xsi:', 'ntk:', 'rr:'])) or  # Specific attribute prefixes
+            (re.match(r'^\s+[a-zA-Z][^<]*="', line) and line.count('="') >= 1)  # Any line starting with whitespace + attribute
+        )
+        
+        if should_reformat:
+            element_match = re.match(r'(\s*<[^\s>]+)\s+(.*)', line)
+            attr_only_match = re.match(r'(\s*)([^<]\S.*)', line) if not element_match else None
+            leading_whitespace = ""
+
+            if element_match:
+                element_start = element_match.group(1)  # The element tag
+                rest = element_match.group(2)           # Rest of the line (attributes and closing)
+                
+                # Calculate indent for subsequent attributes (length of tag + 1 for space)
+                current_indent_len = len(element_start) + 1
+                
+            elif attr_only_match:
+                # This is a line with just attributes (like the nas:MD_Metadata case)
+                leading_whitespace = attr_only_match.group(1)
+                rest = attr_only_match.group(2)
+                element_start = leading_whitespace  # Just the whitespace
+            else:
+                result_lines.append(line)
+                current_indent_len = 0 # Reset if we hit a line we don't handle special
+                i += 1
+                continue
+
+            is_self_closing = rest.strip().endswith('/>')
+
+            # Extract all attributes more comprehensively to handle complex attribute patterns
+            attrs = re.findall(r'([^\s=]+="[^"]*")', rest)
+            
+            if attrs:
+                # For attribute-only lines, we need to handle them differently
+                if attr_only_match:
+                    # Calculate proper indentation: should align with first attribute after element name
+                    if current_indent_len > 0:
+                        indentation = ' ' * current_indent_len
+                    else:
+                        # Fallback if we don't have context (e.g. first line was not caught)
+                        indentation = leading_whitespace + '    '
+
+                    # Put each attribute on its own line with proper indentation
+                    for j, attr in enumerate(attrs):
+                        line_end = ""
+                        if j == len(attrs) - 1:
+                            if is_self_closing:
+                                line_end = "/>"
+                            else:
+                                # Check if we need to close the tag
+                                has_closer = '>' in rest
+                                text_content = ""
+                                if has_closer:
+                                    text_start = rest.find('>') + 1
+                                    text_content = rest[text_start:].strip()
+                                    line_end = f">{text_content}"
+                                elif text_content: # Should be empty if no closer found usually
+                                    line_end = f">{text_content}"
+                                    
+                        result_lines.append(f"{indentation}{attr}{line_end}")
+                else:
+                    # Add first attribute on the opening tag line
+                    result_lines.append(f"{element_start} {attrs[0]}")
+                    original_indent = len(line) - len(line.lstrip())
+                    element_tag_only = element_start.strip()
+                    indentation = ' ' * (original_indent + len(element_tag_only) + 1)
+                    
+                    # If there's only one attribute, add closing bracket to that line
+                    if len(attrs) == 1:
+                        if is_self_closing:
+                            result_lines[-1] += "/>"
+                        else:
+                            text_content = ""
+                            has_closer = '>' in rest
+                            if has_closer:
+                                text_start = rest.find('>') + 1
+                                text_content = rest[text_start:].strip()
+                            
+                            # Only add closing bracket if it was present in the input or we have content
+                            if has_closer:
+                                result_lines[-1] += f">{text_content}"
+                            elif text_content:
+                                result_lines[-1] += f">{text_content}"
+                            # If no closer and no content, we assume it continues on next line, so add nothing
+                    else:
+                        # Multiple attributes - process remaining ones
+                        for j, attr in enumerate(attrs[1:], 1):
+                            line_end = ""
+                            if j == len(attrs) - 1:
+                                if is_self_closing:
+                                    line_end = "/>"
+                                else:
+                                    text_content = ""
+                                    if '>' in rest:
+                                        text_start = rest.find('>') + 1
+                                        text_content = rest[text_start:].strip()
+                                    line_end = f">{text_content}" if text_content else ">"
+                            result_lines.append(f"{indentation}{attr}{line_end}")
+            else:
+                # No attributes found, keep line as is
+                result_lines.append(line)
+        else:
+            # Line is short enough or doesn't have multiple attributes
+            result_lines.append(line)
+            
+            # Still try to detect if this is an opening tag to set context for next lines
+            # This handles cases where lxml splits attributes but we didn't reformat the first line
+            element_match = re.match(r'(\s*<[^\s>/!]+)', line)
+            if element_match and not line.strip().startswith('</'):
+                 current_indent_len = len(element_match.group(1)) + 1
+            else:
+                 current_indent_len = 0
+        
+        i += 1
+    return '\n'.join(result_lines)
+
+
 def pretty_print_xml(xml_string: str, flatten: bool = False, indent: str = '  ') -> str:
-    """Custom XML pretty printer with special attribute formatting."""
+    """Pretty-print an XML document for a human reader, without changing it.
+
+    lxml re-indents the document (whitespace-only text between elements is dropped and
+    rebuilt; comments, processing instructions, CDATA and the declaration survive), then
+    the attribute layout puts long or namespaced attribute lists one attribute per line.
+    The result is kept only if it canonicalizes (C14N) to the same bytes as the input;
+    otherwise lxml's own indentation is returned, with a warning. A document that does not
+    parse is returned as it was. ``flatten=True`` instead joins the lines into one.
+
+    Example:
+        >>> print(pretty_print_xml('<a x="1"><b>t</b></a>'))
+        <a x="1">
+          <b>t</b>
+        </a>
+        >>> pretty_print_xml('<a x="1&#xA;2"/>').rstrip()
+        '<a x="1&#10;2"/>'
+    """
     try:
         # For comments preservation, we need to avoid using lxml parser
         # which strips comments. Instead, work directly with the string
@@ -493,183 +686,39 @@ def pretty_print_xml(xml_string: str, flatten: bool = False, indent: str = '  ')
             except Exception as e:
                 return f"Error flattening XML: {e}\nOriginal XML:\n{xml_string}" if xml_string else xml_string
         
-        # For pretty printing, first try to use lxml for basic formatting
-        # but fall back to string processing if comments are lost
+        # lxml does the re-indentation. remove_blank_text=True drops the whitespace-only
+        # text nodes of a document that is already (or oddly) indented so that it can be
+        # rebuilt; comments and CDATA are kept. The whole document is serialized, not just
+        # the root element, so a stylesheet instruction or a comment before the root
+        # survives.
         try:
-            # Test if we can preserve comments with lxml
-            # Use remove_blank_text=True to force re-indentation of "flat" XML files
             parser = untrusted_parser(strip_cdata=False, remove_comments=False, remove_blank_text=True)
-            
-            # Ensure the XML declaration matches the UTF-8 encoding we are about to use.
-            # If the original string had encoding="ISO-8859-1", lxml would misinterpret
-            # our UTF-8 bytes as Latin-1, causing mojibake.
-            if '<?xml' in xml_string[:100]:
-                # Update regex to handle spaces around '=' (e.g. encoding = "ISO-8859-1")
-                xml_string_for_parsing = re.sub(
-                    r'(<\?xml[^>]+encoding\s*=\s*["\'])([^"\']+)(["\'][^>]*\?>)',
-                    r'\g<1>utf-8\g<3>',
-                    xml_string,
-                    count=1,
-                    flags=re.IGNORECASE
-                )
-            else:
-                xml_string_for_parsing = xml_string
-
-            tree = etree.fromstring(xml_string_for_parsing.encode('utf-8'), parser)
-            
-            # Use UTF-8 to ensure XML declaration is preserved if possible, then decode
-            # Only include declaration if the original string had one
+            root = etree.fromstring(_as_utf8_bytes(xml_string), parser)
             include_decl = '<?xml' in xml_string[:100]
-            
-            xml_bytes = etree.tostring(tree, encoding='utf-8', pretty_print=True, xml_declaration=include_decl)
+            xml_bytes = etree.tostring(root.getroottree(), encoding='utf-8', pretty_print=True,
+                                       xml_declaration=include_decl)
             formatted_xml = xml_bytes.decode('utf-8')
-            
-            # Check if comments were preserved
-            if '<!--' in xml_string and '<!--' not in formatted_xml:
-                # Comments were lost, use string-based approach
-                formatted_xml = xml_string
-            
         except etree.XMLSyntaxError:
-            # If parsing fails, use the original string
-            formatted_xml = xml_string
-        
-        # Post-processing cleanup
-        # Replace tabs with 2 spaces
+            # Not XML: reflowing its lines could only do harm.
+            return xml_string
+
+        # Tabs to 2 spaces; nothing else is rewritten. In particular a newline inside an
+        # attribute value stays the character reference lxml wrote for it: a literal newline
+        # there is normalized to a space by every parser that reads the tag back.
         formatted_xml = formatted_xml.replace('\t', '  ')
-        
-        # Replace encoded newlines with actual newlines for readability
-        # lxml may output &#xA; for newlines in some contexts (e.g. attribute normalization or specific parser settings)
-        formatted_xml = formatted_xml.replace('&#xA;', '\n').replace('&#10;', '\n')
-        
-        # Now process it line by line to handle attributes specially
-        lines = formatted_xml.split('\n')
-        result_lines = []
-        
-        i = 0
-        current_indent_len = 0 # Track indentation for attribute alignment
-        
-        while i < len(lines):
-            line = lines[i]
 
-            # Check if this is a line with attributes that should be reformatted
-            should_reformat = (
-                (len(line) > 100 and line.count('="') > 1) or  # Long lines with multiple attributes
-                (line.count('="') >= 1 and any(p in line for p in ['xmlns:', 'ism:', 'xsi:', 'ntk:', 'rr:'])) or  # Specific attribute prefixes
-                (re.match(r'^\s+[a-zA-Z][^<]*="', line) and line.count('="') >= 1)  # Any line starting with whitespace + attribute
-            )
-            
-            if should_reformat:
-                element_match = re.match(r'(\s*<[^\s>]+)\s+(.*)', line)
-                attr_only_match = re.match(r'(\s*)([^<]\S.*)', line) if not element_match else None
-                leading_whitespace = ""
-
-                if element_match:
-                    element_start = element_match.group(1)  # The element tag
-                    rest = element_match.group(2)           # Rest of the line (attributes and closing)
-                    
-                    # Calculate indent for subsequent attributes (length of tag + 1 for space)
-                    current_indent_len = len(element_start) + 1
-                    
-                elif attr_only_match:
-                    # This is a line with just attributes (like the nas:MD_Metadata case)
-                    leading_whitespace = attr_only_match.group(1)
-                    rest = attr_only_match.group(2)
-                    element_start = leading_whitespace  # Just the whitespace
-                else:
-                    result_lines.append(line)
-                    current_indent_len = 0 # Reset if we hit a line we don't handle special
-                    i += 1
-                    continue
-
-                is_self_closing = rest.strip().endswith('/>')
-
-                # Extract all attributes more comprehensively to handle complex attribute patterns
-                attrs = re.findall(r'([^\s=]+="[^"]*")', rest)
-                
-                if attrs:
-                    # For attribute-only lines, we need to handle them differently
-                    if attr_only_match:
-                        # Calculate proper indentation: should align with first attribute after element name
-                        if current_indent_len > 0:
-                            indentation = ' ' * current_indent_len
-                        else:
-                            # Fallback if we don't have context (e.g. first line was not caught)
-                            indentation = leading_whitespace + '    '
-
-                        # Put each attribute on its own line with proper indentation
-                        for j, attr in enumerate(attrs):
-                            line_end = ""
-                            if j == len(attrs) - 1:
-                                if is_self_closing:
-                                    line_end = "/>"
-                                else:
-                                    # Check if we need to close the tag
-                                    has_closer = '>' in rest
-                                    text_content = ""
-                                    if has_closer:
-                                        text_start = rest.find('>') + 1
-                                        text_content = rest[text_start:].strip()
-                                        line_end = f">{text_content}"
-                                    elif text_content: # Should be empty if no closer found usually
-                                        line_end = f">{text_content}"
-                                        
-                            result_lines.append(f"{indentation}{attr}{line_end}")
-                    else:
-                        # Add first attribute on the opening tag line
-                        result_lines.append(f"{element_start} {attrs[0]}")
-                        original_indent = len(line) - len(line.lstrip())
-                        element_tag_only = element_start.strip()
-                        indentation = ' ' * (original_indent + len(element_tag_only) + 1)
-                        
-                        # If there's only one attribute, add closing bracket to that line
-                        if len(attrs) == 1:
-                            if is_self_closing:
-                                result_lines[-1] += "/>"
-                            else:
-                                text_content = ""
-                                has_closer = '>' in rest
-                                if has_closer:
-                                    text_start = rest.find('>') + 1
-                                    text_content = rest[text_start:].strip()
-                                
-                                # Only add closing bracket if it was present in the input or we have content
-                                if has_closer:
-                                    result_lines[-1] += f">{text_content}"
-                                elif text_content:
-                                    result_lines[-1] += f">{text_content}"
-                                # If no closer and no content, we assume it continues on next line, so add nothing
-                        else:
-                            # Multiple attributes - process remaining ones
-                            for j, attr in enumerate(attrs[1:], 1):
-                                line_end = ""
-                                if j == len(attrs) - 1:
-                                    if is_self_closing:
-                                        line_end = "/>"
-                                    else:
-                                        text_content = ""
-                                        if '>' in rest:
-                                            text_start = rest.find('>') + 1
-                                            text_content = rest[text_start:].strip()
-                                        line_end = f">{text_content}" if text_content else ">"
-                                result_lines.append(f"{indentation}{attr}{line_end}")
-                else:
-                    # No attributes found, keep line as is
-                    result_lines.append(line)
-            else:
-                # Line is short enough or doesn't have multiple attributes
-                result_lines.append(line)
-                
-                # Still try to detect if this is an opening tag to set context for next lines
-                # This handles cases where lxml splits attributes but we didn't reformat the first line
-                element_match = re.match(r'(\s*<[^\s>/!]+)', line)
-                if element_match and not line.strip().startswith('</'):
-                     current_indent_len = len(element_match.group(1)) + 1
-                else:
-                     current_indent_len = 0
-            
-            i += 1
-
-        return '\n'.join(result_lines)
+        styled = _layout_attributes(formatted_xml)
+        # The attribute layout works on serialized lines. It must not change the document,
+        # and this is the check: the same C14N bytes as the input, or it is not used. A
+        # document that cannot be canonicalized cannot be checked, so it is not reflowed.
+        reference = canonical_xml(xml_string)
+        if reference is not None and canonical_xml(styled) == reference:
+            return styled
+        if reference is None:
+            logger.debug("The XML document cannot be canonicalized; keeping lxml's indentation.")
+        else:
+            logger.warning("The attribute layout changed the XML document; keeping lxml's indentation instead.")
+        return formatted_xml
     except Exception as e:
         # If custom formatting fails, return the original string
         logger.warning(f"Custom XML formatting failed; returning the XML unformatted: {e}")

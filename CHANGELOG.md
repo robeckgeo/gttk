@@ -6,11 +6,66 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **`--software-stamp {True,False}`** on `gttk optimize` and `optimize-arc` (default True): False
+  leaves the input's `TIFFTAG_SOFTWARE` exactly as the producer wrote it and adds none when there
+  is none, for a product header a pipeline has already finished
+- **`--geo-metadata PATH`**: `-g` takes a path as well as True/False, embedding that record in the
+  GEO_METADATA tag (50909) alongside the sidecar discovery `-g True` performs
 - **Filename placeholders in validation rules**: `{stem}`, `{name}` and the named groups of a
   product's `[PRODUCT.filename]` `pattern` resolve per file in `expected` (escaped inside `regex`
   constraints, raw in `exact` and `enum`); an undefined placeholder is rejected when the rules
   load, and a file whose stem does not match the pattern fails every rule that uses one. The
   bundled `TILE-PLACEHOLDERS-EXAMPLE` product shows the syntax
+- **`optimize_compression.ProgressBar`**, one per run, in place of the module-level progress state
+
+### Changed
+
+- **GEO_METADATA**: a record the input already carries passes through byte for byte. A record
+  GTTK embeds (`-g True` or `--geo-metadata PATH`) is pretty-printed for `gdalinfo` and QGIS
+  readers and verified by canonical (C14N) comparison to be the same document, falling back to
+  lxml's own indentation otherwise; it is embedded as UTF-8 whatever the file's encoding. A
+  missing, oversize or malformed record now fails the run instead of logging "was embedded"
+- **Rounding** (`--decimals`) reads the band in strips of a whole number of block rows (about
+  16 MB) instead of the whole band plus a float64 copy, and rounds only finite pixels that are not
+  the NoData value, compared at the band's precision; NoData, NaN and infinities keep their bits.
+  Built overviews are rounded the same way. The ArcGIS path's generated rounding scripts follow
+- **Exit status**: `main()` returns the tool's status and `python -m gttk` passes it to
+  `sys.exit`, so a failed `optimize` exits 1 instead of 0; a directory run finishes every file and
+  exits 1 if any failed. A requested report, `.aux.xml` or overview rounding that is not produced
+  is an error; `-g True` with no sidecar and a report that could not be opened are not
+- **Thread safety**: `gdal_env()` applies GDAL's configuration thread-locally; the overview
+  block size is set with `gdal.config_option` and restored even when building fails; the PROJ
+  network flag is counted under a lock so overlapping operations restore the host's setting;
+  `arcMode` and the shared progress dictionary are gone. What stays per process
+  (`UseExceptions()`, the PROJ flag) is documented in the README and DEVELOPER.md
+- **DEVELOPER.md** describes the pipeline as it runs (NoData handling, strip rounding, the
+  metadata step, the early overview build of the rounding workflow) and the thread-safety
+  contract; `optimize_compression`'s module docstring no longer claims in-memory-only intermediates
+
+### Fixed
+
+- **`pretty_print_xml`** rewrote `&#xA;` inside attribute values to a literal newline, which the
+  next parser normalizes to a space, dropped processing instructions and comments before the root
+  element, and could reflow a line into a different document; it now serializes the whole
+  document and keeps its attribute layout only when the result canonicalizes to the input
+- **The disk workspace never engaged**: `optimize` registered an intermediate before
+  `Workspace.plan_for()` sized the run, so the 0.12.0 beside-the-output path was never taken;
+  the intermediate is registered once, by the preprocessor, and the outer workspace context owns
+  the cleanup so on-disk intermediates are removed after the datasets are closed
+- **Leaked error handlers**: `is_geotiff`, the metadata reader and the COG validator pushed a
+  quiet handler around `gdal.Open` without a `finally`, so a failed open (which raises with
+  exceptions on) left it on the thread's handler stack
+- **ArcGIS path**: a NaN NoData arrives from `gdalinfo -json` as the string `"nan"` and is now
+  coerced to a number before the NoData logic runs
+- **NoData compared at the band's precision**: `remap_nodata_value`, `mask_nodata_value` and the
+  precision sampler compared pixels with the double GDAL reports, so a Float32 band's fractional
+  NoData (`float32(-99999.123)` is not `-99999.123`) was never found, and the remap wrote every
+  band back as Float32 whatever its type. `nodata_mask()` compares in the band's own dtype, the
+  remap writes in it, and a target the type cannot hold is refused
+- **Batch runs skipped the per-file argument checks**: the arguments for each file were built
+  with the directory as the input and the file assigned afterwards, so a multi-band raster went
+  through a `-t dem` batch unchecked; they are built with the file's own paths now, and such a
+  file is counted as failed
 
 ## [0.12.0] - 2026-09-03
 

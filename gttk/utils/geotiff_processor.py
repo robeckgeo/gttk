@@ -430,11 +430,8 @@ def calculate_precision_from_values(vals: np.ndarray, sigfigs: int, nodata: Opti
         return 0
 
     if nodata is not None:
-        # Handle NaN nodata specially
-        if isinstance(nodata, float) and np.isnan(nodata):
-            vals = vals[~np.isnan(vals)]
-        else:
-            vals = vals[vals != nodata]
+        # At the array's own precision: see nodata_mask.
+        vals = vals[~nodata_mask(vals, nodata)]
             
     # Also filter NaNs that might be in the data even if nodata wasn't explicitly NaN
     vals = vals[~np.isnan(vals)]
@@ -1405,31 +1402,79 @@ def is_nodata_valid(nodata: float, dtype: str) -> bool:
     # Unknown type, assume valid
     return True
 
+def nodata_mask(array: np.ndarray, nodata: Optional[float]) -> np.ndarray:
+    """
+    Where ``array`` holds ``nodata``, compared at the array's own precision.
+
+    GDAL reports a NoData value as a double. A Float32 band holds ``float32(-99999.123)``,
+    which is not equal to the double ``-99999.123``, so comparing the array with the double
+    finds nothing; an Int16 band holds ``-9999``, which must match the ``-9999.0`` GDAL
+    reports. NaN is matched with ``isnan``. A value the dtype cannot hold at all (NaN or a
+    fraction for an integer band, an integer outside its range) matches nothing; a value
+    beyond a float band's range compares as the infinity it would have been stored as.
+
+    Example:
+        >>> nodata_mask(np.array([1.0, -99999.123, 2.0], dtype=np.float32), -99999.123).tolist()
+        [False, True, False]
+        >>> nodata_mask(np.array([1, -9999], dtype=np.int16), -9999.0).tolist()
+        [False, True]
+        >>> nodata_mask(np.array([1, -9999], dtype=np.int16), -9999.5).tolist()
+        [False, False]
+        >>> nodata_mask(np.array([1.5, np.nan], dtype=np.float32), float('nan')).tolist()
+        [False, True]
+        >>> nodata_mask(np.array([1, 2], dtype=np.uint8), None).tolist()
+        [False, False]
+    """
+    nothing = np.zeros(array.shape, dtype=bool)
+    if nodata is None:
+        return nothing
+    value = float(nodata)
+    if np.isnan(value):
+        return np.isnan(array) if np.issubdtype(array.dtype, np.floating) else nothing
+    if np.issubdtype(array.dtype, np.integer):
+        limits = np.iinfo(array.dtype)
+        if not value.is_integer() or not (limits.min <= value <= limits.max):
+            return nothing
+        return array == array.dtype.type(int(value))
+    with np.errstate(over='ignore'):
+        return array == array.dtype.type(value)
+
+
+def _as_dtype(value: float, dtype: np.dtype) -> np.generic:
+    """``value`` as a scalar of ``dtype``, or a ValueError naming what cannot be stored."""
+    value = float(value)
+    if np.issubdtype(dtype, np.integer):
+        limits = np.iinfo(dtype)
+        if np.isnan(value) or not value.is_integer() or not (limits.min <= value <= limits.max):
+            raise ValueError(f"NoData value {value} cannot be stored in {np.dtype(dtype).name} data")
+        return dtype.type(int(value))
+    return dtype.type(value)
+
+
 def remap_nodata_value(ds: gdal.Dataset, source_nodata: float, target_nodata: float) -> gdal.Dataset:
     """
     Remaps input NoData values to the user-provided target NoData value, if different.
+
+    Pixels are compared and written at the band's own precision (:func:`nodata_mask`): a
+    Float32 band's ``float32(-99999.123)`` is found by the double GDAL reports for it, an
+    Int16 band stays Int16, and a Float64 band keeps its digits. A band holding no such pixel
+    is not rewritten.
+
+    Raises:
+        ValueError: when ``target_nodata`` cannot be stored in the band's data type.
     """
     total_remapped_pixels = 0
 
     for i in range(1, ds.RasterCount + 1):
         band = ds.GetRasterBand(i)
         array = band.ReadAsArray()
-
-        # Remap source NoData to target NoData
-        if np.isnan(source_nodata):
-            nodata_mask = np.isnan(array)
-        else:
-            nodata_mask = array == source_nodata
-        
-        num_nodata_pixels = np.sum(nodata_mask)
-        if num_nodata_pixels > 0:
-            total_remapped_pixels += num_nodata_pixels
-            if np.isnan(target_nodata):
-                array[nodata_mask] = np.nan
-            else:
-                array[nodata_mask] = target_nodata
-        
-        band.WriteArray(array.astype(np.float32)) # Write back as float32
+        mask = nodata_mask(array, source_nodata)
+        num_nodata_pixels = int(np.count_nonzero(mask))
+        if num_nodata_pixels == 0:
+            continue
+        total_remapped_pixels += num_nodata_pixels
+        array[mask] = _as_dtype(target_nodata, array.dtype)
+        band.WriteArray(array)
         band.FlushCache()
 
     if total_remapped_pixels > 0:
@@ -1530,11 +1575,8 @@ def mask_nodata_value(ds: gdal.Dataset, nodata_value: float) -> gdal.Dataset:
         band = ds.GetRasterBand(i)
         array = band.ReadAsArray()
         
-        # Create mask for NoData pixels
-        if np.isnan(nodata_value):
-            band_nodata_mask = np.isnan(array)
-        else:
-            band_nodata_mask = (array == nodata_value)
+        # Create mask for NoData pixels, compared at the band's own precision
+        band_nodata_mask = nodata_mask(array, nodata_value)
         
         if np.any(band_nodata_mask):
             has_nodata_pixels = True

@@ -509,3 +509,106 @@ class TestXmlBytesDecoding:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])
+
+
+# ==============================================================================
+# CATEGORY 6: THE PRETTY PRINTER CHANGES NOTHING BUT WHITESPACE
+# ==============================================================================
+
+import logging  # noqa: E402
+import re  # noqa: E402
+import lxml.etree as etree  # noqa: E402
+from gttk.utils import xml_formatter as xf  # noqa: E402
+from gttk.utils.xml_formatter import canonical_xml  # noqa: E402
+
+ISO_RECORD = (
+    "<?xml version='1.0' encoding='UTF-8'?>\n"
+    '<?xml-stylesheet type="text/xsl" href="./record.xsl" ?><!-- fictional record -->'
+    '<gmd:MD_Metadata xmlns:gmd="http://www.isotc211.org/2005/gmd" '
+    'xmlns:gco="http://www.isotc211.org/2005/gco" xmlns:ism="urn:us:gov:ic:ism">\n'
+    '  <gmd:fileIdentifier><gco:CharacterString>SRC_N00E000_01.xml</gco:CharacterString></gmd:fileIdentifier>\n'
+    '  <ism:Notice ism:noticeType="DS" ism:classification="U" ism:ownerProducer="USA" '
+    'ism:text="line one&#xA;line two">Distribution text</ism:Notice>\n'
+    '  <gmd:other attr="a>b"><![CDATA[x<y]]></gmd:other>\n'
+    '</gmd:MD_Metadata>\n')
+
+CORPUS = {
+    'iso_record': ISO_RECORD,
+    'flat': '<r><a x="1"><b>t</b></a><c/></r>',
+    'mixed_content': '<p ism:x="1" xmlns:ism="urn:x">text <b>bold</b> tail <i>i</i> end</p>',
+    'latin1_declared': '<?xml version="1.0" encoding="ISO-8859-1"?>\n<r><t>café ñ</t></r>',
+    'many_attributes': '<e a="1" b="2" c="3" d="4" e="5" f="6" g="7" h="8" i="9" j="10" k="11" l="12" '
+                       'm="13" n="14" o="15" p="16" q="17" r="18" s="19" t="20"/>',
+    'gt_in_values': '<r x="a &gt; b" y=\'q"q\'>1 &gt; 0 &amp; 2 &lt; 3</r>',
+    'nested_comment': '<r><!-- inner --><a>1</a><?pi here?></r>',
+    'already_indented': '<r>\n    <a>\n        <b>t</b>\n    </a>\n</r>\n',
+}
+
+
+class TestPrettyPrintIsLossless:
+
+    @pytest.mark.parametrize('name', sorted(CORPUS))
+    def test_the_same_document_comes_out(self, name):
+        doc = CORPUS[name]
+        out = pretty_print_xml(doc)
+        assert canonical_xml(out) is not None
+        assert canonical_xml(out) == canonical_xml(doc)
+
+    @pytest.mark.parametrize('name', sorted(CORPUS))
+    def test_formatting_is_idempotent(self, name):
+        once = pretty_print_xml(CORPUS[name])
+        assert pretty_print_xml(once) == once
+
+    def test_the_prolog_survives(self):
+        out = pretty_print_xml(ISO_RECORD)
+        assert '<?xml-stylesheet type="text/xsl" href="./record.xsl" ?>' in out
+        assert '<!-- fictional record -->' in out
+        assert out.index('<?xml-stylesheet') < out.index('<!-- fictional') < out.index('<gmd:MD_Metadata')
+
+    def test_a_newline_inside_an_attribute_stays_a_character_reference(self):
+        """A literal newline there would be normalized to a space by the next parser."""
+        out = pretty_print_xml(ISO_RECORD)
+        assert 'ism:text="line one&#10;line two"' in out
+        notice = etree.fromstring(out.encode('utf-8')).find('{urn:us:gov:ic:ism}Notice')
+        assert notice.get('{urn:us:gov:ic:ism}text') == 'line one\nline two'
+        assert notice.text == 'Distribution text'
+
+    def test_namespaced_attributes_go_one_per_line(self):
+        out = pretty_print_xml(ISO_RECORD)
+        assert re.search(r'<ism:Notice ism:noticeType="DS"\n\s+ism:classification="U"\n\s+ism:ownerProducer="USA"\n', out)
+
+    def test_the_guard_rejects_a_layout_that_changes_the_document(self, monkeypatch):
+        monkeypatch.setattr(xf, '_layout_attributes', lambda text: text.replace('Distribution text', 'Changed text'))
+        records, handler = [], logging.Handler()
+        handler.emit = records.append
+        logging.getLogger('gttk.utils.xml_formatter').addHandler(handler)
+        try:
+            out = pretty_print_xml(ISO_RECORD)
+        finally:
+            logging.getLogger('gttk.utils.xml_formatter').removeHandler(handler)
+        assert 'Changed text' not in out and 'Distribution text' in out
+        assert canonical_xml(out) == canonical_xml(ISO_RECORD)
+        assert any('attribute layout changed' in r.getMessage() for r in records)
+
+    def test_what_is_not_xml_is_returned_unchanged(self):
+        assert pretty_print_xml('<unclosed><tag>content') == '<unclosed><tag>content'
+        assert pretty_print_xml('just text') == 'just text'
+
+
+class TestCanonicalXml:
+
+    def test_whitespace_quoting_and_attribute_order_do_not_matter(self):
+        assert canonical_xml('<a x="1" y="2"><b>t</b></a>') == canonical_xml("<a y='2'\n   x='1'>\n  <b>t</b>\n</a>\n")
+
+    def test_values_and_prolog_do(self):
+        assert canonical_xml('<a x="1"/>') != canonical_xml('<a x="2"/>')
+        assert canonical_xml('<?pi x?><a/>') != canonical_xml('<a/>')
+        assert canonical_xml('<!-- c --><a/>') != canonical_xml('<a/>')
+
+    def test_bytes_follow_their_declaration(self):
+        latin = '<?xml version="1.0" encoding="ISO-8859-1"?><r>café</r>'.encode('latin-1')
+        assert canonical_xml(latin) == canonical_xml('<r>café</r>')
+
+    def test_none_for_what_cannot_be_canonicalized(self):
+        assert canonical_xml('<unclosed>') is None
+        assert canonical_xml('<!DOCTYPE r [<!ENTITY e "x">]><r>&e;</r>') is None

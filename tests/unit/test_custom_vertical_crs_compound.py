@@ -105,26 +105,9 @@ from osgeo import gdal
 
 from tests.fixtures.mock_geotiff_factory import MockGeoTIFF
 
-_GLOBAL_GDAL_CONFIG = ('GDAL_NUM_THREADS', 'ESRI_XML_PAM', 'OSR_WKT_FORMAT', 'GTIFF_WRITE_SRS_WKT2')
-_config_before_import = {k: gdal.GetConfigOption(k) for k in _GLOBAL_GDAL_CONFIG}
-import gttk.tools.optimize_compression as ocmp  # noqa: E402  (import has side effects)
-_config_after_import = {k: gdal.GetConfigOption(k) for k in _GLOBAL_GDAL_CONFIG}
-for _key, _value in _config_before_import.items():
-    gdal.SetConfigOption(_key, _value)
-
-from gttk.utils.preprocessor import Workspace  # noqa: E402
-from gttk.utils.script_arguments import OptimizeArguments  # noqa: E402
-
-
-@pytest.fixture
-def _module_gdal_config():
-    """`optimize_compression` sets GDAL config process-wide at import; contain it."""
-    restore = {k: gdal.GetConfigOption(k) for k in _GLOBAL_GDAL_CONFIG}
-    for key, value in _config_after_import.items():
-        gdal.SetConfigOption(key, value)
-    yield
-    for key, value in restore.items():
-        gdal.SetConfigOption(key, value)
+import gttk.tools.optimize_compression as ocmp
+from gttk.utils.preprocessor import Workspace
+from gttk.utils.script_arguments import OptimizeArguments
 
 
 def _write_dem_cog(tmp_path, vertical_srs, decimals=2, crs='EPSG:4326'):
@@ -133,22 +116,17 @@ def _write_dem_cog(tmp_path, vertical_srs, decimals=2, crs='EPSG:4326'):
     data = (np.random.default_rng(0).random((1, 600, 600)) * 100).astype(np.float32)
     MockGeoTIFF(width=600, height=600, data_type=gdal.GDT_Float32, crs=crs,
                 nodata_value=-32767.0, pixel_data=data).save_to_file(src)
-    prior, ocmp.arcMode = ocmp.arcMode, True
-    try:
-        ocmp._orchestrate_geotiff_optimization(
-            OptimizeArguments(input_path=src, output_path=out, product_type='dem',
-                              vertical_srs=vertical_srs, algorithm='ZSTD', predictor=2,
-                              decimals=decimals, raster_type='point', cog=True,
-                              overviews=True, report=False, write_pam_xml=False,
-                              open_report=False),
-            Workspace(), None)
-    finally:
-        ocmp.arcMode = prior
+    ocmp._orchestrate_geotiff_optimization(
+        OptimizeArguments(input_path=src, output_path=out, product_type='dem',
+                          vertical_srs=vertical_srs, algorithm='ZSTD', predictor=2,
+                          decimals=decimals, raster_type='point', cog=True,
+                          overviews=True, report=False, write_pam_xml=False,
+                          open_report=False, arc_mode=True),
+        Workspace(), None)
     return src, out
 
 
 @pytest.mark.slow
-@pytest.mark.usefixtures("_module_gdal_config")
 class TestCompoundCrsSurvivesTheWrite:
 
     def test_vertical_epsg_code_is_written(self, tmp_path):

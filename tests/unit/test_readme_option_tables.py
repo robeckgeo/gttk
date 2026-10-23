@@ -52,7 +52,7 @@ TABLE_HEADING = '#### Command-Line Arguments'
 TYPE_NAMES = {
     'Path': 'Path', 'str': 'str', 'lower': 'str', 'upper': 'str', 'int': 'int',
     'float': 'float', 'float_nodata': 'float', 'str2bool': 'bool',
-    'valid_quality': 'int', 'parse_decimals': 'int or none',
+    'valid_quality': 'int', 'parse_decimals': 'int or none', 'bool_or_path': 'bool or path',
 }
 
 #: 'Default: <clause>.' in an option's help, up to the first full stop that ends a sentence.

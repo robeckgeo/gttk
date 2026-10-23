@@ -55,6 +55,16 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
+def bool_or_path(value):
+    """argparse type for --geo-metadata: a str2bool spelling (True looks for the external XML
+    record beside the input, False embeds nothing) or the path of the record to embed."""
+    if isinstance(value, (bool, Path)):
+        return value
+    try:
+        return str2bool(value)
+    except argparse.ArgumentTypeError:
+        return Path(value)
+
 def parse_decimals(v):
     """argparse type for --decimals: a non-negative integer, or 'none'/'off'/'keep' to keep
     full precision (no base-10 rounding)."""
@@ -191,7 +201,14 @@ def build_parser() -> argparse.ArgumentParser:
                             help=f"Override raster type ('point' for PixelIsPoint, 'area' for PixelIsArea). "
                                  f"Default: {ch.default_clause('raster_type').lower()}.")
         georef.add_argument('-s', '--vertical-srs', type=str, default=None, dest='vertical_srs', help="Vertical SRS, e.g. EPSG:5703. Required for 'dem'.")
-        georef.add_argument('-g', '--geo-metadata', type=str2bool, default=False, metavar='BOOL', dest='geo_metadata', help='Write the external XML file (.xml or _meta.xml) to the GEO_METADATA tag.')
+        georef.add_argument('-g', '--geo-metadata', type=bool_or_path, default=False, metavar='BOOL|PATH', dest='geo_metadata',
+                            help='Embed an XML metadata record in the GEO_METADATA tag: True embeds the external XML '
+                                 'file (.xml or _meta.xml) found beside the input, a path embeds that record. The '
+                                 'record is pretty-printed without changing it. Default: False.')
+        georef.add_argument('--software-stamp', type=str2bool, default=True, metavar='BOOL', dest='software_stamp',
+                            help="Append ' - optimized by GeoTIFF ToolKit v<version>' to TIFFTAG_SOFTWARE, or set "
+                                 "it when the input has none. Default: True. False leaves the input's tag as it is, "
+                                 "for a product header the pipeline has already written.")
         georef.add_argument('-w', '--write-pam-xml', type=str2bool, default=True, metavar='BOOL', dest='write_pam_xml', help='Write an Esri-compatible .aux.xml PAM statistics file.')
 
         output = p.add_argument_group('output file')
@@ -368,13 +385,35 @@ def build_parser() -> argparse.ArgumentParser:
 
     return parser
 
-def main():
+def exit_status(result) -> int:
+    """A tool's return value as a process exit status.
+
+    None and 0 are success. A tool that returns an integer has reported its own status
+    (optimize returns 1 when a file failed), and that is what the process exits with.
+
+    Example:
+        >>> exit_status(None), exit_status(0), exit_status(1), exit_status(False)
+        (0, 0, 1, 1)
+    """
+    if result is None:
+        return 0
+    if isinstance(result, bool):
+        return 0 if result else 1
+    if isinstance(result, int):
+        return result
+    return 0
+
+
+def main() -> int:
+    """
+    Parse the arguments, run the tool, and return the process exit status.
+
+    0 on success; the tool's own non-zero status when it reports a failure; 1 when it
+    raises. ``python -m gttk`` and the ``gttk`` console script both pass it to ``sys.exit``.
+    """
     # GTTK is a library: it applies GDAL's exception mode per operation rather than
     # at import, so this application makes the choice for its own process.
     gdal.UseExceptions()
-    """
-    Main function to parse arguments and call the appropriate tool.
-    """
     parser = build_parser()
     args = parser.parse_args()
     tool = args.tool
@@ -386,24 +425,25 @@ def main():
     is_arc = getattr(args, 'arc_mode', False)
     logger = setup_logger(level=log_level, is_arc_mode=is_arc)
 
-    # Skip in ArcGIS mode — ArcGIS brings its own GDAL/PROJ and legitimately
+    # Skip in ArcGIS mode: ArcGIS brings its own GDAL/PROJ and legitimately
     # has neither variable set.
     if not is_arc:
         _check_proj_env()
 
+    result = None
     try:
         if tool == 'compare':
             from gttk.tools.compare_compression import compare_compression
             script_args = CompareArguments(**args_dict)
-            compare_compression(script_args)
+            result = compare_compression(script_args)
         elif tool in ['optimize', 'optimize-arc']:
             script_args = OptimizeArguments(**args_dict)
             if tool == 'optimize':
                 from gttk.tools.optimize_compression import optimize_compression
-                optimize_compression(script_args)
+                result = optimize_compression(script_args)
             else:
                 from gttk.tools.optimize_compression_arc import optimize_compression
-                optimize_compression(script_args)
+                result = optimize_compression(script_args)
         elif tool == 'test':
             from gttk.tools.test_compression import test_compression
             if args.input_path:
@@ -413,18 +453,22 @@ def main():
             if args.temp_dir:
                 args.temp_dir = args.temp_dir.resolve()
             script_args = TestArguments(**args_dict)
-            test_compression(script_args)
+            result = test_compression(script_args)
         elif tool == 'read':
             from gttk.tools.read_metadata import read_metadata
             script_args = ReadArguments(**args_dict)
-            read_metadata(script_args)
+            result = read_metadata(script_args)
         elif tool == 'validate':
             from gttk.tools.validate_metadata import validate_metadata
             script_args = ValidateArguments(**args_dict)
-            validate_metadata(script_args)
+            result = validate_metadata(script_args)
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}", exc_info=True)
-        sys.exit(1)
+        return 1
+    status = exit_status(result)
+    if status:
+        logger.error(f"gttk {tool} finished with errors (exit status {status}).")
+    return status
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

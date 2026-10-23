@@ -364,17 +364,15 @@ class TestOperationsStillGetTheSettings:
 
         before = {k: gdal.GetConfigOption(k) for k in GDAL_OPTIONS}
         ocmp.preprocess_geotiff = spy
-        prior, ocmp.arcMode = ocmp.arcMode, True
         try:
             ocmp._orchestrate_geotiff_optimization(
                 OptimizeArguments(input_path=src, output_path=tmp_path / "out.tif",
                                   product_type="dem", vertical_srs="EPSG:4326+3855",
                                   algorithm="ZSTD", report=False, write_pam_xml=False,
-                                  open_report=False),
+                                  open_report=False, arc_mode=True),
                 Workspace(), None)
         finally:
             ocmp.preprocess_geotiff = real
-            ocmp.arcMode = prior
 
         assert seen == GDAL_OPTIONS, "the settings were not in force during the operation"
         assert {k: gdal.GetConfigOption(k) for k in GDAL_OPTIONS} == before
@@ -418,3 +416,121 @@ class TestGdalIsNotAPipDependency:
         assert "conda" in message and "environment.yml" in message
         assert "gdal.h" in message, "name the actual error people will have just seen"
         assert "geotiff-toolkit[gdal]" in message
+
+
+class TestGdalEnvIsThreadLocal:
+    """gdal_env() scopes its settings to the calling thread, so two runs may share a process."""
+
+    def test_the_options_are_invisible_to_another_thread(self):
+        import threading
+        seen = {}
+
+        def peek():
+            seen['value'] = gdal.GetConfigOption('OSR_WKT_FORMAT')
+
+        gdal.SetConfigOption('OSR_WKT_FORMAT', None)
+        with gdal_env():
+            assert gdal.GetConfigOption('OSR_WKT_FORMAT') == 'WKT2_2019'
+            thread = threading.Thread(target=peek)
+            thread.start()
+            thread.join(10)
+        assert seen['value'] is None
+
+    def test_the_proj_network_flag_survives_overlapping_operations(self):
+        """The flag is one per process: the last operation to leave restores the host's
+        setting, not the first, whatever the interleaving."""
+        import threading
+        from osgeo import osr
+        osr.SetPROJEnableNetwork(True)
+        try:
+            a_inside, b_done, release_a = threading.Event(), threading.Event(), threading.Event()
+            problems = []
+
+            def a():
+                with gdal_env():
+                    a_inside.set()
+                    release_a.wait(10)
+
+            def b():
+                a_inside.wait(10)
+                with gdal_env():
+                    if osr.GetPROJEnableNetwork():
+                        problems.append('network on inside b')
+                b_done.set()
+
+            threads = [threading.Thread(target=a), threading.Thread(target=b)]
+            for thread in threads:
+                thread.start()
+            assert b_done.wait(10)
+            if osr.GetPROJEnableNetwork():
+                problems.append('b restored the network while a was still running')
+            release_a.set()
+            for thread in threads:
+                thread.join(10)
+            assert problems == []
+            assert osr.GetPROJEnableNetwork(), 'the host setting comes back once the last operation leaves'
+        finally:
+            osr.SetPROJEnableNetwork(False)
+
+    def test_the_overview_block_size_is_restored_when_building_fails(self, tmp_path, monkeypatch):
+        import numpy as np
+        import gttk.tools.optimize_compression as ocmp
+        from gttk.utils.preprocessor import Workspace
+        from gttk.utils.script_arguments import OptimizeArguments
+        from tests.fixtures.mock_geotiff_factory import MockGeoTIFF
+
+        src = tmp_path / 'dem.tif'
+        data = np.full((1, 600, 600), 12.345, np.float32)
+        MockGeoTIFF(width=600, height=600, data_type=gdal.GDT_Float32, crs='EPSG:4326',
+                    nodata_value=-32767.0, pixel_data=data).save_to_file(src)
+
+        def boom(self, *args, **kwargs):
+            raise RuntimeError('synthetic overview failure')
+
+        monkeypatch.setattr(gdal.Dataset, 'BuildOverviews', boom)
+        gdal.SetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE', None)
+        with pytest.raises(RuntimeError, match='synthetic overview failure'):
+            ocmp._orchestrate_geotiff_optimization(
+                OptimizeArguments(input_path=src, output_path=tmp_path / 'out.tif', product_type='dem',
+                                  vertical_srs='EPSG:5703', algorithm='DEFLATE', decimals=2,
+                                  report=False, write_pam_xml=False, open_report=False, arc_mode=True),
+                Workspace(), None)
+        assert gdal.GetConfigOption('GDAL_TIFF_OVR_BLOCKSIZE') is None
+
+    def test_no_run_state_lives_in_module_globals(self):
+        import gttk.tools.optimize_compression as ocmp
+        for name in ('arcMode', 'progress_callback_data', 'log_file_path', 'arcpy', 'base_path'):
+            assert not hasattr(ocmp, name), name
+
+
+class TestErrorHandlersArePopped:
+    """With exceptions on, a failed gdal.Open raises; the quiet handler pushed around it must
+    still be popped, or every later GDAL message on that thread is swallowed."""
+
+    @staticmethod
+    def _a_fresh_handler_sees_the_next_message():
+        seen = []
+        gdal.PushErrorHandler(lambda err_class, err_no, msg: seen.append(msg))
+        try:
+            with gdal.ExceptionMgr(useExceptions=False):
+                gdal.Error(gdal.CE_Warning, 1, 'probe')
+        finally:
+            gdal.PopErrorHandler()
+        return seen == ['probe']
+
+    def test_is_geotiff(self, tmp_path):
+        from gttk.utils.geokey_parser import is_geotiff
+        bad = tmp_path / 'not.tif'
+        bad.write_text('not a tiff', encoding='utf-8')
+        with gdal.ExceptionMgr(useExceptions=True):
+            assert is_geotiff(str(bad)) is False
+        assert self._a_fresh_handler_sees_the_next_message()
+
+    def test_the_cog_validator(self, tmp_path):
+        from gttk.utils.validate_cloud_optimized_geotiff import validate, ValidateCloudOptimizedGeoTIFFException
+        bad = tmp_path / 'not.tif'
+        bad.write_text('not a tiff', encoding='utf-8')
+        with gdal.ExceptionMgr(useExceptions=True):
+            with pytest.raises((ValidateCloudOptimizedGeoTIFFException, RuntimeError)):
+                validate(str(bad))
+        assert self._a_fresh_handler_sees_the_next_message()

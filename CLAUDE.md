@@ -86,7 +86,9 @@ Located in `gttk/utils/validation/`:
 - `gttk/utils/srs_logic.py` - Spatial reference system handling (compound CRS, vertical datums)
 - `gttk/utils/gdal_runner.py` - GDAL subprocess wrapper for ArcGIS isolation
 - `gttk/utils/esri_epsg_lookup.py` - Esri CRS name to EPSG code lookup
-- `gttk/utils/preprocessor.py` - The optimize pipeline's intermediates; `Workspace` holds them in `/vsimem` or, when they would not fit in memory, beside the output
+- `gttk/utils/preprocessor.py` - The optimize pipeline's preprocessing: `Workspace` holds the intermediates in `/vsimem` or, when they would not fit in memory, beside the output; `software_tag()` is the optional `TIFFTAG_SOFTWARE` stamp; rounding is strip by strip and never touches NoData or non-finite pixels; a `--geo-metadata` record is embedded through `gttk/utils/geo_metadata_writer.py`, pretty-printed and C14N-verified
+- `gttk/utils/gdal_env.py` - `gdal_env()`: GTTK's GDAL configuration for one operation, thread-local; the PROJ network flag is per process and counted under a lock; `UseExceptions()` is the host's call (the CLI makes it in `main()`)
+- `gttk/main.py` - `main()` returns the exit status (a tool's own non-zero status is passed on; a batch with a failed file exits 1); `python -m gttk` and the console script both `sys.exit(main())`
 
 ### ArcGIS Pro Integration
 - `gttk/tools/optimize_compression_arc.py` - Uses OSGeo4W GDAL via subprocess to avoid ArcGIS GDAL conflicts
@@ -103,7 +105,7 @@ Located in `gttk/utils/validation/`:
 - `environment.yml` - Conda environment (Python 3.12+, GDAL 3.11+)
 
 ## Test Structure
-1821 tests total (1551 unit, 86 integration, 59 E2E, 13 benchmark smoke, 112 doctests -- 103 in `gttk/`
+1940 tests total (1635 unit, 103 integration, 70 E2E, 13 benchmark smoke, 119 doctests -- 110 in `gttk/`
 and 9 in `tests/`, all run by `--doctest-modules`):
 - `tests/unit/` - Isolated component tests including 365 validation tests
 - `tests/integration/` - Component interaction tests
@@ -181,7 +183,14 @@ Toolbox language coverage:
 ArcGIS path coverage (POSIX, through `tests/fixtures/fake_osgeo4w.py`, an OSGeo4W-shaped tree whose
 tools are the conda environment's; skipped on Windows, where the real OSGeo4W is the fixture):
 - `test_gdal_runner_fake_osgeo4w.py` - the isolated environment, command resolution, the stdin payload protocol and projection extraction, run for real
-- `test_optimize_arc_on_linux.py` - `optimize-arc`'s orchestration end to end: a DEM to a COG with a compound CRS and PAM statistics, an RGBA image to an internal mask, an input named like a Python statement
+- `test_optimize_arc_on_linux.py` - `optimize-arc`'s orchestration end to end: a DEM to a COG with a compound CRS and PAM statistics, an RGBA image to an internal mask, an input named like a Python statement, a NaN-NoData DEM rounded with its producer's `TIFFTAG_SOFTWARE` kept, an explicit GEO_METADATA record embedded
+
+Product headers and exit status:
+- `test_product_header.py` (integration) - a producer's `TIFFTAG_SOFTWARE` survives `--software-stamp False`, the input's GEO_METADATA arrives byte for byte, a `--geo-metadata` record is embedded readable and C14N-equal, NoData posts keep their bits through rounding
+- `test_geo_metadata_writer.py` - the record reader: pretty-printed, C14N-verified, UTF-8 whatever the file was, errors for a missing, malformed or oversize record
+- `test_main_dispatch.py` - `main()` passes a tool's status on; a requested report, `.aux.xml` or record that is not produced raises
+- `test_optimize_exit_codes.py` (E2E) - `python -m gttk optimize` exits non-zero on every failure path and 0 on a finished-product run whose header is checked tag by tag
+- `test_concurrent_optimize.py` (integration) - two optimizations on two threads give the sequential outputs
 
 Statistics accuracy:
 - `test_statistics_passes.py` - `gttk optimize` computes statistics once for the write; `--report` is what adds the other two

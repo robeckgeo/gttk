@@ -49,7 +49,7 @@ from gttk.utils.geotiff_processor import is_nodata_valid, GeoTiffInfo
 from gttk.utils.log_helpers import ArcpyLogHandler, PACKAGE_LOGGER
 from gttk.utils.path_helpers import get_geotiff_files, prepare_output_path, copy_folder_structure
 from gttk.utils.performance_tracker import PerformanceTracker
-from gttk.utils.preprocessor import find_xml_metadata_file
+from gttk.utils.preprocessor import find_xml_metadata_file, software_tag
 from gttk.utils.script_arguments import OptimizeArguments
 from gttk.utils.srs_logic import handle_srs_logic, check_vertical_srs_mismatch
 from gttk.utils.statistics import calculate_statistics, build_pam_data_from_stats, write_pam_xml
@@ -632,8 +632,13 @@ def round_overviews(filepath):
                 print(f"  Warning: Failed to read overview {{ovr_idx}}")
                 continue
             
-            # Round the data
-            rounded_array = np.round(array, decimals)
+            # Round the finite, non-NoData pixels only: NoData and NaN keep their exact bits.
+            nodata = overview_band.GetNoDataValue()
+            valid = np.isfinite(array)
+            if nodata is not None and nodata == nodata:
+                valid &= (array != array.dtype.type(nodata))
+            rounded_array = array.copy()
+            rounded_array[valid] = np.round(array[valid].astype(np.float64), decimals).astype(array.dtype)
             
             # Write back the rounded data
             result = overview_band.WriteArray(rounded_array)
@@ -766,8 +771,13 @@ def round_dataset(filepath):
             print(f"  Warning: Failed to read band {{band_idx}}")
             continue
         
-        # Round the data
-        rounded_array = np.round(array, decimals)
+        # Round the finite, non-NoData pixels only: NoData and NaN keep their exact bits.
+        nodata = band.GetNoDataValue()
+        valid = np.isfinite(array)
+        if nodata is not None and nodata == nodata:
+            valid &= (array != array.dtype.type(nodata))
+        rounded_array = array.copy()
+        rounded_array[valid] = np.round(array[valid].astype(np.float64), decimals).astype(array.dtype)
         
         # Write back the rounded data
         result = band.WriteArray(rounded_array)
@@ -829,7 +839,8 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
         bands=len(info.get('bands', [])),
         res_x=abs(geo_transform[1]),
         res_y=abs(geo_transform[5]),
-        nodata=info.get('bands', [{}])[0].get('noDataValue'),
+        # gdalinfo -json spells a NaN NoData as the string "nan"; every later step wants a number.
+        nodata=_nodata_number(info.get('bands', [{}])[0].get('noDataValue')),
         data_type=info.get('bands', [{}])[0].get('type'),
         has_alpha=any(b.get('colorInterpretation') == 'Alpha' for b in info.get('bands', []))
     )
@@ -922,8 +933,8 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
 
         # Add metadata
         source_metadata = info.get('metadata', {}).get('', {})
-        software_tag = source_metadata.get('TIFFTAG_SOFTWARE', '')
-        new_software_tag = f"{software_tag.strip()} - optimized by GeoTIFF ToolKit v{__version__}" if software_tag else f"GeoTIFF ToolKit v{__version__}"
+        new_software_tag = software_tag(source_metadata.get('TIFFTAG_SOFTWARE'),
+                                        getattr(args, 'software_stamp', True))
         # Check for vertical SRS to conditionally remove UNITTYPE
         # This removes potential conflicts if vertical SRS is being stripped
         has_vertical = 'VERT_CS' in wkt or 'VERTCRS' in wkt
@@ -937,7 +948,8 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
 
             # Quote the value to handle potential special characters
             preprocess_cmd.extend(["-mo", f"{key}={value}"])
-        preprocess_cmd.extend(["-mo", f"TIFFTAG_SOFTWARE={new_software_tag}"])
+        if new_software_tag is not None:
+            preprocess_cmd.extend(["-mo", f"TIFFTAG_SOFTWARE={new_software_tag}"])
 
         # Add Area/Point with correct priority
         final_raster_type = args.raster_type or default_raster_type_for(args.product_type)
@@ -1290,21 +1302,21 @@ def _orchestrate_geotiff_optimization(args: OptimizeArguments, tracker: Optional
 
         # --- Add GEO_METADATA if requested ---
         xml_metadata_temp_path = None
-        if args.geo_metadata:
-            # Search for XML metadata file based on input path
-            xml_path = find_xml_metadata_file(Path(args.input_path))
-            if xml_path:
-                xml_content = prepare_xml_for_gdal(xml_path)
-                if xml_content:
-                    # Write to temp file to avoid CLI length limits
-                    xml_metadata_temp_path = tfm.get_temp_path("geo_metadata.xml")
-                    with open(xml_metadata_temp_path, 'w', encoding='utf-8') as f:
-                        f.write(xml_content)
-                    logger.info(f"Prepared geo metadata from {xml_path.name}.")
-                else:
-                    logger.warning(f"Failed to prepare XML content from {xml_path}. Skipping metadata embedding.")
+        geo_metadata = getattr(args, 'geo_metadata', False)
+        if geo_metadata:
+            if isinstance(geo_metadata, bool):
+                xml_path = find_xml_metadata_file(Path(args.input_path))
+                if xml_path is None:
+                    logger.info(f"XML metadata file not found for {args.input_path.name}. Skipping metadata embedding.")
             else:
-                logger.warning(f"XML metadata file not found for {args.input_path.name}. Skipping metadata embedding.")
+                xml_path = Path(geo_metadata)
+            if xml_path is not None:
+                # Pretty-printed without being changed (see geo_metadata_writer); written to a
+                # temporary file to stay clear of command-line length limits.
+                xml_content = prepare_xml_for_gdal(xml_path)
+                xml_metadata_temp_path = tfm.get_temp_path("geo_metadata.xml")
+                xml_metadata_temp_path.write_text(xml_content, encoding='utf-8')
+                logger.info(f"Prepared GEO_METADATA from {xml_path.name}.")
 
         # Construct final command or script
         if xml_metadata_temp_path:
